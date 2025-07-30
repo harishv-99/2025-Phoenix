@@ -23,9 +23,9 @@ public class Robot extends RobotBase<Robot.Components> {
 
     @Override
     protected void initRobot() {
-        driveTrainSubsystem = new DriveTrainSubsystem(getHardwareMap(),
-                getTelemetry());
-        robotStateWriter = new RobotStateWriter(this);
+//        driveTrainSubsystem = new DriveTrainSubsystem(getHardwareMap(),
+//                getTelemetry());
+//        robotStateWriter = new RobotStateWriter(this);
     }
 
     @Override
@@ -61,9 +61,7 @@ public class Robot extends RobotBase<Robot.Components> {
 
     @Override
     protected void onPeriodicTeleOp() {
-        getTelemetry().addData("State", teleOpController.getCurrentState().getName());
-
-        teleOpController.executeContainer();
+        teleOpController.onPeriodicTeleOp();
     }
 
     @Override

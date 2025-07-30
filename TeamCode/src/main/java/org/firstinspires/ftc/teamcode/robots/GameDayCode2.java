@@ -8,17 +8,17 @@ import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.JavaUtil;
 
-@TeleOp(name = "GameDayCode")
-public class GameDayCode extends LinearOpMode {
+@TeleOp(name = "GameDayCode2")
+public class GameDayCode2 extends LinearOpMode {
 
-    private DcMotor slideMotor;
-    private DcMotor armRaiserMotor;
+//    private DcMotor slideMotor;
+//    private DcMotor armRaiserMotor;
     private DcMotor frontleftMotor;
     private DcMotor backleftMotor;
     private DcMotor frontrightMotor;
     private DcMotor backrightMotor;
-    private Servo clawservo;
-    private CRServo armExtender;
+//    private Servo clawservo;
+//    private CRServo armExtender;
 
     float errG1LX;
     float errG1LY;
@@ -108,34 +108,34 @@ public class GameDayCode extends LinearOpMode {
     public void runOpMode() {
 //        slideMotor = hardwareMap.get(DcMotor.class, "slideMotor");
 //        armRaiserMotor = hardwareMap.get(DcMotor.class, "armRaiserMotor");
-//        frontleftMotor = hardwareMap.get(DcMotor.class, "frontleftMotor");
-//        backleftMotor = hardwareMap.get(DcMotor.class, "backleftMotor");
-//        frontrightMotor = hardwareMap.get(DcMotor.class, "frontrightMotor");
-//        backrightMotor = hardwareMap.get(DcMotor.class, "backrightMotor");
+        frontleftMotor = hardwareMap.get(DcMotor.class, "frontleftMotor");
+        backleftMotor = hardwareMap.get(DcMotor.class, "backleftMotor");
+        frontrightMotor = hardwareMap.get(DcMotor.class, "frontrightMotor");
+        backrightMotor = hardwareMap.get(DcMotor.class, "backrightMotor");
 //        clawservo = hardwareMap.get(Servo.class, "clawservo");
 //        armExtender = hardwareMap.get(CRServo.class, "armExtender");
-//
-//        // Reverse the right side motors.  This may be wrong for your setup.
-//        // If your robot moves backwards when commanded to go forwards, reverse the left side instead.
+
+        // Reverse the right side motors.  This may be wrong for your setup.
+        // If your robot moves backwards when commanded to go forwards, reverse the left side instead.
 //        slideMotor.setDirection(DcMotor.Direction.REVERSE);
 //        slideMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
 //        slideMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 //        armRaiserMotor.setDirection(DcMotor.Direction.REVERSE);
 //        armRaiserMotor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-//        frontleftMotor.setDirection(DcMotor.Direction.REVERSE);
-//        backleftMotor.setDirection(DcMotor.Direction.REVERSE);
-//        frontrightMotor.setDirection(DcMotor.Direction.FORWARD);
-//        backrightMotor.setDirection(DcMotor.Direction.REVERSE);
+        frontleftMotor.setDirection(DcMotor.Direction.REVERSE);
+        backleftMotor.setDirection(DcMotor.Direction.REVERSE);
+        frontrightMotor.setDirection(DcMotor.Direction.FORWARD);
+        backrightMotor.setDirection(DcMotor.Direction.REVERSE);
         joystickErr();
         joystickPrintErr();
         waitForStart();
         while (opModeIsActive()) {
-            if (false) {
-                moveIntake();
+            if (true) {
+//                moveIntake();
                 moveRobot();
-                moveSlides();
-                armExtenderServo();
-                armRaiser();
+//                moveSlides();
+//                armExtenderServo();
+//                armRaiser();
             } else {
                 joystickTest();
             }
@@ -146,29 +146,29 @@ public class GameDayCode extends LinearOpMode {
     /**
      * Describe this function...
      */
-    private void moveIntake() {
-        if (gamepad2.y) {
-            telemetry.addLine("Intake Close");
-            clawservo.setPosition(0);
-        } else if (gamepad2.a) {
-            telemetry.addLine("Intake Open");
-            clawservo.setPosition(1);
-        }
-    }
+//    private void moveIntake() {
+//        if (gamepad2.y) {
+//            telemetry.addLine("Intake Close");
+//            clawservo.setPosition(0);
+//        } else if (gamepad2.a) {
+//            telemetry.addLine("Intake Open");
+//            clawservo.setPosition(1);
+//        }
+//    }
 
     /**
      * Describe this function...
      */
-    private void armExtenderServo() {
-        armExtender.setDirection(CRServo.Direction.REVERSE);
-        if (gamepad2.dpad_up) {
-            armExtender.setPower(1);
-        } else if (gamepad2.dpad_down) {
-            armExtender.setPower(-1);
-        } else {
-            armExtender.setPower(0);
-        }
-    }
+//    private void armExtenderServo() {
+////        armExtender.setDirection(CRServo.Direction.REVERSE);
+//        if (gamepad2.dpad_up) {
+////            armExtender.setPower(1);
+//        } else if (gamepad2.dpad_down) {
+////            armExtender.setPower(-1);
+//        } else {
+//            armExtender.setPower(0);
+//        }
+//    }
 
     /**
      * Describe this function...
@@ -182,50 +182,50 @@ public class GameDayCode extends LinearOpMode {
     /**
      * Describe this function...
      */
-    private void armRaiser() {
-        double armExtenderUp;
-
-        armExtenderUp = -joystickCorrection(gamepad2.right_stick_y, errG2RY) * 50;
-        telemetry.addData("Target", armRaiserMotor.getCurrentPosition() + armExtenderUp);
-        telemetry.addData("armExtenderPosChange", armExtenderUp);
-        if (armExtenderUp < 0 && armRaiserMotor.getCurrentPosition() > 0) {
-            armRaiserMotor.setTargetPosition((int) (armRaiserMotor.getCurrentPosition() + armExtenderUp));
-            telemetry.addLine("Going down");
-        } else if (armExtenderUp > 0 && armRaiserMotor.getCurrentPosition() < 1500) {
-            armRaiserMotor.setTargetPosition((int) (armRaiserMotor.getCurrentPosition() + armExtenderUp));
-            telemetry.addLine("Going up");
-        } else if (gamepad2.b) {
-            armRaiserMotor.setTargetPosition((int) (armRaiserMotor.getCurrentPosition() + armExtenderUp));
-            telemetry.addLine("Override");
-        } else {
-            armRaiserMotor.setTargetPosition(armRaiserMotor.getCurrentPosition() + 0);
-        }
-        armRaiserMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-        armRaiserMotor.setPower(0.8);
-    }
+//    private void armRaiser() {
+//        double armExtenderUp;
+//
+//        armExtenderUp = -joystickCorrection(gamepad2.right_stick_y, errG2RY) * 50;
+//        telemetry.addData("Target", armRaiserMotor.getCurrentPosition() + armExtenderUp);
+//        telemetry.addData("armExtenderPosChange", armExtenderUp);
+//        if (armExtenderUp < 0 && armRaiserMotor.getCurrentPosition() > 0) {
+//            armRaiserMotor.setTargetPosition((int) (armRaiserMotor.getCurrentPosition() + armExtenderUp));
+//            telemetry.addLine("Going down");
+//        } else if (armExtenderUp > 0 && armRaiserMotor.getCurrentPosition() < 1500) {
+//            armRaiserMotor.setTargetPosition((int) (armRaiserMotor.getCurrentPosition() + armExtenderUp));
+//            telemetry.addLine("Going up");
+//        } else if (gamepad2.b) {
+//            armRaiserMotor.setTargetPosition((int) (armRaiserMotor.getCurrentPosition() + armExtenderUp));
+//            telemetry.addLine("Override");
+//        } else {
+//            armRaiserMotor.setTargetPosition(armRaiserMotor.getCurrentPosition() + 0);
+//        }
+//        armRaiserMotor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+//        armRaiserMotor.setPower(0.8);
+//    }
 
     /**
      * Describe this function...
      */
-    private void moveSlides() {
-        // Use gamepad_and will press_and _to move the slides up and down, height may vary
-        // Remember, Y stick value is reversed
-        telemetry.addData("SlidePos", slideMotor.getCurrentPosition());
-        y = -(joystickCorrection(gamepad2.left_stick_y, errG2LY) * 1);
-        telemetry.addData("SlidePower", y);
-        if (y < 0 && slideMotor.getCurrentPosition() > 0) {
-            slideMotor.setPower(y);
-            telemetry.addLine("Going down");
-        } else if (y > 0 && slideMotor.getCurrentPosition() < 27000) {
-            slideMotor.setPower(y);
-            telemetry.addLine("Going up");
-        } else if (gamepad2.b) {
-            slideMotor.setPower(y);
-            telemetry.addLine("Override");
-        } else {
-            slideMotor.setPower(0);
-        }
-    }
+//    private void moveSlides() {
+//        // Use gamepad_and will press_and _to move the slides up and down, height may vary
+//        // Remember, Y stick value is reversed
+//        telemetry.addData("SlidePos", slideMotor.getCurrentPosition());
+//        y = -(joystickCorrection(gamepad2.left_stick_y, errG2LY) * 1);
+//        telemetry.addData("SlidePower", y);
+//        if (y < 0 && slideMotor.getCurrentPosition() > 0) {
+//            slideMotor.setPower(y);
+//            telemetry.addLine("Going down");
+//        } else if (y > 0 && slideMotor.getCurrentPosition() < 27000) {
+//            slideMotor.setPower(y);
+//            telemetry.addLine("Going up");
+//        } else if (gamepad2.b) {
+//            slideMotor.setPower(y);
+//            telemetry.addLine("Override");
+//        } else {
+//            slideMotor.setPower(0);
+//        }
+//    }
 
     /**
      * Describe this function...
