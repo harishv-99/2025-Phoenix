@@ -95,7 +95,8 @@ public class GameDayCode extends LinearOpMode {
         // First subtract the error from the position, then stretch or shrink
         if (pos >= err) {
             newpos = (pos - err) / (1 - err);
-        } else {
+        }
+        else {
             newpos = (pos - err) / (1 + err);
         }
         return newpos;

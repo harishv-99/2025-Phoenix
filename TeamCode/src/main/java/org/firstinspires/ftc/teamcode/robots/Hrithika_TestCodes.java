@@ -15,6 +15,44 @@ public class Hrithika_TestCodes extends LinearOpMode {
 
     @Override
     public void runOpMode() throws InterruptedException{
+//        Camera camera = new Camera(hardwareMap, telemetry, "Webcam 1");
+
+        waitForStart();
+
+        while(!isStopRequested() && opModeIsActive()) {
+
+            if (gamepad1.x) {
+                telemetry.addLine("|- " + Float.toString(gamepad1.left_stick_x));
+                telemetry.addData("A", gamepad1.x);
+                telemetry.addData("x axis", gamepad1.left_stick_x);
+                telemetry.update();
+            }
+
+//            ArrayList<Integer> ids;
+//            ids = camera.getAprilTagIds();
+//            for(int i : ids) {
+//                telemetry.addLine(Integer.toString(i));
+//            }
+
+
+//            if(!tagProcessor.getDetections().isEmpty()) {
+//                tag = tagProcessor.getDetections().get(0);
+//                if (tag.metadata != null) {
+//                    telemetry.addData("id", tag.metadata.id);
+//                    telemetry.addData("x", tag.ftcPose.x);
+//                    telemetry.addData("y", tag.ftcPose.y);
+//                    telemetry.addData("z", tag.ftcPose.z);
+//                    telemetry.addData("roll", tag.ftcPose.roll);
+//                    telemetry.addData("pitch", tag.ftcPose.pitch);
+//                    telemetry.addData("yaw", tag.ftcPose.yaw);
+//                }
+//            }
+//            telemetry.update();
+        }
+    }
+
+//    @Override
+    public void runOpMode2() throws InterruptedException{
         AprilTagProcessor tagProcessor = new AprilTagProcessor.Builder()
                 .setDrawAxes(true)
                 .setDrawCubeProjection(true)

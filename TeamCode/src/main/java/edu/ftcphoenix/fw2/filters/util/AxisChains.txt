@@ -1,0 +1,42 @@
+How to use (quick examples)
+Drivetrain axis (outside DriveSignal)
+// Build once
+Filter<Double> axis = AxisChains.teleopAxis(0.05, 1.8, 3.0, () -> slowMode ? 0.35 : 1.0);
+
+// Loop
+double cmd = gp.leftY();                 // [-1..1]
+double shaped = axis.apply(cmd, dt);
+motor.setPower(MathUtil.clampFinite(shaped, -1, 1, 0));
+
+Arm motion (very gentle)
+Filter<Double> armShape = AxisChains.gentleMotion(2.0 /* jerk */, 0.8 /* rate */);
+double out = armShape.apply(armStickY, dt);
+armMotor.setPower(MathUtil.clampFinite(out, -1, 1, 0));
+
+Shooter open-loop with compensation
+Filter<Double> shooter = AxisChains.motorPower(robot::getVoltage, 12.0, 0.06, 1.0);
+double raw = trigger; // 0..1
+double pwr = shooter.apply(raw, dt);
+left.setPower(pwr); right.setPower(pwr);
+
+Sensor smoothing (e.g., distance)
+Filter<Double> smooth = AxisChains.smoothMeasurement(5, 0.03);
+double smoothed = smooth.apply(distanceSensor.getDistance(), dt);
+
+Safe final clamp (if you want a last guard)
+Filter<Double> safeClamp = AxisChains.safeOutputClamp(-1, 1);
+motor.setPower(safeClamp.apply(command, dt));
+
+Why this design helps
+
+Reusable everywhere: any component can grab a ready-made chain without pulling in DriveSignal.
+
+Composable: each chain is just a Pipeline<Double>; add/remove steps as needed.
+
+Live-tunable: scales use DoubleSupplier so you can hook driver toggles or dashboard sliders.
+
+Safe: safeOutputClamp and MathUtil.clampFinite protect sinks from NaN/Inf and out-of-range values.
+
+Consistent feel: the same teleop shaping can be used for drivetrain axes, arms, or other manual controls.
+
+If you want, I can also provide a tiny JUnit-like test harness for these filters to sanity-check dt behavior and edge cases (NaN handling, zero dt, etc.).
