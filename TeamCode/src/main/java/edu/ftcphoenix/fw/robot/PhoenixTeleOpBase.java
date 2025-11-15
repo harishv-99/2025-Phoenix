@@ -22,14 +22,14 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * <p>Subclassing pattern:
  * <ul>
  *   <li>Annotate your subclass with {@code @TeleOp(...)}.</li>
- *   <li>Override {@link #initRobot()} to:
+ *   <li>Override {@link #onInitRobot()} to:
  *       <ul>
  *         <li>Map hardware.</li>
  *         <li>Create drive sources / stages.</li>
  *         <li>Define bindings using {@link #bind()} and {@link #p1()} / {@link #p2()}.</li>
  *       </ul>
  *   </li>
- *   <li>Override {@link #loopRobot(double)} to:
+ *   <li>Override {@link #onLoopRobot(double)} to:
  *       <ul>
  *         <li>Update drive / stages / subsystems.</li>
  *         <li>Publish telemetry.</li>
@@ -47,7 +47,6 @@ public abstract class PhoenixTeleOpBase extends OpMode {
     private Bindings bindings;
     private LoopClock clock;
 
-    @Override
     public final void init() {
         // Core input plumbing
         gamepads = Gamepads.create(gamepad1, gamepad2);
@@ -56,19 +55,17 @@ public abstract class PhoenixTeleOpBase extends OpMode {
         clock = new LoopClock();
 
         // Let subclass wire hardware + bindings
-        initRobot();
+        onInitRobot();
 
         telemetry.addLine("PhoenixTeleOpBase: init complete");
         telemetry.update();
     }
 
-    @Override
     public final void start() {
         clock.reset(getRuntime());
         onStartRobot();
     }
 
-    @Override
     public final void loop() {
         // Update timing
         clock.update(getRuntime());
@@ -79,10 +76,9 @@ public abstract class PhoenixTeleOpBase extends OpMode {
         bindings.update(dtSec);
 
         // Delegate to subclass for robot behavior
-        loopRobot(dtSec);
+        onLoopRobot(dtSec);
     }
 
-    @Override
     public final void stop() {
         onStopRobot();
     }
@@ -101,7 +97,7 @@ public abstract class PhoenixTeleOpBase extends OpMode {
      *   <li>Set up {@link Bindings} using {@link #bind()} and {@link #p1()} / {@link #p2()}.</li>
      * </ul>
      */
-    protected abstract void initRobot();
+    protected abstract void onInitRobot();
 
     /**
      * Called once from {@link #start()} after the internal loop clock is reset.
@@ -117,7 +113,7 @@ public abstract class PhoenixTeleOpBase extends OpMode {
      *
      * @param dtSec approximate time step since last loop, in seconds
      */
-    protected abstract void loopRobot(double dtSec);
+    protected abstract void onLoopRobot(double dtSec);
 
     /**
      * Called once from {@link #stop()}. Optional cleanup hook.

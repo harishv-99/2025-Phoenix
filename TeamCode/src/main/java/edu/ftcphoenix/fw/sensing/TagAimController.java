@@ -1,258 +1,170 @@
 package edu.ftcphoenix.fw.sensing;
 
-import java.util.Objects;
-import java.util.Set;
-
 import edu.ftcphoenix.fw.core.PidController;
-import edu.ftcphoenix.fw.core.Pid;
+import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
+import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
- * Controller that generates a rotational (omega) command to aim the robot
- * at an AprilTag.
+ * Controller that turns a target bearing measurement into a turn command (omega).
  *
- * <p>This class is deliberately independent of drivebase and gamepad details:
- * it only knows how to:</p>
+ * <h2>Role</h2>
+ * <p>{@code TagAimController} is responsible for the <em>control law</em> part of aiming:
+ * given a {@link BearingSample} (from a {@link BearingSource}) and loop timing
+ * information ({@link LoopClock}), it computes an angular velocity command
+ * {@code omega} that tries to drive the bearing to zero.
  *
- * <ul>
- *   <li>Ask an {@link AprilTagSensor} for the best tag from a set of IDs.</li>
- *   <li>Use a {@link PidController} on the tag bearing to compute an omega
- *       command.</li>
- *   <li>Apply a deadband, freshness check, and magnitude limit.</li>
- * </ul>
+ * <p>It does <strong>not</strong> know or care how the bearing was measured
+ * (AprilTags, other vision targets, synthetic sources, etc.). That wiring is
+ * handled elsewhere (for example, by {@code TagAim} helpers).
  *
- * <p>Higher-level code is responsible for deciding when to use this omega:
- * for example, a TeleOp {@code DriveSource} can override the driver's
- * turn input while a button is held, or an autonomous routine can apply
- * the omega continuously while approaching a goal.</p>
- *
- * <h2>Typical usage (TeleOp / auto)</h2>
- *
+ * <h2>Typical usage</h2>
  * <pre>{@code
- * // TeleOp or auto init:
- * AprilTagSensor sensor = Tags.aprilTags(hardwareMap, "Webcam 1");
- * Set<Integer> scoringTags = Set.of(1, 2, 3);
+ * BearingSource bearing = ...;  // e.g., built from AprilTagSensor
+ * PidController pid = ...;     // your PID implementation/config
  *
- * TagAimController aim = TagAimController.withDefaults(sensor, scoringTags);
+ * TagAimController aim = new TagAimController(
+ *         pid,
+ *         Math.toRadians(1.0),                 // deadband: 1 degree
+ *         0.8,                                 // max omega
+ *         TagAimController.LossPolicy.ZERO_OUTPUT_RESET_I);
  *
- * // In your loop:
- * double omega = aim.update(dtSec);
- *
- * if (aim.hasTarget()) {
- *     telemetry.addData("Aim error (deg)", aim.getErrorDeg());
- * }
- *
- * // Use omega as your rotational command (e.g. driveBase.drive(...omega...)).
+ * // In your TeleOp or Auto loop:
+ * BearingSample sample = bearing.sample(clock);
+ * double omega = aim.update(clock, sample);
  * }</pre>
- *
- * <p>Most teams will not instantiate this class directly. Instead, they will
- * use a higher-level helper such as {@code TagAim.forTeleOp(...)} that wraps
- * a base {@code DriveSource} and a {@code Button} and uses this controller
- * internally.</p>
  */
 public final class TagAimController {
 
-    private final AprilTagSensor sensor;
-    private final Set<Integer> idsOfInterest;
+    /**
+     * Policy for what to do when the target is not visible (lost).
+     */
+    public enum LossPolicy {
+        /**
+         * Set output omega to zero and reset the underlying PID state.
+         *
+         * <p>This is a safe default for TeleOp: as soon as the target is lost,
+         * the robot stops turning and the controller forgets any accumulated
+         * integral error.
+         */
+        ZERO_OUTPUT_RESET_I,
+
+        /**
+         * Hold the last computed omega and prevent further integral accumulation.
+         *
+         * <p>Useful when you want aiming to coast briefly through short vision
+         * dropouts, but do not want integral windup.
+         */
+        HOLD_LAST_NO_I,
+
+        /**
+         * Set output omega to zero, but do not reset the PID.
+         *
+         * <p>Can be useful if you expect the same target to reappear quickly
+         * and you want to keep accumulated integral state.
+         */
+        ZERO_NO_RESET
+    }
+
     private final PidController pid;
+    private final double deadbandRad;
+    private final double maxOmega;
+    private final LossPolicy lossPolicy;
 
-    // Tuning parameters
-    private double maxTagAgeSec;
-    private double deadbandRad;
-    private double maxAbsOmega;
-
-    // State for telemetry / inspection
-    private boolean lastHasTarget = false;
-    private double lastErrorRad = 0.0;
+    private double lastOmega = 0.0;
 
     /**
-     * Construct a TagAimController with explicit configuration and PID.
+     * Construct a tag aim controller.
      *
-     * <p>Most teams should use {@link #withDefaults(AprilTagSensor, Set)}
-     * instead, which provides reasonable defaults for FTC robots.</p>
-     *
-     * @param sensor        AprilTag sensor to query
-     * @param idsOfInterest set of tag IDs to aim at
-     * @param pid           PID controller for bearing error
-     * @param maxTagAgeSec  maximum acceptable tag age in seconds
-     * @param deadbandRad   deadband around zero bearing (radians) where
-     *                      omega will be zero
-     * @param maxAbsOmega   maximum absolute omega command (normalized turn)
+     * @param pid         PID implementation used to turn bearing error into omega
+     * @param deadbandRad deadband around zero bearing (in radians) where no output is produced
+     * @param maxOmega    absolute maximum omega command (output is clamped to [-maxOmega, +maxOmega])
+     * @param lossPolicy  policy to apply when no target is visible
      */
-    public TagAimController(AprilTagSensor sensor,
-                            Set<Integer> idsOfInterest,
-                            PidController pid,
-                            double maxTagAgeSec,
+    public TagAimController(PidController pid,
                             double deadbandRad,
-                            double maxAbsOmega) {
-        this.sensor = Objects.requireNonNull(sensor, "sensor");
-        this.idsOfInterest = Objects.requireNonNull(idsOfInterest, "idsOfInterest");
-        this.pid = Objects.requireNonNull(pid, "pid");
-        this.maxTagAgeSec = maxTagAgeSec;
+                            double maxOmega,
+                            LossPolicy lossPolicy) {
+        this.pid = pid;
         this.deadbandRad = deadbandRad;
-        this.maxAbsOmega = Math.abs(maxAbsOmega);
+        this.maxOmega = maxOmega;
+        this.lossPolicy = lossPolicy;
     }
 
     /**
-     * Construct a TagAimController with framework-default tuning.
+     * Update the controller for a new bearing sample.
      *
-     * <p>Defaults are chosen to be reasonable starting points for FTC robots:</p>
+     * <p>This method applies the following logic:
+     * <ol>
+     *   <li>If the target is lost:
+     *     <ul>
+     *       <li>Apply the configured {@link LossPolicy}.</li>
+     *       <li>Return the resulting {@code omega}.</li>
+     *     </ul>
+     *   </li>
+     *   <li>Otherwise:
+     *     <ul>
+     *       <li>Compute error = {@code bearingRad} (we want bearing → 0).</li>
+     *       <li>If {@code |error| < deadbandRad}, output zero.</li>
+     *       <li>Else, run the PID and clamp omega to [-maxOmega, +maxOmega].</li>
+     *     </ul>
+     *   </li>
+     * </ol>
      *
-     * <ul>
-     *   <li>kP = 1.5, kI = 0.0, kD = 0.2 (bearing in radians &rarr; omega).</li>
-     *   <li>Maximum tag age = 0.3 s.</li>
-     *   <li>Deadband = 2 degrees (in radians).</li>
-     *   <li>Maximum |omega| = 0.7 (normalized turn command).</li>
-     * </ul>
-     *
-     * @param sensor        AprilTag sensor to query
-     * @param idsOfInterest set of tag IDs to aim at
-     * @return a controller with default tuning
+     * @param clock  loop clock for the current iteration (used for dtSec)
+     * @param sample current bearing sample from a {@link BearingSource}
+     * @return commanded turn rate omega, in [-maxOmega, +maxOmega]
      */
-    public static TagAimController withDefaults(AprilTagSensor sensor,
-                                                Set<Integer> idsOfInterest) {
-        Pid pid = Pid.withGains(1.5, 0.0, 0.2);
-        double maxTagAgeSec = 0.3;
-        double deadbandRad = Math.toRadians(2.0);
-        double maxAbsOmega = 0.7;
-        return new TagAimController(sensor, idsOfInterest, pid,
-                maxTagAgeSec, deadbandRad, maxAbsOmega);
-    }
+    public double update(LoopClock clock, BearingSample sample) {
+        double dtSec = clock.dtSec();
 
-    /**
-     * Update the controller and compute a new omega command.
-     *
-     * <p>This method should typically be called once per loop, using the same
-     * {@code dtSec} that you pass to your other controllers.</p>
-     *
-     * <p>Behavior:</p>
-     *
-     * <ul>
-     *   <li>If no suitable tag is visible (ID not in the set or too old),
-     *       this returns 0 and {@link #hasTarget()} will be {@code false}.</li>
-     *   <li>If a tag is visible but its bearing is within {@link #getDeadbandRad()},
-     *       this returns 0 to avoid small oscillations.</li>
-     *   <li>Otherwise, the bearing (radians) is passed as the error into the
-     *       underlying {@link PidController}, and its output is clamped to
-     *       [-{@link #getMaxAbsOmega()}, +{@link #getMaxAbsOmega()}].</li>
-     * </ul>
-     *
-     * @param dtSec loop time step in seconds
-     * @return rotational command (omega), typically interpreted as a
-     * normalized turn input
-     */
-    public double update(double dtSec) {
-        AprilTagObservation obs = sensor.best(idsOfInterest, maxTagAgeSec);
-
-        if (!obs.hasTarget) {
-            lastHasTarget = false;
-            lastErrorRad = 0.0;
-            pid.reset(); // clear integral/derivative state when we lose the tag
-            return 0.0;
+        if (!sample.hasTarget) {
+            handleLoss();
+            return lastOmega;
         }
 
-        lastHasTarget = true;
-        lastErrorRad = obs.bearingRad;
+        double error = sample.bearingRad; // we want bearing → 0
 
-        // Apply deadband around zero to avoid micro-oscillations.
-        double error = MathUtil.deadband(lastErrorRad, deadbandRad);
-        if (error == 0.0) {
-            // Aligned within deadband: no turn command needed.
-            return 0.0;
+        // Inside deadband: treat as on-target; no turn command.
+        if (Math.abs(error) < deadbandRad) {
+            lastOmega = 0.0;
+            return lastOmega;
         }
 
-        double rawOmega = pid.update(error, dtSec);
-
-        // Clamp omega magnitude for driver comfort / stability.
-        return MathUtil.clampAbs(rawOmega, maxAbsOmega);
-    }
-
-    // ---------------------------------------------------------------------
-    // Tuning accessors (optional)
-    // ---------------------------------------------------------------------
-
-    /**
-     * @return maximum acceptable tag age in seconds
-     */
-    public double getMaxTagAgeSec() {
-        return maxTagAgeSec;
+        double raw = pid.update(error, dtSec);
+        lastOmega = MathUtil.clamp(raw, -maxOmega, maxOmega);
+        return lastOmega;
     }
 
     /**
-     * Set the maximum acceptable tag age in seconds.
+     * Last commanded omega value.
      *
-     * @param maxTagAgeSec maximum age; values &lt;= 0 will effectively require
-     *                     tags to be from the most recent frame
-     * @return this controller, for chaining
+     * <p>This can be useful for logging or for advanced loss policies that
+     * need to inspect the previous output.
      */
-    public TagAimController setMaxTagAgeSec(double maxTagAgeSec) {
-        this.maxTagAgeSec = maxTagAgeSec;
-        return this;
+    public double getLastOmega() {
+        return lastOmega;
     }
 
     /**
-     * @return deadband radius around zero bearing, in radians
+     * Apply the configured loss policy when the target is not visible.
      */
-    public double getDeadbandRad() {
-        return deadbandRad;
-    }
+    private void handleLoss() {
+        switch (lossPolicy) {
+            case ZERO_OUTPUT_RESET_I:
+                pid.reset();
+                lastOmega = 0.0;
+                break;
 
-    /**
-     * Set the deadband radius around zero bearing, in radians.
-     *
-     * @param deadbandRad deadband radius; negative values are treated as
-     *                    their absolute value
-     * @return this controller, for chaining
-     */
-    public TagAimController setDeadbandRad(double deadbandRad) {
-        this.deadbandRad = Math.abs(deadbandRad);
-        return this;
-    }
+            case HOLD_LAST_NO_I:
+                // Keep lastOmega; do not touch PID state here.
+                // Callers may choose to reset separately if desired.
+                break;
 
-    /**
-     * @return maximum absolute omega command (normalized)
-     */
-    public double getMaxAbsOmega() {
-        return maxAbsOmega;
-    }
-
-    /**
-     * Set the maximum absolute omega command (normalized).
-     *
-     * @param maxAbsOmega maximum magnitude; negative values are treated as
-     *                    their absolute value
-     * @return this controller, for chaining
-     */
-    public TagAimController setMaxAbsOmega(double maxAbsOmega) {
-        this.maxAbsOmega = Math.abs(maxAbsOmega);
-        return this;
-    }
-
-    // ---------------------------------------------------------------------
-    // Telemetry helpers
-    // ---------------------------------------------------------------------
-
-    /**
-     * @return whether the last call to {@link #update(double)} used a valid
-     * tag observation
-     */
-    public boolean hasTarget() {
-        return lastHasTarget;
-    }
-
-    /**
-     * @return last bearing error (radians) seen by the controller; 0 if
-     * no target was available
-     */
-    public double getErrorRad() {
-        return lastErrorRad;
-    }
-
-    /**
-     * @return last bearing error (degrees) seen by the controller; 0 if
-     * no target was available
-     */
-    public double getErrorDeg() {
-        return Math.toDegrees(lastErrorRad);
+            case ZERO_NO_RESET:
+                lastOmega = 0.0;
+                // PID state is preserved; integral may continue when target reappears.
+                break;
+        }
     }
 }

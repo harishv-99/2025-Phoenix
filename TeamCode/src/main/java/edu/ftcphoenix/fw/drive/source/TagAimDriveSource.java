@@ -1,145 +1,92 @@
 package edu.ftcphoenix.fw.drive.source;
 
-import java.util.Objects;
-
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.input.Button;
+import edu.ftcphoenix.fw.sensing.BearingSource;
+import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
 import edu.ftcphoenix.fw.sensing.TagAimController;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
- * Drive source that wraps another {@link DriveSource} and adds AprilTag-based
- * auto-aim behavior when a button is held.
+ * DriveSource that wraps another DriveSource and adds tag-based auto-aim.
  *
- * <p>This class is intended to be used in TeleOp, where driver stick inputs
- * produce a base {@link DriveSignal} (via, for example,
- * {@link StickDriveSource}) and a button is used to temporarily override
- * the turn component ({@link DriveSignal#omega}) so that the robot rotates
- * to face an AprilTag.</p>
- *
- * <h2>Responsibilities</h2>
+ * <h2>Role</h2>
+ * <p>{@code TagAimDriveSource} is a reusable implementation of the same
+ * behavior that {@code TagAim.forTeleOp(...)} provides:
  *
  * <ul>
- *   <li>Delegate to an underlying "base" {@link DriveSource} to compute
- *       the raw drive signal each loop.</li>
- *   <li>While the aim button is pressed:
+ *   <li>It holds a "base" {@link DriveSource} (e.g. stick mapping).</li>
+ *   <li>It reads a {@link BearingSource} (e.g. AprilTags wrapped as bearing).</li>
+ *   <li>It uses a {@link TagAimController} to turn bearing into omega.</li>
+ *   <li>When the {@link Button} is pressed:
  *     <ul>
- *       <li>Use a {@link TagAimController} to compute an omega command
- *           based on tag bearing.</li>
- *       <li>Replace the base signal's omega with the controller's output.</li>
+ *       <li>Axial and lateral commands come from the base source.</li>
+ *       <li>Omega is overridden by the controller's output.</li>
  *     </ul>
  *   </li>
- *   <li>When the aim button is not pressed, pass the base signal through
- *       unchanged.</li>
+ *   <li>When the button is <b>not</b> pressed, it simply passes through
+ *       the base {@link DriveSignal} unchanged.</li>
  * </ul>
  *
- * <h2>Typical usage</h2>
- *
- * <pre>{@code
- * // TeleOp init:
- * AprilTagSensor tags = Tags.aprilTags(hardwareMap, "Webcam 1");
- * Set<Integer> scoringTags = Set.of(1, 2, 3);
- *
- * TagAimController aim = TagAimController.withDefaults(tags, scoringTags);
- *
- * StickDriveSource sticks = new StickDriveSource(p1(), new StickDriveSource.Params());
- *
- * DriveSource drive = new TagAimDriveSource(
- *         sticks,
- *         p1().leftBumper(),
- *         aim);
- *
- * // TeleOp loop:
- * drivebase.drive(drive.get(clock()));
- * }</pre>
- *
- * <p>Most teams will not instantiate this class directly; they can instead
- * use a helper such as {@code TagAim.forTeleOp(...)} that wires everything
- * together in one call.</p>
+ * <p>This class is useful if you prefer to construct and hold an explicit
+ * object instead of using anonymous wrappers.
  */
 public final class TagAimDriveSource implements DriveSource {
 
-    private final DriveSource base;
+    private final DriveSource baseDrive;
     private final Button aimButton;
+    private final BearingSource bearingSource;
     private final TagAimController controller;
 
-    // Telemetry helpers
-    private boolean lastAiming = false;
-    private double lastOmega = 0.0;
-
     /**
-     * Create a new TagAimDriveSource.
+     * Construct a tag-aiming drive source.
      *
-     * @param base       base drive source (e.g., {@link StickDriveSource});
-     *                   must not be {@code null}
-     * @param aimButton  button that enables auto-aim while pressed;
-     *                   must not be {@code null}
-     * @param controller tag aim controller used to compute omega;
-     *                   must not be {@code null}
+     * @param baseDrive     existing drive source (sticks, planner, etc.)
+     * @param aimButton     button that enables aiming while pressed
+     * @param bearingSource source of bearing measurements to the target
+     * @param controller    controller that turns bearing into omega
      */
-    public TagAimDriveSource(DriveSource base,
+    public TagAimDriveSource(DriveSource baseDrive,
                              Button aimButton,
+                             BearingSource bearingSource,
                              TagAimController controller) {
-        this.base = Objects.requireNonNull(base, "base");
-        this.aimButton = Objects.requireNonNull(aimButton, "aimButton");
-        this.controller = Objects.requireNonNull(controller, "controller");
+        this.baseDrive = baseDrive;
+        this.aimButton = aimButton;
+        this.bearingSource = bearingSource;
+        this.controller = controller;
     }
 
+    /**
+     * Get the current drive signal.
+     *
+     * <p>Behavior:
+     * <ul>
+     *   <li>If {@code aimButton} is <b>not</b> pressed, returns the result of
+     *       {@link DriveSource#get(LoopClock)} from {@code baseDrive}.</li>
+     *   <li>If {@code aimButton} <b>is</b> pressed:
+     *     <ul>
+     *       <li>Sample bearing via {@link BearingSource#sample(LoopClock)}.</li>
+     *       <li>Update the {@link TagAimController} via
+     *           {@link TagAimController#update(LoopClock, BearingSample)}.</li>
+     *       <li>Keep axial/lateral from the base drive, override omega.</li>
+     *     </ul>
+     *   </li>
+     * </ul>
+     */
     @Override
     public DriveSignal get(LoopClock clock) {
-        // Always compute the base signal first.
-        DriveSignal baseSignal = base.get(clock);
+        DriveSignal base = baseDrive.get(clock);
 
-        // Check whether the driver is requesting auto-aim.
-        lastAiming = aimButton.isPressed();
-        if (!lastAiming) {
-            // Not aiming: pass through the base signal unchanged.
-            lastOmega = baseSignal.omega;
-            return baseSignal;
+        if (!aimButton.isPressed()) {
+            // No aiming: pass through base drive signal.
+            return base;
         }
 
-        // Aiming: use tag-based controller to compute omega.
-        double dtSec = clock.dtSec();
-        double omega = controller.update(dtSec);
-        lastOmega = omega;
+        BearingSample sample = bearingSource.sample(clock);
+        double omega = controller.update(clock, sample);
 
-        // Replace the turn component; keep axial/lateral from the base signal.
-        return baseSignal.withOmega(omega);
-    }
-
-    // -------------------------------------------------------------------------
-    // Telemetry helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * @return whether the aim button was pressed during the last call to
-     * {@link #get(LoopClock)}
-     */
-    public boolean isAiming() {
-        return lastAiming;
-    }
-
-    /**
-     * @return whether the {@link TagAimController} had a valid tag during
-     * the last call to {@link #get(LoopClock)}
-     */
-    public boolean hasTarget() {
-        return controller.hasTarget();
-    }
-
-    /**
-     * @return last omega command produced while aiming; 0 when not aiming
-     */
-    public double getLastOmega() {
-        return lastOmega;
-    }
-
-    /**
-     * @return last bearing error (degrees) reported by the controller; 0 if
-     * no valid tag was seen
-     */
-    public double getErrorDeg() {
-        return controller.getErrorDeg();
+        // Preserve driver-controlled axial/lateral, override omega to aim.
+        return new DriveSignal(base.axial, base.lateral, omega);
     }
 }

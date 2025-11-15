@@ -2,177 +2,166 @@ package edu.ftcphoenix.robots.phoenix;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import edu.ftcphoenix.fw.adapters.plants.Plants;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.stage.buffer.BufferStage;
-import edu.ftcphoenix.fw.stage.setpoint.SetpointStage;
-import edu.ftcphoenix.fw.util.Units;
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import edu.ftcphoenix.fw.input.DriverKit;
+import edu.ftcphoenix.fw.robot.Subsystem;
+import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.robots.phoenix.subsystem.DriveSubsystem;
+import edu.ftcphoenix.robots.phoenix.subsystem.ShooterSubsystem;
+import edu.ftcphoenix.robots.phoenix.subsystem.VisionSubsystem;
 
 /**
- * Robot container for the "Phoenix" robot.
+ * PhoenixRobot represents your whole robot for this season.
  *
- * <p>This class is responsible for wiring FTC hardware into framework
- * subsystems:
+ * <h2>Role</h2>
+ * <p>This class owns all of the robot's subsystems and provides a simple
+ * lifecycle that TeleOp and Autonomous OpModes can call into.
+ *
+ * <p>Typical pattern:
  * <ul>
- *   <li>Mecanum drivebase</li>
- *   <li>Shooter (velocity-based)</li>
- *   <li>Buffer / feeder (timed pulses)</li>
+ *   <li>TeleOp shell (extends PhoenixTeleOpBase) calls:
+ *     <ul>
+ *       <li>{@link #onTeleopInit()} once at start.</li>
+ *       <li>{@link #onTeleopLoop(LoopClock)} every loop.</li>
+ *       <li>{@link #onStop()} when stopping.</li>
+ *     </ul>
+ *   </li>
+ *   <li>Auto shell (extends PhoenixAutoBase) similarly calls
+ *       {@link #onAutoInit()}, {@link #onAutoLoop(LoopClock)}, and {@link #onStop()}.</li>
  * </ul>
  *
- * <p>Typical usage from an OpMode:
- * <pre>{@code
- * public final class PhoenixTeleOp extends OpMode {
- *     private PhoenixRobot robot;
- *
- *     @Override public void init() {
- *         robot = new PhoenixRobot(hardwareMap);
- *         // set up inputs, bindings, StickDriveSource, etc.
- *     }
- *
- *     @Override public void loop() {
- *         double dtSec = ...; // from LoopClock
- *
- *         // Drive:
- *         DriveSignal cmd = sticks.get(clock).clamped();
- *         robot.drivebase.drive(cmd);
- *         robot.drivebase.update(clock);
- *
- *         // Stages:
- *         robot.shooter.update(dtSec);
- *         robot.buffer.update(dtSec);
- *     }
- * }
- * }</pre>
- *
- * <p>All hardware names and constants below are examples; tune as needed for
- * your robot.</p>
+ * <p>All timing is derived from {@link LoopClock}, so subsystems never need
+ * to call {@code nanoTime()} directly.
  */
 public final class PhoenixRobot {
 
-    // ---------------------------------------------------------------------
-    // Hardware names (tune to match your configuration)
-    // ---------------------------------------------------------------------
+    private final DriverKit driverKit;
+    private final Telemetry telemetry;
 
-    public static final String HW_FRONT_LEFT = "fl";
-    public static final String HW_FRONT_RIGHT = "fr";
-    public static final String HW_BACK_LEFT = "bl";
-    public static final String HW_BACK_RIGHT = "br";
+    // Subsystems owned by this robot.
+    private final DriveSubsystem drive;
+    private final VisionSubsystem vision;
+    private final ShooterSubsystem shooter;
 
-    public static final String HW_SHOOTER = "shooter";
-    public static final String HW_BUFFER = "feeder";
-
-    // ---------------------------------------------------------------------
-    // Shooter configuration (example values)
-    // ---------------------------------------------------------------------
+    // Registry to forward lifecycle calls uniformly.
+    private final List<Subsystem> subsystems = new ArrayList<>();
 
     /**
-     * Encoder ticks per motor shaft revolution (including gear ratio).
-     */
-    public static final double SHOOTER_TICKS_PER_REV = 28.0;
-
-    /**
-     * Idle RPM (wheel speed) for shooter.
-     */
-    public static final double SHOOTER_IDLE_RPM = 1000.0;
-
-    /**
-     * Full SHOOT RPM for shooter.
-     */
-    public static final double SHOOTER_SHOOT_RPM = 3500.0;
-
-    // ---------------------------------------------------------------------
-    // Buffer pulse configuration (example values)
-    // ---------------------------------------------------------------------
-
-    /**
-     * Forward pulse power for buffer (0..1).
-     */
-    public static final double BUFFER_POWER = 1.0;
-
-    /**
-     * Pulse duration (seconds) to feed one game piece.
-     */
-    public static final double BUFFER_SECONDS = 0.40;
-
-    // ---------------------------------------------------------------------
-    // Public goal enums
-    // ---------------------------------------------------------------------
-
-    /**
-     * High-level shooter goals.
+     * Construct the PhoenixRobot and all of its subsystems.
      *
-     * <p>These are mapped to target velocities via {@link SetpointStage}.</p>
+     * @param hw        FTC hardware map
+     * @param driverKit driver input helpers created by the base OpMode
+     * @param telemetry telemetry from the base OpMode
      */
-    public enum ShooterGoal {
-        STOP,
-        IDLE,
-        SHOOT
+    public PhoenixRobot(HardwareMap hw,
+                        DriverKit driverKit,
+                        Telemetry telemetry) {
+        this.driverKit = driverKit;
+        this.telemetry = telemetry;
+
+        // Construct subsystems.
+        this.vision = new VisionSubsystem(hw, telemetry);
+        this.drive = new DriveSubsystem(hw, driverKit, vision);
+        this.shooter = new ShooterSubsystem(hw, driverKit, telemetry);
+
+        // Register them in the order we want to update them.
+        subsystems.add(drive);
+        subsystems.add(shooter);
+        subsystems.add(vision);
     }
 
-    // ---------------------------------------------------------------------
-    // Public subsystems
-    // ---------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // TeleOp lifecycle
+    // ------------------------------------------------------------------------
 
     /**
-     * Drivetrain (mecanum).
-     */
-    public final MecanumDrivebase drivebase;
-
-    /**
-     * Shooter stage (velocity-based).
-     */
-    public final SetpointStage<ShooterGoal> shooter;
-
-    /**
-     * Buffer / feeder stage (timed pulses).
-     */
-    public final BufferStage buffer;
-
-    // ---------------------------------------------------------------------
-    // Construction
-    // ---------------------------------------------------------------------
-
-    /**
-     * Wire all Phoenix subsystems from the FTC {@link HardwareMap}.
+     * Called once when TeleOp starts.
      *
-     * @param hw hardware map provided by the OpMode
+     * <p>Forwards to {@link Subsystem#onTeleopInit()} on each subsystem.
      */
-    public PhoenixRobot(HardwareMap hw) {
-        // ---- Drivebase: use Drives helper to hide FtcHardware from robot code.
-        //
-        // Adjust inversion as needed for your robot. Example here:
-        // - Names:  fl, fr, bl, br
-        // - Only front-right is inverted (common when wiring is asymmetric).
-        drivebase = Drives.mecanum(hw)
-                .frontLeft(HW_FRONT_LEFT)
-                .frontRight(HW_FRONT_RIGHT)
-                .backLeft(HW_BACK_LEFT)
-                .backRight(HW_BACK_RIGHT)
-                .invertFrontRight()   // tweak per your robot's motor orientations
-                .build();
+    public void onTeleopInit() {
+        for (Subsystem s : subsystems) {
+            s.onTeleopInit();
+        }
+    }
 
-        // ---- Shooter: SetpointStage + Plants.velocity (rad/s)
-        shooter = SetpointStage.enumBuilder(ShooterGoal.class)
-                .name("Shooter")
-                .plant(Plants.velocity(
-                        hw,
-                        HW_SHOOTER,
-                        SHOOTER_TICKS_PER_REV,
-                        false))
-                .target(ShooterGoal.STOP, 0.0)
-                .target(ShooterGoal.IDLE, Units.rpmToRadPerSec(SHOOTER_IDLE_RPM))
-                .target(ShooterGoal.SHOOT, Units.rpmToRadPerSec(SHOOTER_SHOOT_RPM))
-                .build();
+    /**
+     * Called every loop during TeleOp.
+     *
+     * <p>Forwards {@link LoopClock} to each subsystem's
+     * {@link Subsystem#onTeleopLoop(LoopClock)} and then updates telemetry.
+     *
+     * @param clock loop clock for the current TeleOp iteration
+     */
+    public void onTeleopLoop(LoopClock clock) {
+        for (Subsystem s : subsystems) {
+            s.onTeleopLoop(clock);
+        }
+        telemetry.update();
+    }
 
-        // ---- Buffer: BufferStage with timed pulses, gated on shooter readiness.
-        buffer = BufferStage.builder()
-                .name("Buffer")
-                .egress(
-                        BufferStage.TransferSpecs
-                                .powerFor(hw, HW_BUFFER, false, BUFFER_POWER, BUFFER_SECONDS)
-                                .downstreamReady(shooter::atSetpoint)
-                )
-                .build();
+    // ------------------------------------------------------------------------
+    // Autonomous lifecycle
+    // ------------------------------------------------------------------------
+
+    /**
+     * Called once when Autonomous starts.
+     *
+     * <p>Forwards to {@link Subsystem#onAutoInit()} on each subsystem.
+     */
+    public void onAutoInit() {
+        for (Subsystem s : subsystems) {
+            s.onAutoInit();
+        }
+    }
+
+    /**
+     * Called every loop during Autonomous.
+     *
+     * <p>Forwards {@link LoopClock} to each subsystem's
+     * {@link Subsystem#onAutoLoop(LoopClock)} and then updates telemetry.
+     *
+     * @param clock loop clock for the current Autonomous iteration
+     */
+    public void onAutoLoop(LoopClock clock) {
+        for (Subsystem s : subsystems) {
+            s.onAutoLoop(clock);
+        }
+        telemetry.update();
+    }
+
+    // ------------------------------------------------------------------------
+    // Common shutdown
+    // ------------------------------------------------------------------------
+
+    /**
+     * Called when TeleOp or Auto is stopping.
+     *
+     * <p>Forwards to {@link Subsystem#onStop()} on each subsystem.
+     */
+    public void onStop() {
+        for (Subsystem s : subsystems) {
+            s.onStop();
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Optional accessors (for tasks or higher-level logic)
+    // ------------------------------------------------------------------------
+
+    public DriveSubsystem drive() {
+        return drive;
+    }
+
+    public VisionSubsystem vision() {
+        return vision;
+    }
+
+    public ShooterSubsystem shooter() {
+        return shooter;
     }
 }

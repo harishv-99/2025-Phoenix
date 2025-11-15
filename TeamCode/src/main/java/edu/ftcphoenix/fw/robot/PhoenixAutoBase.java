@@ -12,7 +12,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   <li>Provide a structured lifecycle for autonomous:
  *       <ol>
  *         <li>Framework wiring.</li>
- *         <li>{@link #initRobot()} for user hardware/subsystems.</li>
+ *         <li>{@link #onInitRobot()} for user hardware/subsystems.</li>
  *         <li>{@link #waitForStart()} call.</li>
  *         <li>Clock reset and {@link #onStartRobot()} hook.</li>
  *         <li>{@link #runAuto()} user-defined autonomous sequence.</li>
@@ -57,7 +57,7 @@ public abstract class PhoenixAutoBase extends LinearOpMode {
         clock = new LoopClock();
 
         // Let subclass map hardware and construct subsystems.
-        initRobot();
+        onInitRobot();
 
         telemetry.addLine("PhoenixAutoBase: init complete");
         telemetry.update();
@@ -97,7 +97,7 @@ public abstract class PhoenixAutoBase extends LinearOpMode {
      *       runOpMode still needs to return promptly).</li>
      * </ul>
      */
-    protected abstract void initRobot();
+    protected abstract void onInitRobot();
 
     /**
      * Called once after {@link #waitForStart()} and clock reset.
