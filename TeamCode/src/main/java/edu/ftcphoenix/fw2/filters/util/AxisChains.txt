@@ -6,7 +6,7 @@ Filter<Double> axis = AxisChains.teleopAxis(0.05, 1.8, 3.0, () -> slowMode ? 0.3
 // Loop
 double cmd = gp.leftY();                 // [-1..1]
 double shaped = axis.apply(cmd, dt);
-motor.setPower(MathUtil.clampFinite(shaped, -1, 1, 0));
+motorOutput.setPower(MathUtil.clampFinite(shaped, -1, 1, 0));
 
 Arm motion (very gentle)
 Filter<Double> armShape = AxisChains.gentleMotion(2.0 /* jerk */, 0.8 /* rate */);
@@ -25,7 +25,7 @@ double smoothed = smooth.apply(distanceSensor.getDistance(), dt);
 
 Safe final clamp (if you want a last guard)
 Filter<Double> safeClamp = AxisChains.safeOutputClamp(-1, 1);
-motor.setPower(safeClamp.apply(command, dt));
+motorOutput.setPower(safeClamp.apply(command, dt));
 
 Why this design helps
 

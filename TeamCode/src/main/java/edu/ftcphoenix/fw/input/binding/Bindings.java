@@ -1,240 +1,177 @@
 package edu.ftcphoenix.fw.input.binding;
 
-import edu.ftcphoenix.fw.input.Axis;
-import edu.ftcphoenix.fw.input.Button;
-
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.BooleanSupplier;
-import java.util.function.DoubleConsumer;
-import java.util.function.Supplier;
+import java.util.function.Consumer;
+
+import edu.ftcphoenix.fw.input.Button;
 
 /**
- * Declarative bindings from inputs to actions.
+ * Simple binding manager that turns raw {@link Button} states into higher-level
+ * behaviors for teleop:
  *
- * <h3>Update contract</h3>
- * Call {@link #update(double)} once per loop <b>after</b> you've updated inputs
- * (i.e., after Gamepads.update(dt)). Bindings are stateless except for local toggles.
- *
- * <h3>Design goals</h3>
  * <ul>
- *   <li>One-liners for common FTC use cases.</li>
- *   <li>No threads; runs in your normal loop.</li>
- *   <li>Composable: add as many bindings as you want, they all execute each tick.</li>
+ *   <li>{@link #onPress(Button, Runnable)} – fire once on rising edge.</li>
+ *   <li>{@link #whileHeld(Button, Runnable, Runnable)} – run once per loop while
+ *       pressed, and a separate action when released.</li>
+ *   <li>{@link #toggle(Button, Consumer)} – flip a boolean on rising edge and
+ *       notify a consumer.</li>
  * </ul>
  *
- * <h3>Examples</h3>
- * <pre>{@code
- * Bindings bind = new Bindings();
- * bind.onPress(shootBtn, shooter::fireOnce);
- * bind.toggle(enableBtn, shooter::setEnabled); // true/false flip each press
- * bind.whileHeld(intakeBtn, () -> intake.setPower(1.0), () -> intake.setPower(0.0));
- * bind.onDoubleTap(altFireBtn, shooter::burst);
- * bind.onLongHoldStart(spinUpBtn.configureLongHold(0.5), shooter::spinUp);
- * bind.whileLongHeld(slowBtn.configureLongHold(0.25), () -> drive.setScale(0.4), () -> drive.setScale(1.0));
- * bind.stream(throttleAxis, drive::setForward); // every tick
- * // in loop:
- * pads.update(dt);
- * bind.update(dt);
- * }</pre>
+ * <p>Usage pattern:
+ * <pre>
+ * Bindings bindings = new Bindings();
+ *
+ * bindings.onPress(dk.p1().buttonA(), new Runnable() {
+ *     public void run() { doSomethingOnce(); }
+ * });
+ *
+ * bindings.whileHeld(dk.p1().rightBumper(),
+ *     new Runnable() { public void run() { runWhilePressed(); } },
+ *     new Runnable() { public void run() { stopWhenReleased(); } }
+ * );
+ *
+ * bindings.toggle(dk.p1().buttonX(), new Consumer<Boolean>() {
+ *     public void accept(Boolean on) { setShooterOn(on != null && on.booleanValue()); }
+ * });
+ *
+ * // In loop():
+ * bindings.update(dtSec);
+ * </pre>
+ *
+ * <p>This class is deliberately tiny and SDK-agnostic. It does not know about
+ * gamepads directly, only the {@link Button} abstraction provided by the FW.
  */
 public final class Bindings {
 
-    private final List<Runnable> tasks = new ArrayList<>();
+    private static final class OnPressBinding {
+        Button button;
+        Runnable action;
+        boolean lastPressed;
+    }
 
-    // ---------------------------
-    // Basic button bindings
-    // ---------------------------
+    private static final class WhileHeldBinding {
+        Button button;
+        Runnable whilePressed;
+        Runnable onRelease;
+        boolean lastPressed;
+    }
+
+    private static final class ToggleBinding {
+        Button button;
+        Consumer<Boolean> consumer;
+        boolean lastPressed;
+        boolean toggled;
+    }
+
+    private final List<OnPressBinding> onPressBindings = new ArrayList<OnPressBinding>();
+    private final List<WhileHeldBinding> whileHeldBindings = new ArrayList<WhileHeldBinding>();
+    private final List<ToggleBinding> toggleBindings = new ArrayList<ToggleBinding>();
 
     /**
-     * Run action on the tick a button transitions from up -> down.
+     * Bind a button to an action that fires once on the rising edge
+     * (when the button transitions from not pressed to pressed).
      */
-    public Bindings onPress(Button b, Runnable action) {
-        require(b);
-        require(action);
-        tasks.add(() -> {
-            if (b.justPressed()) action.run();
-        });
-        return this;
+    public void onPress(Button button, Runnable action) {
+        if (button == null || action == null) {
+            throw new IllegalArgumentException("button and action are required");
+        }
+        OnPressBinding b = new OnPressBinding();
+        b.button = button;
+        b.action = action;
+        b.lastPressed = button.isPressed(); // start from current state
+        onPressBindings.add(b);
     }
 
     /**
-     * Run action on the tick a button transitions from down -> up.
+     * Bind a button to an action that runs every loop while the button is pressed,
+     * and another action that runs once when the button is released.
+     *
+     * <p>Semantics:
+     * <ul>
+     *   <li>If the button is pressed, {@code whilePressed.run()} is called on
+     *       every {@link #update(double)}.</li>
+     *   <li>When the button transitions from pressed → not pressed, the
+     *       {@code onRelease.run()} action is fired once.</li>
+     * </ul>
      */
-    public Bindings onRelease(Button b, Runnable action) {
-        require(b);
-        require(action);
-        tasks.add(() -> {
-            if (b.justReleased()) action.run();
-        });
-        return this;
+    public void whileHeld(Button button, Runnable whilePressed, Runnable onRelease) {
+        if (button == null || whilePressed == null || onRelease == null) {
+            throw new IllegalArgumentException("button, whilePressed, and onRelease are required");
+        }
+        WhileHeldBinding b = new WhileHeldBinding();
+        b.button = button;
+        b.whilePressed = whilePressed;
+        b.onRelease = onRelease;
+        b.lastPressed = button.isPressed(); // start from current state
+        whileHeldBindings.add(b);
     }
 
     /**
-     * Toggle a boolean state each time the button is pressed.
-     * The consumer is given the new state (true/false).
+     * Bind a button to a boolean toggle. Each rising edge of the button flips
+     * the internal boolean state and notifies the consumer.
+     *
+     * <p>Semantics:
+     * <ul>
+     *   <li>The internal state starts at {@code false}.</li>
+     *   <li>On each rising edge (not pressed → pressed), the state toggles
+     *       and {@code consumer.accept(state)} is called.</li>
+     *   <li>There is no automatic call at init; if you need an initial state
+     *       applied to hardware, set it yourself in your OpMode init.</li>
+     * </ul>
      */
-    public Bindings toggle(Button b, java.util.function.Consumer<Boolean> consumer) {
-        require(b);
-        require(consumer);
-        final boolean[] state = {false};
-        tasks.add(() -> {
-            if (b.justPressed()) {
-                state[0] = !state[0];
-                consumer.accept(state[0]);
-            }
-        });
-        return this;
+    public void toggle(Button button, Consumer<Boolean> consumer) {
+        if (button == null || consumer == null) {
+            throw new IllegalArgumentException("button and consumer are required");
+        }
+        ToggleBinding b = new ToggleBinding();
+        b.button = button;
+        b.consumer = consumer;
+        b.lastPressed = button.isPressed();
+        b.toggled = false;
+        toggleBindings.add(b);
     }
 
     /**
-     * While button is held, run {@code doWhile} every tick; when released, run {@code onStop} once.
-     */
-    public Bindings whileHeld(Button b, Runnable doWhile, Runnable onStop) {
-        require(b);
-        require(doWhile);
-        require(onStop);
-        final boolean[] wasHeld = {false};
-        tasks.add(() -> {
-            if (b.isDown()) {
-                doWhile.run();
-                wasHeld[0] = true;
-            } else if (wasHeld[0]) {
-                onStop.run();
-                wasHeld[0] = false;
-            }
-        });
-        return this;
-    }
-
-    // ---------------------------
-    // Gesture bindings
-    // ---------------------------
-
-    /**
-     * Run action when a configured double-tap is detected (see Button.configureDoubleTap).
-     */
-    public Bindings onDoubleTap(Button b, Runnable action) {
-        require(b);
-        require(action);
-        tasks.add(() -> {
-            if (b.justDoubleTapped()) action.run();
-        });
-        return this;
-    }
-
-    /**
-     * Run action when a configured long-hold first crosses its threshold (edge).
-     */
-    public Bindings onLongHoldStart(Button b, Runnable action) {
-        require(b);
-        require(action);
-        tasks.add(() -> {
-            if (b.longHoldStarted()) action.run();
-        });
-        return this;
-    }
-
-    /**
-     * While long-hold condition is true, run {@code doWhile}; on exit, run {@code onStop} once.
-     */
-    public Bindings whileLongHeld(Button b, Runnable doWhile, Runnable onStop) {
-        require(b);
-        require(doWhile);
-        require(onStop);
-        final boolean[] was = {false};
-        tasks.add(() -> {
-            if (b.isLongHeld()) {
-                doWhile.run();
-                was[0] = true;
-            } else if (was[0]) {
-                onStop.run();
-                was[0] = false;
-            }
-        });
-        return this;
-    }
-
-    // ---------------------------
-    // Axis streaming
-    // ---------------------------
-
-    /**
-     * Stream an axis value to a consumer each tick (e.g., motor power).
-     */
-    public Bindings stream(Axis axis, DoubleConsumer consumer) {
-        require(axis);
-        require(consumer);
-        tasks.add(() -> consumer.accept(axis.get()));
-        return this;
-    }
-
-    /**
-     * Stream an axis value multiplied by a dynamic scale (e.g., slow mode).
-     * Scale supplier is sampled every tick.
-     */
-    public Bindings streamScaled(Axis axis, Supplier<Double> scale, DoubleConsumer consumer) {
-        require(axis);
-        require(scale);
-        require(consumer);
-        tasks.add(() -> consumer.accept(axis.get() * safe(scale.get())));
-        return this;
-    }
-
-    /**
-     * Stream an axis value only while a condition is true (e.g., while a combo chord is active).
-     * When condition is false, {@code onBlocked} runs once (use to zero outputs).
-     */
-    public Bindings streamWhile(Axis axis,
-                                BooleanSupplier condition,
-                                DoubleConsumer consumer,
-                                Runnable onBlocked) {
-        require(axis);
-        require(condition);
-        require(consumer);
-        require(onBlocked);
-        final boolean[] blocked = {false};
-        tasks.add(() -> {
-            if (condition.getAsBoolean()) {
-                consumer.accept(axis.get());
-                blocked[0] = false;
-            } else if (!blocked[0]) {
-                onBlocked.run();
-                blocked[0] = true;
-            }
-        });
-        return this;
-    }
-
-    // ---------------------------
-    // Lifecycle
-    // ---------------------------
-
-    /**
-     * Run all bindings for this loop. Call once per loop, after inputs update.
+     * Process all bindings for this loop.
+     *
+     * <p>{@code dtSec} is provided for symmetry with other FW components, but
+     * is not currently used. It is kept to allow future time-based bindings
+     * without changing the signature.
      */
     public void update(double dtSec) {
-        // dtSec reserved for future time-aware per-binding filters if needed.
-        for (int i = 0, n = tasks.size(); i < n; i++) tasks.get(i).run();
-    }
+        // onPress: detect rising edge
+        for (int i = 0; i < onPressBindings.size(); i++) {
+            OnPressBinding b = onPressBindings.get(i);
+            boolean pressed = b.button.isPressed();
+            if (pressed && !b.lastPressed) {
+                b.action.run();
+            }
+            b.lastPressed = pressed;
+        }
 
-    /**
-     * Remove all bindings.
-     */
-    public void clear() {
-        tasks.clear();
-    }
+        // whileHeld: run while pressed, fire onRelease on falling edge
+        for (int i = 0; i < whileHeldBindings.size(); i++) {
+            WhileHeldBinding b = whileHeldBindings.get(i);
+            boolean pressed = b.button.isPressed();
+            if (pressed) {
+                b.whilePressed.run();
+            } else if (b.lastPressed) {
+                // Just released
+                b.onRelease.run();
+            }
+            b.lastPressed = pressed;
+        }
 
-    // ---------------------------
-    // Utils
-    // ---------------------------
-
-    private static <T> T require(T obj) {
-        return Objects.requireNonNull(obj, "argument must be non-null");
-    }
-
-    private static double safe(Double d) {
-        return (d == null || d.isNaN() || d.isInfinite()) ? 1.0 : d;
+        // toggle: flip state on rising edge and notify consumer
+        for (int i = 0; i < toggleBindings.size(); i++) {
+            ToggleBinding b = toggleBindings.get(i);
+            boolean pressed = b.button.isPressed();
+            if (pressed && !b.lastPressed) {
+                b.toggled = !b.toggled;
+                b.consumer.accept(Boolean.valueOf(b.toggled));
+            }
+            b.lastPressed = pressed;
+        }
     }
 }
