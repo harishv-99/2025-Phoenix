@@ -5,7 +5,7 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
-import edu.ftcphoenix.fw.adapters.plants.Plants;
+import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
@@ -101,11 +101,11 @@ public final class TeleOpStaged extends OpMode {
         // 3) Shooter: SetpointStage + velocity Plant
         shooterStage = SetpointStage.enumBuilder(ShooterGoal.class)
                 .name("Shooter")
-                .plant(Plants.velocity(
+                .plant(FtcPlants.velocity(
                         hardwareMap,
                         HW_SHOOTER,
-                        SHOOTER_TICKS_PER_REV,
-                        false))
+                        false,
+                        SHOOTER_TICKS_PER_REV))
                 .target(ShooterGoal.STOP, 0.0)
                 .target(ShooterGoal.IDLE, Units.rpmToRadPerSec(SHOOTER_IDLE_RPM))
                 .target(ShooterGoal.SHOOT, Units.rpmToRadPerSec(SHOOTER_SHOOT_RPM))

@@ -6,6 +6,7 @@ import java.util.function.BooleanSupplier;
 
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
 import edu.ftcphoenix.fw.hal.MotorOutput;
+import edu.ftcphoenix.fw.stage.Stage;
 
 /**
  * Timed pulse stage for a buffer / indexer mechanism.
@@ -38,7 +39,7 @@ import edu.ftcphoenix.fw.hal.MotorOutput;
  * downstream readiness allows. EJECT commands are also queued; they run after any
  * in-progress pulse completes.</p>
  */
-public final class BufferStage {
+public final class BufferStage implements Stage {
 
     /**
      * High-level buffer commands.
@@ -123,7 +124,7 @@ public final class BufferStage {
         /**
          * Student-friendly factory: build specs from a hardware name.
          *
-         * <p>This mirrors the {@code Plants.*(hardwareMap, name, ...)} helpers:
+         * <p>This mirrors the {@code FtcPlants.*(hardwareMap, name, ...)} helpers:
          * call this from robot wiring code instead of touching {@link MotorOutput}
          * or {@link FtcHardware} directly.</p>
          *

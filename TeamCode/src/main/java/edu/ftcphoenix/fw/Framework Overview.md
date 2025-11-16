@@ -1,10 +1,12 @@
 # Phoenix FTC Framework Overview
 
-Welcome! This document is a guided tour of the Phoenix FTC framework and how you use it to build clear, maintainable robot code.
+Welcome! This document is a guided tour of the Phoenix FTC framework and how you use it to build
+clear, maintainable robot code.
 
 The overarching goal:
 
-> **Make robot-specific code as simple and readable as possible, while the framework handles the wiring, control patterns, and boilerplate.**
+> **Make robot-specific code as simple and readable as possible, while the framework handles the
+wiring, control patterns, and boilerplate.**
 >
 > Students write the *story* of what the robot does; the framework handles the plumbing.
 
@@ -13,6 +15,9 @@ Robot stories are expressed primarily through:
 * A season-specific **`PhoenixRobot`** class that owns subsystems.
 * Small, focused **subsystems** (drive, vision, shooter, etc.).
 * **Thin TeleOp and Auto shells** that delegate to `PhoenixRobot`.
+
+This overview explains how the packages fit together and how your code sits on top of them. For
+concrete “how do I start a TeleOp?” steps, see the **Beginner’s Guide**.
 
 ---
 
@@ -24,109 +29,90 @@ Robot stories are expressed primarily through:
 
     * TeleOp / Auto code should be readable by a new student.
     * Robot code should describe *behavior*, not motor math or SDK plumbing.
-    * Repeated patterns (drive, intake, shooter, vision, AprilTags, etc.) live in helpers and subsystems.
+    * Repeated patterns (drive, intake, shooter, vision, AprilTags, etc.) live in helpers and
+      subsystems.
 
 2. **Clear layering and separation of concerns**
 
-    * FTC SDK (`HardwareMap`, `Gamepad`, `DcMotorEx`, `Servo`, `VisionPortal`) is wrapped by small adapters.
+    * FTC SDK (`HardwareMap`, `Gamepad`, `DcMotorEx`, `Servo`, `VisionPortal`) is wrapped by small
+      adapters.
     * Adapters and HAL convert SDK types → framework interfaces.
-    * Robot logic talks to simple interfaces (`DriveSource`, `Task`, `AprilTagSensor`, `BearingSource`, `Subsystem`), not raw SDK classes.
+    * Robot logic talks to simple interfaces (`DriveSource`, `AprilTagSensor`, `BearingSource`,
+      `Subsystem`), not raw SDK classes.
 
 3. **Beginner path + advanced escape hatch**
 
     * **Beginner:** 1–2 obvious helper calls, minimal types.
     * **Advanced:** more control, explicit wiring, access to underlying interfaces.
 
-   If something feels too complex for beginners, we add or improve a helper instead of pushing complexity into OpModes.
+   If something feels too complex for beginners, we add or improve a helper instead of pushing
+   complexity into OpModes.
 
 4. **Consistency over cleverness**
 
     * Naming and patterns are consistent across packages.
-    * Helpers follow similar shapes: `of(...)`, `defaultXxx(...)`, `forTeleOp(...)`, `forAuto(...)`, `mecanum(...).build()`.
-    * Vision / AprilTags follow the same patterns as drive and input.
+    * Helpers follow similar shapes: `of(...)`, `defaultXxx(...)`, `forTeleOp(...)`, `forAuto(...)`,
+      `mecanum(...).build()`.
 
-5. **Single source of time**
+5. **Testable, reusable subsystems**
 
-    * `LoopClock` is the standard way to get `dtSec` and timestamps.
-    * All update-style methods (`DriveSource.get`, `BearingSource.sample`, `TagAimController.update`, subsystem `onXLoop`) take a `LoopClock` rather than calling `System.nanoTime()` directly.
-
----
-
-## 2. Big Picture Architecture
-
-At a high level, a Phoenix-based robot is structured as:
-
-* **PhoenixTeleOpBase / PhoenixAutoBase**
-
-    * Base OpModes that wire `Gamepads`, `DriverKit`, `LoopClock`, and telemetry.
-    * Expose lifecycle hooks: `onInitRobot`, `onStartRobot`, `onLoopRobot`, `onStopRobot`.
-
-* **PhoenixRobot** (season-specific)
-
-    * Constructed once by the base class:
-
-      ```java
-      robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
-      ```
-
-    * Owns all subsystems (drive, vision, shooter, etc.).
-
-    * Exposes lifecycle methods used by TeleOp/Auto shells:
-
-      ```java
-      robot.onTeleopInit();
-      robot.onTeleopLoop(clock);
-      robot.onAutoInit();
-      robot.onAutoLoop(clock);
-      robot.onStop();
-      ```
-
-* **Subsystems**
-
-    * Implement `Subsystem` with lifecycle methods:
-
-      ```java
-      void onTeleopInit();
-      void onTeleopLoop(LoopClock clock);
-      void onAutoInit();
-      void onAutoLoop(LoopClock clock);
-      void onStop();
-      ```
-
-    * Examples: `DriveSubsystem`, `VisionSubsystem`, `ShooterSubsystem`.
-
-    * Each subsystem owns its hardware and logic for one part of the robot.
-
-**Flow in TeleOp:**
-
-1. `PhoenixTeleOpBase.loop()` updates the `LoopClock` and inputs.
-2. It calls `onLoopRobot(dtSec)` on the TeleOp shell.
-3. The TeleOp shell calls `robot.onTeleopLoop(clock)`.
-4. `PhoenixRobot` forwards to each `Subsystem.onTeleopLoop(clock)`.
-5. Subsystems read inputs / sensors and command hardware via framework helpers.
-
-Auto follows the same pattern with `onAutoInit` / `onAutoLoop`.
+    * Mechanisms (drive, shooter, arm, intake) live in subsystem classes that are reusable across
+      OpModes.
+    * Subsystems depend on framework interfaces, not FTC SDK classes.
 
 ---
 
-## 3. Package Map (what lives where)
+## 2. Big-picture layering
 
-This section explains:
+At a high level, Phoenix layers look like this:
 
-* What each package is for.
-* Which parts are **beginner** vs **advanced**.
+```text
+Your code (PhoenixRobot + subsystems + OpModes)
+│
+├─ fw.robot       – PhoenixTeleOpBase, PhoenixAutoBase, Subsystem
+├─ fw.drive       – drivebases + drive sources
+├─ fw.stage       – reusable processing blocks (buffer, setpoint)
+├─ fw.task        – autonomous task graphs
+├─ fw.sensing     – AprilTags, bearings, etc.
+├─ fw.input       – Gamepads, axes, buttons, DriverKit
+└─ fw.hal + fw.adapters.ftc
+     ├─ HAL interfaces (MotorOutput, ServoOutput, etc.)
+     └─ FTC adapters (FtcHardware, FtcPlants, FtcVision)
+```
+
+The rest of this document walks through the important packages and their roles.
+
+---
+
+## 3. Package-by-package tour
 
 ### 3.1 `fw.hal` – Hardware Abstraction Layer
 
 **Main types**
 
-* `MotorOutput` – "thing that accepts a normalized power in [-1, 1]".
-* `ServoOutput` – "thing that accepts a normalized position in [0, 1]".
+* `MotorOutput`
+
+    * Minimal interface for “write normalized power in [-1, +1]”.
+    * Methods:
+
+        * `setPower(double power)`
+        * `double getLastPower()`
+
+* `ServoOutput`
+
+    * Minimal interface for positional servos.
+    * Methods:
+
+        * `setPosition(double position)` in [0, 1]
+        * `double getLastPosition()`
+
+These interfaces let the rest of the framework treat motors/servos generically, without depending on
+`DcMotorEx`, `CRServo`, or `Servo` directly.
 
 **Who uses this?**
 
 * **Beginners:** almost never directly.
-* **Advanced:** when constructing custom mechanisms that aren’t covered by `Plants` or `Drives`.
+* **Advanced:** when constructing custom mechanisms that aren’t covered by `FtcPlants` or `Drives`.
 
 ---
 
@@ -138,6 +124,7 @@ This section explains:
 
     * `motor(hardwareMap, name, inverted)` → `MotorOutput`
     * `servo(hardwareMap, name, inverted)` → `ServoOutput`
+    * `crServoMotor(hardwareMap, name, inverted)` → `MotorOutput` backed by a `CRServo`.
 
 * `FtcVision`
 
@@ -151,29 +138,34 @@ This section explains:
 
 ---
 
-### 3.3 `fw.adapters.plants` – Mechanism "plants"
+### 3.3 `FtcPlants` – Mechanism "plants" (in `fw.adapters.ftc`)
 
 **Main entry point**
 
-* `Plants` – static helpers that create `SetpointStage.Plant` implementations from hardware.
+* `FtcPlants` – static helpers that create `SetpointStage.Plant` implementations from FTC hardware.
 
 Examples:
 
-* `Plants.power(hw, "intake", false)` – open-loop power plant.
-* `Plants.velocity(hw, "shooter", ticksPerRev, inverted)` – velocity plant.
-* `Plants.servoPosition(hw, "pusher", false)` – positional servo [0, 1].
-* `Plants.powerPair(...)`, `Plants.velocityPair(...)`, `Plants.servoPositionPair(...)`, `Plants.motorPositionPair(...)` – dual-output variants.
+* `FtcPlants.power(hw, "intake", false)` – open-loop power plant (normalized power in [-1, +1]).
+* `FtcPlants.velocity(hw, "shooter", false, ticksPerRev)` – velocity plant (target in rad/s).
+* `FtcPlants.servoPosition(hw, "pusher", false)` – positional servo [0, 1].
+* `FtcPlants.powerPair(...)`, `FtcPlants.velocityPair(...)`, `FtcPlants.servoPositionPair(...)`,
+  `FtcPlants.motorPositionPair(...)` – dual-output variants for mechanisms with two actuators (e.g.,
+  dual shooter wheels, dual lift motors).
 
 **Usage level**
 
 * **Beginner:**
 
-    * Use these helpers from examples to wire shooters, intakes, etc.
+    * Use these helpers from examples to wire shooters, intakes, arms, etc.
     * Don’t need to understand `SetpointStage.Plant` right away.
 
 * **Advanced:**
 
-    * Combine `Plants` with `SetpointStage` and `BufferStage` to build structured subsystems.
+    * Combine `FtcPlants` with `SetpointStage` and `BufferStage` to build structured subsystems.
+    * Prefer `FtcPlants.*(hardwareMap, ...)` for simple wiring from configuration names.
+    * Use the lower-level overloads (that accept `MotorOutput` / `ServoOutput`) when composing more
+      complex mechanisms.
 
 ---
 
@@ -181,54 +173,66 @@ Examples:
 
 **Main types**
 
-* `DriveSignal` – immutable `(axial, lateral, omega)` command.
-* `DriveSource` – anything that can produce a `DriveSignal` given a `LoopClock`.
-* `MecanumDrivebase` – open-loop 4-wheel mecanum mixer and hardware owner.
-* `Drives` – builder helpers for creating drivebases from `HardwareMap`:
+* `DriveSignal`
+
+    * Immutable value type: `(axial, lateral, omega)`.
+    * Represents a single “drive command” for a holonomic drive.
+
+* `MecanumDrivebase`
+
+    * Converts `DriveSignal` into per-wheel motor powers.
+    * Handles inversion and scaling.
+
+* `Drives`
+
+    * Builder-style helpers for drivebases.
+
+  Example:
 
   ```java
-  drivebase = Drives
+  MecanumDrivebase drive = Drives
           .mecanum(hardwareMap)
           .frontLeft("fl")
           .frontRight("fr")
           .backLeft("bl")
           .backRight("br")
-          .invertRightSide()   // typical FTC wiring; change if needed
+          .invertRightSide()
           .build();
   ```
 
 **Usage level**
 
-* **Beginner:**
-
-    * Use `Drives.mecanum(...)` to build your drivebase.
-    * Treat `MecanumDrivebase` as a type you pass a `DriveSignal` into.
-
-* **Advanced:**
-
-    * Implement your own `DriveSource` chains (e.g., path follower + aim + slow mode).
+* **Beginner:** use `Drives.mecanum(...)` to construct your drivebase.
+* **Advanced:** extend `DriveSignal` usage, or create new drivebase types if needed.
 
 ---
 
-### 3.5 `fw.drive.source` – Ways to produce drive signals
+### 3.5 `fw.drive.source` – Ways to produce `DriveSignal`
 
 **Main types**
 
+* `DriveSource`
+
+    * Functional interface: given a `LoopClock`, produce a `DriveSignal`.
+    * Implementations can incorporate input shaping, PID controllers, etc.
+
 * `StickDriveSource`
 
-    * Turns gamepad sticks into a `DriveSignal`.
-    * Handles deadband, optional squaring, scaling, and slow mode.
+    * Maps gamepad sticks to `DriveSignal`.
+    * Includes helpers like `defaultMecanumWithSlowMode(...)`.
 
-* `TagAimDriveSource`
+* `TagAim`
 
-    * Wraps a base `DriveSource` and overrides `omega` when an aim button is held.
+    * Provides helpers that turn an AprilTag bearing into a rotation command.
+    * `TagAim.forTeleOp(...)` wraps a base `DriveSource` and lets a button temporarily “take over”
+      rotation to aim at a tag.
 
 **Usage level**
 
 * **Beginner:**
 
-    * Use `StickDriveSource.defaultMecanumWithSlowMode(driverKit, slowButton, slowScale)`.
-    * Let `TagAim.forTeleOp(...)` construct an internal `TagAimDriveSource` when you want auto-aim.
+    * Use `StickDriveSource.defaultMecanumWithSlowMode(...)` for P1 driving.
+    * Use `TagAim.forTeleOp(...)` to add "face the tag" behavior to your drive.
 
 * **Advanced:**
 
@@ -276,15 +280,41 @@ Examples:
 
 * `PhoenixTeleOpBase`
 
-    * Wires gamepads, `DriverKit`, `LoopClock`, and telemetry.
-    * Calls:
+    * Base class for TeleOp OpModes.
+    * Handles:
 
-      ```java
-      onInitRobot();
-      onStartRobot();
-      onLoopRobot(double dtSec);
-      onStopRobot();
-      ```
+        * `LoopClock` creation.
+        * Input wiring (`Gamepads` → `DriverKit`).
+        * Calling your robot lifecycle methods.
+
+  Skeleton:
+
+  ```java
+  @TeleOp
+  public final class MyTeleOp extends PhoenixTeleOpBase {
+      private PhoenixRobot robot;
+
+      @Override
+      protected void onInitRobot() {
+          robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
+      }
+
+      @Override
+      protected void onStartRobot() {
+          robot.onTeleopInit();
+      }
+
+      @Override
+      protected void onLoopRobot(double dtSec) {
+          robot.onTeleopLoop(clock());
+      }
+
+      @Override
+      protected void onStopRobot() {
+          robot.onStop();
+      }
+  }
+  ```
 
 * `PhoenixAutoBase`
 
@@ -302,34 +332,49 @@ Examples:
       void onStop();
       ```
 
-* `PhoenixRobot`
-
-    * Owns subsystems and forwards lifecycle calls from base classes.
-
 **Usage level**
 
 * **Beginner:**
 
-    * Use provided examples as patterns.
-    * Focus on editing `PhoenixRobot` and subsystems; treat shells as boilerplate.
+    * Create a `PhoenixRobot` class that owns subsystems.
+    * Use `PhoenixTeleOpBase` for TeleOp, `PhoenixAutoBase` for Auto.
 
 * **Advanced:**
 
-    * Extend `PhoenixTeleOpBase` / `PhoenixAutoBase` for all OpModes; keep shells thin.
+    * Add more subsystems and tasks over time.
+    * Split large subsystems into smaller ones as the robot grows.
 
 ---
 
-### 3.8 `fw.stage` – Stages (buffer, setpoint, etc.)
+### 3.8 `fw.stage` – Stages (buffer, setpoint)
+
+Stages are reusable processing blocks that you can wire together.
 
 **Main types**
 
-* `SetpointStage` – generic “setpoint controller” wrapping a `Plant` and control logic.
-* `BufferStage` – higher-level behavior for feeders/buffers.
+* `SetpointStage<G>`
+
+    * Maps high-level goals (typically an enum) to numeric targets and drives a `Plant`.
+    * Uses a `Plant` interface that exposes:
+
+        * `setTarget(double target)`
+        * `update(double dtSec)`
+        * `boolean atSetpoint()`
+
+* `BufferStage`
+
+    * Provides buffering/queuing semantics for commands (e.g., “queue up shooter cycles”).
+
+* `Stage`
+
+    * Lightweight framework for wiring stages into a processing pipeline.
 
 **Usage level**
 
-* **Beginner:** mostly see these in shooter/buffer examples; treat them as black-box subsystems.
-* **Advanced:** compose plants + stages for robust mechanisms with clear goal/at-setpoint semantics.
+* **Beginner:** mostly uses plants through helpers (like `FtcPlants.velocityPair(...)`) and example
+  subsystems.
+* **Advanced:** builds custom `SetpointStage` and `BufferStage` combinations for rich subsystem
+  behavior.
 
 ---
 
@@ -337,14 +382,19 @@ Examples:
 
 **Main types**
 
-* `Task` – interface for something that runs over time.
-* `TaskRunner` – drives a root `Task` each loop.
-* `SequenceTask`, `ParallelAllTask`, `InstantTask`, `WaitUntilTask`, etc.
+* `Task`
+
+    * Represents a unit of autonomous work (e.g., "drive to pose", "shoot 3 discs").
+    * Composable: can wait for, sequence, or run tasks in parallel.
+
+* `TaskRunner`
+
+    * Drives a `Task` graph forward each loop.
 
 **Usage level**
 
-* **Beginner:** tweak distances/targets in a copy of an existing auton.
-* **Advanced:** design full autonomous routines as task graphs.
+* **Beginner:** can start with simple `Task` examples (e.g., shoot then park).
+* **Advanced:** uses tasks to structure complex autonomous routines.
 
 ---
 
@@ -352,48 +402,39 @@ Examples:
 
 **Main types**
 
-* `LoopClock` – tracks loop time and `dtSec`.
-* `MathUtil` – central math helpers (`clamp`, `clamp01`, `clampAbs`, `deadband`, etc.).
-* `Units` – unit conversions as needed.
+* `LoopClock`
+
+    * Tracks absolute time and `dtSec` between loops.
+
+* `InterpolatingTable1D`
+
+    * Simple utility for mapping from a sampled 1D function (e.g., distance → shooter velocity) via
+      linear interpolation.
+
+* `MathUtil`, `Filter` types, etc.
 
 **Usage level**
 
-* **Beginner:** encounter `LoopClock` indirectly via base classes and helpers.
-* **Advanced:** use `LoopClock` and `MathUtil` directly when writing controllers.
+* **Beginner:** mostly uses `LoopClock` indirectly via `PhoenixTeleOpBase` and `PhoenixAutoBase`.
+* **Advanced:** uses interpolation and math helpers when building their own controllers.
 
 ---
 
 ### 3.11 `fw.sensing` – AprilTags and aiming
 
-This package provides a clean layering for AprilTags and any other “angle-to-target” sensing.
-
 **Main types**
 
 * `AprilTagSensor`
 
-    * Interface that hides VisionPortal/AprilTagProcessor details.
-    * Core method:
-
-      ```java
-      AprilTagObservation obs = sensor.best(idsOfInterest, maxAgeSec);
-      if (obs.hasTarget) {
-          int id = obs.id;
-          double rangeIn = obs.rangeInches;
-          double bearingDeg = Math.toDegrees(obs.bearingRad);
-      }
-      ```
+    * Interface for AprilTag observations (id, pose, bearing, range, age).
 
 * `AprilTagObservation`
 
-    * `boolean hasTarget`
-    * `int id`
-    * `double rangeInches` (range from `ftcPose.range` in inches when metadata is available)
-    * `double bearingRad`
-    * `double ageSec`
+    * Holds one observation from an AprilTag sensor.
 
 * `Tags`
 
-    * Beginner-friendly factory:
+    * Beginner factory for AprilTag sensing:
 
       ```java
       AprilTagSensor tags = Tags.aprilTags(hardwareMap, "Webcam 1");
@@ -401,316 +442,66 @@ This package provides a clean layering for AprilTags and any other “angle-to-t
 
 * `BearingSource`
 
-    * Abstraction for “do we have a target, and what is its bearing?”
+    * Interface for “where should we aim?” sources.
 
-      ```java
-      BearingSample sample = bearingSource.sample(clock);
-      if (sample.hasTarget) {
-          double bearing = sample.bearingRad;
-      }
-      ```
+* `TagAim` / `TagAimController`
 
-* `TagAimController`
-
-    * Pure control logic: bearing → omega.
-
-      ```java
-      double omega = controller.update(clock, sample);
-      ```
-
-    * Uses a `PidController` internally and honors deadband, max omega, and loss policies.
-
-* `TagAim` / `TagAimDriveSource`
-
-    * **Beginner helper:** wrap an existing `DriveSource` so that holding a button auto-aims omega at scoring tags:
-
-      ```java
-      DriveSource drive = TagAim.forTeleOp(
-              sticks,
-              driverKit.p1().leftBumper(),
-              tags,
-              Set.of(1, 2, 3));
-      ```
-
-    * **Advanced:** construct your own `BearingSource` + `TagAimController` and feed the omega into your own drive logic.
+    * Convert tag bearing into a rotation command for the drive.
+    * Provide helpers for TeleOp (`TagAim.forTeleOp(...)`).
 
 **Usage level**
 
-* **Beginner:**
-
-    * Use `Tags.aprilTags(...)` to create `AprilTagSensor`.
-    * Use `TagAim.forTeleOp(...)` to add “hold-to-aim” behavior to your existing stick drive.
-    * Use `AprilTagObservation` for ID + range when setting shooter velocity.
-
-* **Advanced:**
-
-    * Customize PID gains, deadband, and loss policy in `TagAimController`.
-    * Use `BearingSource` with other sensors in the future.
-    * Use `TagAimDriveSource` or your own `DriveSource` that blends aiming with path-following.
+* **Beginner:** use `Tags.aprilTags(...)` + `TagAim.forTeleOp(...)`.
+* **Advanced:** build custom sensors or aiming logic using `BearingSource` and `TagAimController`.
 
 ---
 
 ### 3.12 `fw.core` – Generic control logic
 
-If present, this package contains generic control primitives such as:
+**Main types**
 
-* `PidController` – interface for “given error + dt, return correction”.
-* `Pid` – reference implementation with clamps and derivative filtering.
+* `PidController` / `Pid`
+
+    * Generic PID controller interface + implementation.
+
+* Other generic control or math helpers.
 
 **Usage level**
 
-* **Beginner:** rely on higher-level wrappers like `TagAimController`.
-* **Advanced:** use directly for heading hold, shooter velocity, arm control, etc.
+* **Beginner:** rarely used directly.
+* **Advanced:** used in custom subsystems and control algorithms.
 
 ---
 
-### 3.13 `fw.examples` – Reference OpModes
+### 3.13 `fw.examples` – Reference OpModes and subsystems
 
-Fully-working examples at different levels:
+This package contains example TeleOp / Auto OpModes and subsystems that show recommended patterns.
 
-* **Basic drive:** Gamepads → DriverKit → StickDriveSource → MecanumDrivebase.
-* **Subsystem TeleOp:** Drive + shooter/intake wired as subsystems.
-* **TagAim TeleOp:** Drive with AprilTags and TagAim.
-* **Task-based Autos:** using `TaskRunner` + `Task` graphs.
+* How to wire a mecanum drive with `Drives` + `StickDriveSource`.
+* How to build a shooter subsystem using `FtcPlants.velocityPair(...)`.
+* How to use `Tags.aprilTags(...)` + `TagAim.forTeleOp(...)` for AprilTag-based auto-aim.
 
-Use these as starting templates and as “live documentation”.
+**Usage level**
 
----
-
-## 4. Beginner Quickstart (PhoenixRobot + TeleOp)
-
-This quickstart assumes you:
-
-* Have a mecanum robot (4 drive motors named `fl`, `fr`, `bl`, `br`).
-* Have a webcam configured as `"Webcam 1"` for AprilTags.
-* Want a TeleOp with:
-
-    * Stick driving.
-    * Slow mode.
-    * “Hold left bumper to auto-aim at scoring AprilTags.”
-
-### 4.1 Thin TeleOp shell
-
-```java
-@TeleOp(name = "Phoenix: TeleOp", group = "Phoenix")
-public final class PhoenixTeleOp extends PhoenixTeleOpBase {
-
-    private PhoenixRobot robot;
-
-    @Override
-    protected void onInitRobot() {
-        robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
-    }
-
-    @Override
-    protected void onStartRobot() {
-        robot.onTeleopInit();
-    }
-
-    @Override
-    protected void onLoopRobot(double dtSec) {
-        robot.onTeleopLoop(clock());
-    }
-
-    @Override
-    protected void onStopRobot() {
-        robot.onStop();
-    }
-}
-```
-
-### 4.2 PhoenixRobot with drive + vision + shooter
-
-Inside `edu.ftcphoenix.robots.phoenix.PhoenixRobot`:
-
-```java
-public final class PhoenixRobot {
-
-    private final DriverKit driverKit;
-    private final Telemetry telemetry;
-
-    private final DriveSubsystem drive;
-    private final VisionSubsystem vision;
-    private final ShooterSubsystem shooter;
-    private final List<Subsystem> subsystems = new ArrayList<>();
-
-    public PhoenixRobot(HardwareMap hw,
-                        DriverKit driverKit,
-                        Telemetry telemetry) {
-        this.driverKit = driverKit;
-        this.telemetry = telemetry;
-
-        this.vision  = new VisionSubsystem(hw, telemetry);
-        this.drive   = new DriveSubsystem(hw, driverKit, vision);
-        this.shooter = new ShooterSubsystem(hw, driverKit, telemetry);
-
-        subsystems.add(drive);
-        subsystems.add(shooter);
-        subsystems.add(vision);
-    }
-
-    public void onTeleopInit() {
-        for (Subsystem s : subsystems) s.onTeleopInit();
-    }
-
-    public void onTeleopLoop(LoopClock clock) {
-        for (Subsystem s : subsystems) s.onTeleopLoop(clock);
-        telemetry.update();
-    }
-
-    public void onAutoInit() {
-        for (Subsystem s : subsystems) s.onAutoInit();
-    }
-
-    public void onAutoLoop(LoopClock clock) {
-        for (Subsystem s : subsystems) s.onAutoLoop(clock);
-        telemetry.update();
-    }
-
-    public void onStop() {
-        for (Subsystem s : subsystems) s.onStop();
-    }
-}
-```
-
-### 4.3 DriveSubsystem with TagAim
-
-```java
-public final class DriveSubsystem implements Subsystem {
-
-    private final MecanumDrivebase drivebase;
-    private final DriveSource driveSource;
-
-    public DriveSubsystem(HardwareMap hw,
-                          DriverKit driverKit,
-                          VisionSubsystem vision) {
-
-        this.drivebase = Drives
-                .mecanum(hw)
-                .frontLeft("fl")
-                .frontRight("fr")
-                .backLeft("bl")
-                .backRight("br")
-                .invertRightSide()
-                .build();
-
-        StickDriveSource sticks =
-                StickDriveSource.defaultMecanumWithSlowMode(
-                        driverKit,
-                        driverKit.p1().rightBumper(), // slow mode
-                        0.30);
-
-        this.driveSource = TagAim.forTeleOp(
-                sticks,
-                driverKit.p1().leftBumper(),          // hold to aim
-                vision.getTagSensor(),
-                vision.getScoringTagIds());
-    }
-
-    @Override
-    public void onTeleopLoop(LoopClock clock) {
-        DriveSignal cmd = driveSource.get(clock);
-        drivebase.drive(cmd);
-    }
-
-    @Override
-    public void onStop() {
-        drivebase.stop();
-    }
-
-    // other lifecycle methods can be empty if not needed
-}
-```
-
-### 4.4 VisionSubsystem with AprilTagSensor
-
-```java
-public final class VisionSubsystem implements Subsystem {
-
-    private final Telemetry telemetry;
-    private final AprilTagSensor tags;
-    private final Set<Integer> scoringTags;
-
-    public VisionSubsystem(HardwareMap hw, Telemetry telemetry) {
-        this.telemetry = telemetry;
-        this.tags = Tags.aprilTags(hw, "Webcam 1");
-        this.scoringTags = Set.of(1, 2, 3); // adjust per game
-    }
-
-    public AprilTagSensor getTagSensor() {
-        return tags;
-    }
-
-    public Set<Integer> getScoringTagIds() {
-        return scoringTags;
-    }
-
-    @Override
-    public void onTeleopLoop(LoopClock clock) {
-        AprilTagObservation obs = tags.best(scoringTags, 0.30);
-        if (obs.hasTarget) {
-            telemetry.addData("Tag id", obs.id);
-            telemetry.addData("range (in)", "%.1f", obs.rangeInches);
-            telemetry.addData("bearing (deg)", "%.1f", Math.toDegrees(obs.bearingRad));
-        } else {
-            telemetry.addLine("No scoring tag visible");
-        }
-    }
-}
-```
-
-This gives you a full path:
-
-* Sticks drive the robot.
-* Right bumper enables slow mode.
-* Left bumper auto-aims at scoring tags.
-* Vision subsystem reports tag ID, range in inches, and bearing.
+* **Beginner:** copy, rename, and tweak examples for your robot.
+* **Advanced:** treat examples as templates and starting points for more complex designs.
 
 ---
 
-## 5. How to Navigate Beginner vs Advanced APIs
+## 4. How your robot code fits in
 
-When exploring the framework:
+Putting it all together for a typical TeleOp:
 
-* **Beginner-friendly entry points** usually look like:
+1. **Base class:** extend `PhoenixTeleOpBase`.
+2. **Robot class:** create a `PhoenixRobot` that owns subsystems (`DriveSubsystem`,
+   `ShooterSubsystem`, `VisionSubsystem`, etc.).
+3. **Subsystems:** use `Drives`, `StickDriveSource`, `Tags`, `TagAim`, `FtcHardware`, and
+   `FtcPlants` to wire hardware.
+4. **Inputs:** use `Gamepads` + `DriverKit` to read P1/P2 controls.
+5. **Behavior:** in each subsystem’s `onTeleopLoop(...)`, read inputs and set setpoints/commands.
 
-    * `defaultXxx(...)`
-    * `forTeleOp(...)` / `forAuto(...)`
-    * `aprilTags(...)` inside `Tags`
-    * `mecanum(hardwareMap)...build()`
+If you stick to these patterns:
 
-* **Advanced APIs**:
-
-    * Work directly with interfaces like `DriveSource`, `AprilTagSensor`, `BearingSource`, `PidController`, `Task`.
-    * Accept explicit configs and tuning parameters.
-
-A good workflow:
-
-1. Start from an example in `fw.examples` that is close to what you want.
-2. Copy it into your team code and rename it.
-3. Change hardware names, tag IDs, and buttons.
-4. Only then dive into lower-level framework packages if you need custom behavior.
-
----
-
-## 6. Philosophy Recap (including vision)
-
-* **OpModes** should read like a story about your robot’s behavior.
-* **Base classes** (`PhoenixTeleOpBase`, `PhoenixAutoBase`) hide repetitive wiring and provide `LoopClock`.
-* **PhoenixRobot + subsystems** concentrate robot logic in one place.
-* **Drive** (`Drives`, `StickDriveSource`, `MecanumDrivebase`) has a single clear pattern.
-* **Mechanisms** use plants and stages instead of one-off motor commands.
-* **Inputs** are mapped through `DriverKit` and optional `Bindings`, not scattered `gamepad1.a` calls.
-* **Vision** (AprilTags) follows the same pattern:
-
-    * Adapter: `FtcVision` creates VisionPortal + AprilTagProcessor.
-    * Sensor interface: `AprilTagSensor`.
-    * Beginner factory: `Tags.aprilTags(...)`.
-    * Control logic: `BearingSource` + `TagAimController`.
-    * TeleOp helper: `TagAim.forTeleOp(...)` / `TagAimDriveSource`.
-
-If you stick to these patterns, Phoenix stays:
-
-* Approachable for new students.
-* Robust for competitions.
-* Flexible enough to grow into more advanced robots and control strategies over multiple seasons.
+* Robot-specific code stays small and readable.
+* Framework code absorbs the complexity.
+* The same patterns can carry across seasons with different robots and games.

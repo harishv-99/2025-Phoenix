@@ -4,62 +4,43 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
+import edu.ftcphoenix.fw.actuation.Plant;
+import edu.ftcphoenix.fw.stage.Stage;
+
 /**
- * Generic setpoint stage: maps high-level goals to numeric targets and drives a {@link Plant}.
+ * Generic setpoint stage: maps high-level goals to numeric targets and
+ * drives a {@link Plant}.
  *
  * <p>Typical usage:
- * <pre>
+ * <pre>{@code
  * // Enum of high-level goals
  * enum ShooterGoal { STOP, IDLE, SHOOT }
  *
  * // Build from an enum with explicit targets
- * SetpointStage&lt;ShooterGoal&gt; shooter = SetpointStage
- *         .enumBuilder(ShooterGoal.class)
- *         .name("Shooter")
- *         .plant(Plants.velocity(shooterMotor, ticksPerRev, inverted))
- *         .target(ShooterGoal.STOP,  0.0)
- *         .target(ShooterGoal.IDLE,  rpmToRadPerSec(1000))
- *         .target(ShooterGoal.SHOOT, rpmToRadPerSec(3500))
- *         .build();
+ * SetpointStage<ShooterGoal> shooter = SetpointStage
+ *     .enumBuilder(ShooterGoal.class)
+ *     .name("Shooter")
+ *     .plant(FtcPlants.velocity(
+ *             hardwareMap,
+ *             "shooter",
+ *             ticksPerRev,
+ *             false))
+ *     .target(ShooterGoal.STOP, 0.0)
+ *     .target(ShooterGoal.IDLE, Units.rpmToRadPerSec(1000.0))
+ *     .target(ShooterGoal.SHOOT, Units.rpmToRadPerSec(3500.0))
+ *     .build();
+ * }</pre>
  *
- * // Later: command goals and update
- * shooter.setGoal(ShooterGoal.SHOOT);
- * shooter.update(dtSec);
- * boolean ready = shooter.atSetpoint();
- * </pre>
- *
- * <p>For non-enum goals, you can build a {@link GoalMap} yourself and use {@link Builder}.</p>
- *
- * @param <G> goal type (enum recommended for most uses)
+ * <p>Your robot code then drives the stage with high-level goals:</p>
+ * <pre>{@code
+ * shooterStage.setGoal(ShooterGoal.IDLE);
+ * ...
+ * shooterStage.setGoal(ShooterGoal.SHOOT);
+ * ...
+ * shooterStage.update(dtSec);
+ * }</pre>
  */
-public final class SetpointStage<G> {
-
-    // ---------------------------------------------------------------------
-    // Plant interface
-    // ---------------------------------------------------------------------
-
-    /**
-     * Plant drives hardware to a target and reports readiness.
-     *
-     * <p>Implementations typically wrap a motor/servo/other subsystem and
-     * interpret the target value in their own units (position, velocity, etc.).</p>
-     */
-    public interface Plant {
-        /**
-         * Command a new target value. Units are plant-defined.
-         */
-        void setTarget(double target);
-
-        /**
-         * Update time-based internal state.
-         */
-        void update(double dtSec);
-
-        /**
-         * @return true when the plant considers itself "at setpoint".
-         */
-        boolean atSetpoint();
-    }
+public final class SetpointStage<G> implements Stage {
 
     // ---------------------------------------------------------------------
     // Goal → target mapping

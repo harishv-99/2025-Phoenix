@@ -1,45 +1,50 @@
-package edu.ftcphoenix.fw.adapters.plants;
+package edu.ftcphoenix.fw.adapters.ftc;
 
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.hal.MotorOutput;
 import edu.ftcphoenix.fw.hal.ServoOutput;
-import edu.ftcphoenix.fw.stage.setpoint.SetpointStage;
+import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
- * Helpers for constructing {@link SetpointStage.Plant} implementations
- * from FTC hardware.
+ * FTC-specific helpers for constructing {@link Plant} implementations
+ * from hardware.
  *
- * <p>Design goals:
+ * <p>Design goals:</p>
  * <ul>
  *   <li>Keep common FTC use-cases trivial to wire from {@link HardwareMap}.</li>
  *   <li>Hide FTC SDK details behind small, reusable plant implementations.</li>
  *   <li>Provide both single-output and paired-output variants with consistent naming.</li>
  * </ul>
  *
- * <p>Single-output plants:
+ * <p>Single-output plants:</p>
  * <ul>
  *   <li>{@link #power(HardwareMap, String, boolean)} – open-loop power.</li>
- *   <li>{@link #velocity(HardwareMap, String, double, boolean)} – velocity (rad/s).</li>
+ *   <li>{@link #velocity(HardwareMap, String, boolean, double)} – velocity (rad/s).</li>
  *   <li>{@link #servoPosition(HardwareMap, String, boolean)} – servo position [0,1].</li>
- *   <li>{@link #motorPosition(HardwareMap, String, double, boolean, double)} – motor angle (rad).</li>
+ *   <li>{@link #motorPosition(HardwareMap, String, boolean, double, double)} – motor angle (radians).</li>
  * </ul>
  *
- * <p>Paired-output plants (two outputs driven as one mechanism):
+ * <p>Paired-output plants (two outputs driven as one mechanism):</p>
  * <ul>
  *   <li>{@link #powerPair(HardwareMap, String, boolean, String, boolean)} – dual power.</li>
  *   <li>{@link #velocityPair(HardwareMap, String, boolean, String, boolean, double)} – dual velocity.</li>
  *   <li>{@link #servoPositionPair(HardwareMap, String, boolean, String, boolean)} – dual servo.</li>
  *   <li>{@link #motorPositionPair(HardwareMap, String, boolean, String, boolean, double, double)} – dual angle.</li>
  * </ul>
+ *
+ * <p>All factories come in two flavors:</p>
+ * <ul>
+ *   <li>Accepting {@link MotorOutput}/{@link ServoOutput} directly.</li>
+ *   <li>Accepting {@link HardwareMap} + device names + inversion flags.</li>
+ * </ul>
  */
-public final class Plants {
+public final class FtcPlants {
 
-    private Plants() {
+    private FtcPlants() {
         // utility holder
     }
 
@@ -53,11 +58,11 @@ public final class Plants {
      * <p>Semantics:
      * <ul>
      *   <li>target ∈ [-1, +1] → normalized power.</li>
-     *   <li>{@link SetpointStage.Plant#update(double)} is a no-op.</li>
-     *   <li>{@link SetpointStage.Plant#atSetpoint()} always returns true.</li>
+     *   <li>{@link Plant#update(double)} is a no-op.</li>
+     *   <li>{@link Plant#atSetpoint()} always returns true.</li>
      * </ul>
      */
-    public static SetpointStage.Plant power(MotorOutput motor, boolean inverted) {
+    public static Plant power(MotorOutput motor, boolean inverted) {
         if (motor == null) {
             throw new IllegalArgumentException("motor is required");
         }
@@ -70,7 +75,7 @@ public final class Plants {
      * <p>Students only need to know the hardware name and whether it is
      * inverted in their configuration.</p>
      */
-    public static SetpointStage.Plant power(HardwareMap hw, String name, boolean inverted) {
+    public static Plant power(HardwareMap hw, String name, boolean inverted) {
         MotorOutput m = FtcHardware.motor(hw, name, inverted);
         // MotorOutput already handles inversion; plant can use non-inverted.
         return power(m, false);
@@ -79,7 +84,7 @@ public final class Plants {
     /**
      * Internal implementation for open-loop power.
      */
-    private static final class PowerPlant implements SetpointStage.Plant {
+    private static final class PowerPlant implements Plant {
         private final MotorOutput motor;
         private final boolean inverted;
 
@@ -128,14 +133,14 @@ public final class Plants {
      * <p>Semantics:
      * <ul>
      *   <li>target ∈ [-1, +1] → normalized power.</li>
-     *   <li>{@link SetpointStage.Plant#update(double)} is a no-op.</li>
-     *   <li>{@link SetpointStage.Plant#atSetpoint()} always returns true.</li>
+     *   <li>{@link Plant#update(double)} is a no-op.</li>
+     *   <li>{@link Plant#atSetpoint()} always returns true.</li>
      * </ul>
      */
-    public static SetpointStage.Plant powerPair(MotorOutput a,
-                                                boolean invertA,
-                                                MotorOutput b,
-                                                boolean invertB) {
+    public static Plant powerPair(MotorOutput a,
+                                  boolean invertA,
+                                  MotorOutput b,
+                                  boolean invertB) {
         if (a == null || b == null) {
             throw new IllegalArgumentException("Both motors are required");
         }
@@ -147,11 +152,11 @@ public final class Plants {
      *
      * <p>Each motor can have its own inversion flag.</p>
      */
-    public static SetpointStage.Plant powerPair(HardwareMap hw,
-                                                String nameA,
-                                                boolean invertA,
-                                                String nameB,
-                                                boolean invertB) {
+    public static Plant powerPair(HardwareMap hw,
+                                  String nameA,
+                                  boolean invertA,
+                                  String nameB,
+                                  boolean invertB) {
         MotorOutput a = FtcHardware.motor(hw, nameA, invertA);
         MotorOutput b = FtcHardware.motor(hw, nameB, invertB);
         // Outputs already handle inversion; plant can treat both as non-inverted.
@@ -161,7 +166,7 @@ public final class Plants {
     /**
      * Internal implementation for paired open-loop power.
      */
-    private static final class PowerPairPlant implements SetpointStage.Plant {
+    private static final class PowerPairPlant implements Plant {
         private final MotorOutput a;
         private final MotorOutput b;
         private final boolean invertA;
@@ -218,9 +223,9 @@ public final class Plants {
      *   <li>No internal closed-loop control beyond what the SDK provides.</li>
      * </ul>
      */
-    public static SetpointStage.Plant velocity(DcMotorEx motor,
-                                               double ticksPerRev,
-                                               boolean inverted) {
+    public static Plant velocity(DcMotorEx motor,
+                                 double ticksPerRev,
+                                 boolean inverted) {
         if (motor == null) {
             throw new IllegalArgumentException("motor is required");
         }
@@ -235,10 +240,10 @@ public final class Plants {
      *
      * <p>The ticks-per-rev value should match your motor + encoder setup.</p>
      */
-    public static SetpointStage.Plant velocity(HardwareMap hw,
-                                               String name,
-                                               double ticksPerRev,
-                                               boolean inverted) {
+    public static Plant velocity(HardwareMap hw,
+                                 String name,
+                                 boolean inverted,
+                                 double ticksPerRev) {
         DcMotorEx m = hw.get(DcMotorEx.class, name);
         return velocity(m, ticksPerRev, inverted);
     }
@@ -246,7 +251,7 @@ public final class Plants {
     /**
      * Internal implementation for single-motor velocity.
      */
-    private static final class VelocityPlant implements SetpointStage.Plant {
+    private static final class VelocityPlant implements Plant {
         private final DcMotorEx motor;
         private final double ticksPerRev;
         private final boolean inverted;
@@ -299,11 +304,11 @@ public final class Plants {
      *   <li>Uses {@link DcMotorEx#setVelocity(double)} for each motor.</li>
      * </ul>
      */
-    public static SetpointStage.Plant velocityPair(DcMotorEx a,
-                                                   boolean invertA,
-                                                   DcMotorEx b,
-                                                   boolean invertB,
-                                                   double ticksPerRev) {
+    public static Plant velocityPair(DcMotorEx a,
+                                     boolean invertA,
+                                     DcMotorEx b,
+                                     boolean invertB,
+                                     double ticksPerRev) {
         if (a == null || b == null) {
             throw new IllegalArgumentException("Both motors are required");
         }
@@ -316,12 +321,12 @@ public final class Plants {
     /**
      * Convenience: paired velocity plant from two motor names.
      */
-    public static SetpointStage.Plant velocityPair(HardwareMap hw,
-                                                   String nameA,
-                                                   boolean invertA,
-                                                   String nameB,
-                                                   boolean invertB,
-                                                   double ticksPerRev) {
+    public static Plant velocityPair(HardwareMap hw,
+                                     String nameA,
+                                     boolean invertA,
+                                     String nameB,
+                                     boolean invertB,
+                                     double ticksPerRev) {
         DcMotorEx a = hw.get(DcMotorEx.class, nameA);
         DcMotorEx b = hw.get(DcMotorEx.class, nameB);
         return velocityPair(a, invertA, b, invertB, ticksPerRev);
@@ -330,7 +335,7 @@ public final class Plants {
     /**
      * Internal implementation for dual-motor velocity.
      */
-    private static final class VelocityPairPlant implements SetpointStage.Plant {
+    private static final class VelocityPairPlant implements Plant {
         private final DcMotorEx a;
         private final DcMotorEx b;
         private final boolean invertA;
@@ -395,10 +400,10 @@ public final class Plants {
      * <p>Semantics:
      * <ul>
      *   <li>target ∈ [0, 1] → servo position.</li>
-     *   <li>No feedback; {@link SetpointStage.Plant#atSetpoint()} always returns true.</li>
+     *   <li>No feedback; {@link Plant#atSetpoint()} always returns true.</li>
      * </ul>
      */
-    public static SetpointStage.Plant servoPosition(ServoOutput servo) {
+    public static Plant servoPosition(ServoOutput servo) {
         if (servo == null) {
             throw new IllegalArgumentException("servo is required");
         }
@@ -408,9 +413,9 @@ public final class Plants {
     /**
      * Convenience: servo position plant using a hardware name.
      */
-    public static SetpointStage.Plant servoPosition(HardwareMap hw,
-                                                    String name,
-                                                    boolean inverted) {
+    public static Plant servoPosition(HardwareMap hw,
+                                      String name,
+                                      boolean inverted) {
         ServoOutput s = FtcHardware.servo(hw, name, inverted);
         return servoPosition(s);
     }
@@ -418,7 +423,7 @@ public final class Plants {
     /**
      * Internal implementation for simple servo position plants.
      */
-    private static final class ServoPositionPlant implements SetpointStage.Plant {
+    private static final class ServoPositionPlant implements Plant {
         private final ServoOutput servo;
         private double target = 0.0;
 
@@ -460,11 +465,11 @@ public final class Plants {
      * <p>Semantics:
      * <ul>
      *   <li>target ∈ [0, 1] → same position command for both servos.</li>
-     *   <li>No feedback; {@link SetpointStage.Plant#atSetpoint()} always returns true.</li>
+     *   <li>No feedback; {@link Plant#atSetpoint()} always returns true.</li>
      * </ul>
      */
-    public static SetpointStage.Plant servoPositionPair(ServoOutput a,
-                                                        ServoOutput b) {
+    public static Plant servoPositionPair(ServoOutput a,
+                                          ServoOutput b) {
         if (a == null || b == null) {
             throw new IllegalArgumentException("Both servos are required");
         }
@@ -474,11 +479,11 @@ public final class Plants {
     /**
      * Convenience: paired servo position plant from two servo names.
      */
-    public static SetpointStage.Plant servoPositionPair(HardwareMap hw,
-                                                        String nameA,
-                                                        boolean invertA,
-                                                        String nameB,
-                                                        boolean invertB) {
+    public static Plant servoPositionPair(HardwareMap hw,
+                                          String nameA,
+                                          boolean invertA,
+                                          String nameB,
+                                          boolean invertB) {
         ServoOutput a = FtcHardware.servo(hw, nameA, invertA);
         ServoOutput b = FtcHardware.servo(hw, nameB, invertB);
         return servoPositionPair(a, b);
@@ -487,7 +492,7 @@ public final class Plants {
     /**
      * Internal implementation for paired servo position plants.
      */
-    private static final class ServoPositionPairPlant implements SetpointStage.Plant {
+    private static final class ServoPositionPairPlant implements Plant {
         private final ServoOutput a;
         private final ServoOutput b;
         private double target = 0.0;
@@ -536,10 +541,10 @@ public final class Plants {
      *       {@link DcMotorEx#setMode(DcMotor.RunMode)} to manage RUN_TO_POSITION.</li>
      * </ul>
      */
-    public static SetpointStage.Plant motorPosition(DcMotorEx motor,
-                                                    double ticksPerRev,
-                                                    boolean inverted,
-                                                    double toleranceRad) {
+    public static Plant motorPosition(DcMotorEx motor,
+                                      double ticksPerRev,
+                                      boolean inverted,
+                                      double toleranceRad) {
         if (motor == null) {
             throw new IllegalArgumentException("motor is required");
         }
@@ -555,11 +560,11 @@ public final class Plants {
     /**
      * Convenience: motor position plant from a motor name.
      */
-    public static SetpointStage.Plant motorPosition(HardwareMap hw,
-                                                    String name,
-                                                    double ticksPerRev,
-                                                    boolean inverted,
-                                                    double toleranceRad) {
+    public static Plant motorPosition(HardwareMap hw,
+                                      String name,
+                                      boolean inverted,
+                                      double ticksPerRev,
+                                      double toleranceRad) {
         DcMotorEx m = hw.get(DcMotorEx.class, name);
         return motorPosition(m, ticksPerRev, inverted, toleranceRad);
     }
@@ -567,7 +572,7 @@ public final class Plants {
     /**
      * Internal implementation for single-motor position.
      */
-    private static final class MotorPositionPlant implements SetpointStage.Plant {
+    private static final class MotorPositionPlant implements Plant {
         private final DcMotorEx motor;
         private final double ticksPerRev;
         private final boolean inverted;
@@ -633,12 +638,12 @@ public final class Plants {
      *   <li>Both motors are driven with RUN_TO_POSITION mode.</li>
      * </ul>
      */
-    public static SetpointStage.Plant motorPositionPair(DcMotorEx a,
-                                                        boolean invertA,
-                                                        DcMotorEx b,
-                                                        boolean invertB,
-                                                        double ticksPerRev,
-                                                        double toleranceRad) {
+    public static Plant motorPositionPair(DcMotorEx a,
+                                          boolean invertA,
+                                          DcMotorEx b,
+                                          boolean invertB,
+                                          double ticksPerRev,
+                                          double toleranceRad) {
         if (a == null || b == null) {
             throw new IllegalArgumentException("Both motors are required");
         }
@@ -654,13 +659,13 @@ public final class Plants {
     /**
      * Convenience: paired motor position plant from two motor names.
      */
-    public static SetpointStage.Plant motorPositionPair(HardwareMap hw,
-                                                        String nameA,
-                                                        boolean invertA,
-                                                        String nameB,
-                                                        boolean invertB,
-                                                        double ticksPerRev,
-                                                        double toleranceRad) {
+    public static Plant motorPositionPair(HardwareMap hw,
+                                          String nameA,
+                                          boolean invertA,
+                                          String nameB,
+                                          boolean invertB,
+                                          double ticksPerRev,
+                                          double toleranceRad) {
         DcMotorEx a = hw.get(DcMotorEx.class, nameA);
         DcMotorEx b = hw.get(DcMotorEx.class, nameB);
         return motorPositionPair(a, invertA, b, invertB, ticksPerRev, toleranceRad);
@@ -669,7 +674,7 @@ public final class Plants {
     /**
      * Internal implementation for dual-motor position.
      */
-    private static final class MotorPositionPairPlant implements SetpointStage.Plant {
+    private static final class MotorPositionPairPlant implements Plant {
         private final DcMotorEx a;
         private final DcMotorEx b;
         private final boolean invertA;

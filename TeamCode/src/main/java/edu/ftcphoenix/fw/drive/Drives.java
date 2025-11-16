@@ -12,7 +12,7 @@ import edu.ftcphoenix.fw.hal.MotorOutput;
  * <ul>
  *   <li>Hide {@link FtcHardware} and {@link MotorOutput} from robot-centric code.</li>
  *   <li>Make wiring a mecanum drive simple, explicit, and readable.</li>
- *   <li>Mirror the style of {@code Plants.*(hardwareMap, ...)} for mechanisms.</li>
+ *   <li>Mirror the style of {@code FtcPlants.*(hardwareMap, ...)} for mechanisms.</li>
  * </ul>
  *
  * <p>Typical usage:</p>

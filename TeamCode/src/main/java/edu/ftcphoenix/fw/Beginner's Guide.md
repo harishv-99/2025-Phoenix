@@ -37,34 +37,29 @@ There are three main pieces you’ll work with:
     * Has lifecycle methods like:
 
       ```java
-      void onTeleopInit();
-      void onTeleopLoop(LoopClock clock);
-      void onAutoInit();
-      void onAutoLoop(LoopClock clock);
-      void onStop();
+      public final class PhoenixRobot {
+          public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) { ... }
+ 
+          public void onTeleopInit() { ... }
+          public void onTeleopLoop(LoopClock clock) { ... }
+          public void onAutoInit() { ... }
+          public void onAutoLoop(LoopClock clock) { ... }
+          public void onStop() { ... }
+      }
       ```
 
 2. **PhoenixTeleOpBase / PhoenixAutoBase** (in `edu.ftcphoenix.fw.robot`)
 
-    * Base classes that create `Gamepads`, `DriverKit`, `LoopClock`, etc.
-    * Call your robot’s lifecycle methods each loop.
-    * Expose hooks:
+    * Base classes that hide FTC OpMode boilerplate.
+    * They own the main loop and call into your `PhoenixRobot` methods.
 
-      ```java
-      protected void onInitRobot();
-      protected void onStartRobot();
-      protected void onLoopRobot(double dtSec);
-      protected void onStopRobot();
-      ```
+3. **Framework adapters** (in `edu.ftcphoenix.fw.adapters.*`)
 
-3. **Thin OpMode shells** (in `org.firstinspires.ftc.teamcode.robots`)
+    * `FtcHardware` turns FTC SDK objects (`DcMotorEx`, `Servo`, etc.) into simple outputs.
+    * `FtcVision` turns camera + processors into a `AprilTagSensor`.
+    * Higher-level helpers like `Drives`, `Tags`, `TagAim`, etc. wire common patterns.
 
-    * Very small classes with `@TeleOp` / `@Autonomous` annotations.
-    * Just glue the base classes to your `PhoenixRobot`.
-
-Think of it like this:
-
-> OpMode shell → PhoenixTeleOpBase / PhoenixAutoBase → PhoenixRobot → subsystems → motors, sensors, etc.
+Your robot code should mostly use **DriverKit**, **Drives**, **Tags**, and your own subsystems. The adapters hide the low‑level details.
 
 ---
 
@@ -97,7 +92,9 @@ edu/ftcphoenix/robots/phoenix
         // later: IntakeSubsystem, TransferSubsystem, etc.
 ```
 
-In the beginning, it’s fine to keep everything in `PhoenixRobot`. Section 9 shows how to split it into subsystems later.
+`PhoenixRobot` then owns these subsystems and forwards lifecycle calls to them.
+
+You don’t have to start with subsystems. It’s fine to begin with everything in `PhoenixRobot`. Section 9 shows how to split it into subsystems later.
 
 ---
 
@@ -116,31 +113,26 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.StickDriveSource;
 import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.util.LoopClock;
 
-/**
- * PhoenixRobot represents your whole robot for this season.
- *
- * Students write robot behavior here. TeleOps and Autos are thin shells
- * that call into this class.
- */
 public final class PhoenixRobot {
 
     private final DriverKit driverKit;
     private final Telemetry telemetry;
 
     private final MecanumDrivebase drivebase;
-    private final StickDriveSource drive;
+    private final DriveSource drive;
 
     public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
         this.driverKit = driverKit;
         this.telemetry = telemetry;
 
-        // 1) Build the mecanum drivebase from motor names
+        // 1) Build a mecanum drivebase from hardware
         this.drivebase = Drives
                 .mecanum(hw)
                 .frontLeft("fl")
@@ -177,7 +169,17 @@ public final class PhoenixRobot {
 }
 ```
 
-### 3.2 Thin TeleOp Shell using PhoenixTeleOpBase
+Key ideas:
+
+* `PhoenixRobot` **does not extend** `OpMode`. It’s just a plain Java class.
+* `Drives.mecanum(hw)` uses your hardware map to wire wheels correctly.
+* `StickDriveSource.defaultMecanum(driverKit)` reads sticks from gamepad 1.
+
+You never talk to `Gamepad` directly. You always go through **DriverKit** and **GamepadDevice**, which provide higher-level buttons/axes and handle debouncing.
+
+---
+
+### 3.2 PhoenixTeleOp.java (thin shell)
 
 ```java
 package org.firstinspires.ftc.teamcode.robots;
@@ -187,17 +189,14 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import edu.ftcphoenix.fw.robot.PhoenixTeleOpBase;
 import edu.ftcphoenix.robots.phoenix.PhoenixRobot;
 
-/**
- * Thin TeleOp layer that delegates to PhoenixRobot.
- */
-@TeleOp(name = "Phoenix: TeleOp", group = "Phoenix")
+@TeleOp(name = "Phoenix: Drive Only", group = "Phoenix")
 public final class PhoenixTeleOp extends PhoenixTeleOpBase {
 
     private PhoenixRobot robot;
 
     @Override
     protected void onInitRobot() {
-        // PhoenixTeleOpBase provides hardwareMap, driverKit(), and telemetry
+        // PhoenixTeleOpBase gives us hardwareMap, driverKit(), telemetry
         robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
     }
 
@@ -208,7 +207,6 @@ public final class PhoenixTeleOp extends PhoenixTeleOpBase {
 
     @Override
     protected void onLoopRobot(double dtSec) {
-        // clock() is provided by PhoenixTeleOpBase
         robot.onTeleopLoop(clock());
     }
 
@@ -219,90 +217,69 @@ public final class PhoenixTeleOp extends PhoenixTeleOpBase {
 }
 ```
 
-That’s it:
+This class is intentionally tiny. It:
 
-* The TeleOp shell is tiny.
-* All real logic lives in `PhoenixRobot`.
+* Extends `PhoenixTeleOpBase` instead of `OpMode`.
+* Wires the base to your `PhoenixRobot`.
+* Forwards lifecycle events (`onInitRobot`, `onStartRobot`, `onLoopRobot`, `onStopRobot`).
+
+Your students will mostly be editing `PhoenixRobot`, not this shell.
 
 ---
 
-## 4. Adding Slow Mode (Precision Driving)
+## 4. Adding Slow Mode and Better Drive Controls
 
-To add slow mode (reduced speed while holding a button), you only touch `PhoenixRobot`.
+Now we add a slow-mode trigger and make the drive feel better for drivers.
+
+We’ll use:
+
+* `StickDriveSource.defaultMecanumWithSlowMode(...)` for square/limited inputs.
+* A slow mode that activates while the driver holds a bumper.
 
 ```java
-public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-    this.driverKit = driverKit;
-    this.telemetry = telemetry;
+// Inside PhoenixRobot constructor, replace the drive line
 
-    this.drivebase = Drives
-            .mecanum(hw)
-            .frontLeft("fl")
-            .frontRight("fr")
-            .backLeft("bl")
-            .backRight("br")
-            .invertRightSide()
-            .build();
-
-    // Slow mode: press right bumper to drive at 30% speed
-    this.drive = StickDriveSource.defaultMecanumWithSlowMode(
-            driverKit,
-            driverKit.p1().rightBumper(),
-            0.30
-    );
-}
+this.drive = StickDriveSource.defaultMecanumWithSlowMode(
+        driverKit,
+        driverKit.p1().rightBumper(), // hold for slow mode
+        0.30                          // 30% speed in slow mode
+);
 ```
 
-The TeleOp shell does **not** change. It still just calls `robot.onTeleopLoop(clock())`.
+Now driver 1 can:
+
+* Drive normally with the sticks.
+* Hold the right bumper to make fine adjustments near the goal.
 
 ---
 
-## 5. Adding AprilTags (Auto-Aim in TeleOp)
+## 5. Adding AprilTag Aiming (TagAim)
 
-Phoenix gives you helpers to use AprilTags without dealing with VisionPortal details.
+Phoenix includes helpers to aim the robot at AprilTags during TeleOp.
 
-We’ll extend `PhoenixRobot` so that:
+We’ll use:
 
-* It owns an `AprilTagSensor`.
-* It wraps the stick drive with `TagAim.forTeleOp(...)`.
-* The TeleOp shell stays the same.
+* `FtcVision` + `Tags.aprilTags(...)` to create an `AprilTagSensor`.
+* `TagAim.forTeleOp(...)` to wrap the drive controls.
 
-### 5.1 PhoenixRobot with Tags and Aim
+### 5.1 Wiring vision in PhoenixRobot
 
 ```java
-package edu.ftcphoenix.robots.phoenix;
-
-import com.qualcomm.robotcore.hardware.HardwareMap;
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-
-import java.util.Set;
-
-import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
-import edu.ftcphoenix.fw.input.DriverKit;
-import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.sensing.Tags;
-import edu.ftcphoenix.fw.util.LoopClock;
+
+...
 
 public final class PhoenixRobot {
 
-    private final DriverKit driverKit;
-    private final Telemetry telemetry;
-
-    private final MecanumDrivebase drivebase;
-    private final DriveSource drive;        // NOTE: now DriveSource
     private final AprilTagSensor tags;
     private final Set<Integer> scoringTags = Set.of(1, 2, 3);
 
     public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-        this.driverKit = driverKit;
-        this.telemetry = telemetry;
+        ...
 
+        // 1) Build mecanum drivebase (same as before)
         this.drivebase = Drives
                 .mecanum(hw)
                 .frontLeft("fl")
@@ -312,203 +289,45 @@ public final class PhoenixRobot {
                 .invertRightSide()
                 .build();
 
-        // 1) AprilTag sensor from webcam
+        // 2) Create Tag sensor (uses FtcVision under the hood)
         this.tags = Tags.aprilTags(hw, "Webcam 1");
 
-        // 2) Base drive from sticks with slow mode
-        StickDriveSource sticks =
-                StickDriveSource.defaultMecanumWithSlowMode(
-                        driverKit,
-                        driverKit.p1().rightBumper(),
-                        0.30);
+        // 3) Base drive source (sticks + slow mode)
+        var baseDrive = StickDriveSource.defaultMecanumWithSlowMode(
+                driverKit,
+                driverKit.p1().rightBumper(),
+                0.30);
 
-        // 3) Wrap sticks with auto-aim when left bumper is held
+        // 4) Wrap with TagAim for auto-aiming when left bumper is held
         this.drive = TagAim.forTeleOp(
-                sticks,
-                driverKit.p1().leftBumper(),
+                baseDrive,
+                driverKit.p1().leftBumper(),  // hold to aim
                 tags,
-                scoringTags
-        );
+                scoringTags);
     }
 
-    public void onTeleopInit() {
-        // nothing extra for now
-    }
-
-    public void onTeleopLoop(LoopClock clock) {
-        DriveSignal cmd = drive.get(clock);
-        drivebase.drive(cmd);
-
-        // Optional: show tag info for students
-        AprilTagObservation obs = tags.best(scoringTags, 0.3);
-        if (obs.hasTarget) {
-            telemetry.addData("Tag id", obs.id);
-            telemetry.addData("range (in)", "%.1f", obs.rangeInches);
-            telemetry.addData("bearing (deg)", "%.1f", Math.toDegrees(obs.bearingRad));
-        } else {
-            telemetry.addLine("No scoring tag visible");
-        }
-
-        telemetry.update();
-    }
-
-    public void onStop() {
-        drivebase.stop();
-    }
+    ... // onTeleopInit/onTeleopLoop/onStop as before
 }
 ```
 
-The TeleOp shell remains the same. All the AprilTag wiring lives inside `PhoenixRobot`.
+Now driver 1 can:
+
+* Drive with sticks as before.
+* Hold **left bumper** to make the robot automatically rotate to face a scoring AprilTag.
+
+You don’t need to worry about the math for converting tag bearing to robot rotation. `TagAim` and `Tags` handle that.
 
 ---
 
-## 6. Autonomous with PhoenixAutoBase and PhoenixRobot
+## 6. Splitting into Subsystems (Drive, Vision, Shooter)
 
-Once TeleOp is working, you can reuse the same `PhoenixRobot` for Autonomous.
+As your robot adds mechanisms, a single `PhoenixRobot` class can get long.
 
-There are two levels:
-
-* A **simple Auto** that just calls `robot.onAutoInit()` / `robot.onAutoLoop(...)`.
-* A more advanced Auto using the **task system** (`Task`, `TaskRunner`).
-
-### 6.1 Simple Auto Shell
-
-```java
-package org.firstinspires.ftc.teamcode.robots;
-
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-
-import edu.ftcphoenix.fw.robot.PhoenixAutoBase;
-import edu.ftcphoenix.fw.util.LoopClock;
-import edu.ftcphoenix.robots.phoenix.PhoenixRobot;
-
-@Autonomous(name = "Phoenix: Simple Auto", group = "Phoenix")
-public final class PhoenixAuto extends PhoenixAutoBase {
-
-    private PhoenixRobot robot;
-
-    @Override
-    protected void onInitRobot() {
-        robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
-    }
-
-    @Override
-    protected void onStartRobot() {
-        robot.onAutoInit();
-    }
-
-    @Override
-    protected void onLoopRobot(double dtSec) {
-        // clock() is provided by PhoenixAutoBase
-        robot.onAutoLoop(clock());
-    }
-
-    @Override
-    protected void onStopRobot() {
-        robot.onStop();
-    }
-}
-```
-
-Inside `PhoenixRobot`, you can start with very simple auto behavior:
-
-```java
-public void onAutoInit() {
-    // For a first auto: maybe reset encoders or timers.
-}
-
-public void onAutoLoop(LoopClock clock) {
-    // For beginners, you can start with a simple timed drive.
-    // (Later you can move this into tasks.)
-}
-```
-
-Later, you can advance to the `Task` system and, if you wish, blend in TagAim or other controllers in autonomous.
-
----
-
-## 7. How Students Should Think About Files
-
-When you’re editing code, remember:
-
-* **OpMode shells** (`PhoenixTeleOp`, `PhoenixAuto`)
-
-    * Very small.
-    * Mostly boilerplate.
-    * You rarely change these once they’re set up.
-
-* **PhoenixRobot** (and its helper classes)
-
-    * Where you spend most of your time.
-    * Where you add new mechanisms and behavior.
-    * Where you wire drive, AprilTags, shooter, intake, etc.
-
-If your TeleOp shell starts to grow more than ~30–40 lines of code, it probably means logic is leaking out of `PhoenixRobot` and should be moved back.
-
----
-
-## 8. Suggested Learning Path
-
-1. **Step 1: Robot + TeleOp skeleton**
-
-    * Create `PhoenixRobot` with drive only.
-    * Use `PhoenixTeleOpBase` + TeleOp shell to move the robot.
-
-2. **Step 2: Slow mode**
-
-    * Modify `PhoenixRobot` to use `defaultMecanumWithSlowMode`.
-    * Test precise driving.
-
-3. **Step 3: AprilTags in TeleOp**
-
-    * Add `Tags.aprilTags(...)` to `PhoenixRobot`.
-    * Wrap drive with `TagAim.forTeleOp(...)`.
-    * Print tag ID and range to telemetry.
-
-4. **Step 4: Simple Autonomous**
-
-    * Create a `PhoenixAuto` shell using `PhoenixAutoBase`.
-    * Reuse `PhoenixRobot` inside auto.
-    * Start with a very simple sequence (drive forward, park).
-
-5. **Step 5: More mechanisms**
-
-    * Add shooter/intake classes that `PhoenixRobot` owns.
-    * Use buttons from `driverKit` to control them.
-
-You don’t need to know every package or class in Phoenix to get started. Focus on:
-
-* `PhoenixRobot`
-* `PhoenixTeleOpBase` / TeleOp shell
-* `PhoenixAutoBase` / Auto shell
-* `Drives` + `StickDriveSource`
-* `Tags` + `TagAim` (when you’re ready for AprilTags)
-
-The rest of the framework is there to support you as your robot and ideas get more advanced.
-
----
-
-## 9. Going Further: Splitting PhoenixRobot into Subsystems
-
-Once your robot starts to have *many* mechanisms (drive, shooter, intake, arm, vision, etc.), keeping everything in a single `PhoenixRobot` file can get crowded.
-
-A natural next step is to split behavior into **subsystems**:
-
-* `DriveSubsystem` – owns mecanum drive and stick mapping (and optional TagAim).
-* `VisionSubsystem` – owns the AprilTag sensor and tag IDs.
-* `ShooterSubsystem` – owns the shooter motors and button control.
-* (Later) `IntakeSubsystem`, `TransferSubsystem`, etc.
-
-### 9.1 Expanded Project Structure
+A common pattern is to create a `subsystem` package and move each “chunk” into its own class.
 
 ```text
-TeamCode/src/main/java
-└── org/firstinspires/ftc/teamcode/robots
-    ├── PhoenixTeleOp.java          // thin TeleOp shell
-    └── PhoenixAuto.java            // thin Auto shell
-
-└── edu/ftcphoenix/robots/phoenix
-    PhoenixRobot.java               // main robot class
+edu/ftcphoenix/robots/phoenix
+    PhoenixRobot.java
 
     subsystem/
         DriveSubsystem.java
@@ -516,101 +335,68 @@ TeamCode/src/main/java
         ShooterSubsystem.java
 ```
 
-### 9.2 PhoenixRobot with Subsystems
+Each subsystem:
 
-Here is what `PhoenixRobot` looks like when it owns subsystems instead of doing everything itself:
+* Knows its own hardware.
+* Has its own lifecycle methods (`onTeleopInit`, `onTeleopLoop`, `onAutoInit`, `onAutoLoop`, `onStop`).
+* Uses the same Phoenix helpers.
+
+### 6.1 Subsystem interface
+
+The Phoenix framework provides a simple `Subsystem` interface:
 
 ```java
-package edu.ftcphoenix.robots.phoenix;
+package edu.ftcphoenix.fw.robot;
 
-import com.qualcomm.robotcore.hardware.HardwareMap;
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import edu.ftcphoenix.fw.input.DriverKit;
-import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.util.LoopClock;
-import edu.ftcphoenix.robots.phoenix.subsystem.DriveSubsystem;
-import edu.ftcphoenix.robots.phoenix.subsystem.ShooterSubsystem;
-import edu.ftcphoenix.robots.phoenix.subsystem.VisionSubsystem;
 
-public final class PhoenixRobot {
-
-    private final DriverKit driverKit;
-    private final Telemetry telemetry;
-
-    private final DriveSubsystem drive;
-    private final VisionSubsystem vision;
-    private final ShooterSubsystem shooter;
-
-    private final List<Subsystem> subsystems = new ArrayList<>();
-
-    public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-        this.driverKit = driverKit;
-        this.telemetry = telemetry;
-
-        this.vision  = new VisionSubsystem(hw, telemetry);
-        this.drive   = new DriveSubsystem(hw, driverKit, vision);
-        this.shooter = new ShooterSubsystem(hw, driverKit, telemetry);
-
-        subsystems.add(drive);
-        subsystems.add(shooter);
-        subsystems.add(vision);
-    }
-
-    public void onTeleopInit() {
-        for (Subsystem s : subsystems) s.onTeleopInit();
-    }
-
-    public void onTeleopLoop(LoopClock clock) {
-        for (Subsystem s : subsystems) s.onTeleopLoop(clock);
-        telemetry.update();
-    }
-
-    public void onAutoInit() {
-        for (Subsystem s : subsystems) s.onAutoInit();
-    }
-
-    public void onAutoLoop(LoopClock clock) {
-        for (Subsystem s : subsystems) s.onAutoLoop(clock);
-        telemetry.update();
-    }
-
-    public void onStop() {
-        for (Subsystem s : subsystems) s.onStop();
-    }
+public interface Subsystem {
+    default void onTeleopInit() {}
+    default void onTeleopLoop(LoopClock clock) {}
+    default void onAutoInit() {}
+    default void onAutoLoop(LoopClock clock) {}
+    default void onStop() {}
 }
 ```
 
-Your TeleOp and Auto shells **do not change**—they still just create a `PhoenixRobot` and call `onTeleopLoop(clock())` / `onAutoLoop(clock())`.
+You can implement this in your own classes.
 
-### 9.3 Example: DriveSubsystem (with TagAim)
+### 6.2 Example: DriveSubsystem
 
 ```java
 package edu.ftcphoenix.robots.phoenix.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.DriveSource;
+import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.StickDriveSource;
 import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.util.LoopClock;
 
+import java.util.Set;
+
 public final class DriveSubsystem implements Subsystem {
 
+    private final Telemetry telemetry;
+    private final DriverKit driverKit;
+
     private final MecanumDrivebase drivebase;
-    private final DriveSource driveSource;
+    private final DriveSource drive;
 
     public DriveSubsystem(HardwareMap hw,
                           DriverKit driverKit,
-                          VisionSubsystem vision) {
+                          Telemetry telemetry,
+                          AprilTagSensor tags,
+                          Set<Integer> scoringTags) {
+        this.telemetry = telemetry;
+        this.driverKit = driverKit;
 
         this.drivebase = Drives
                 .mecanum(hw)
@@ -621,23 +407,26 @@ public final class DriveSubsystem implements Subsystem {
                 .invertRightSide()
                 .build();
 
-        StickDriveSource sticks =
-                StickDriveSource.defaultMecanumWithSlowMode(
-                        driverKit,
-                        driverKit.p1().rightBumper(), // slow mode
-                        0.30);
+        var baseDrive = StickDriveSource.defaultMecanumWithSlowMode(
+                driverKit,
+                driverKit.p1().rightBumper(),
+                0.30);
 
-        this.driveSource = TagAim.forTeleOp(
-                sticks,
-                driverKit.p1().leftBumper(),          // hold LB to aim
-                vision.getTagSensor(),
-                vision.getScoringTagIds());
+        this.drive = TagAim.forTeleOp(
+                baseDrive,
+                driverKit.p1().leftBumper(),
+                tags,
+                scoringTags);
     }
 
     @Override
     public void onTeleopLoop(LoopClock clock) {
-        DriveSignal cmd = driveSource.get(clock);
+        DriveSignal cmd = drive.get(clock);
         drivebase.drive(cmd);
+
+        telemetry.addData("axial", cmd.axial);
+        telemetry.addData("lateral", cmd.lateral);
+        telemetry.addData("omega", cmd.omega);
     }
 
     @Override
@@ -647,12 +436,13 @@ public final class DriveSubsystem implements Subsystem {
 }
 ```
 
-### 9.4 Example: VisionSubsystem (AprilTags)
+### 6.3 Example: VisionSubsystem
 
 ```java
 package edu.ftcphoenix.robots.phoenix.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
+
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import java.util.Set;
@@ -665,48 +455,51 @@ import edu.ftcphoenix.fw.util.LoopClock;
 
 public final class VisionSubsystem implements Subsystem {
 
+    private static final double MAX_AGE_SEC = 0.3;
+
     private final Telemetry telemetry;
     private final AprilTagSensor tags;
-    private final Set<Integer> scoringTags = Set.of(1, 2, 3);
+    private final Set<Integer> scoringTags;
 
-    public VisionSubsystem(HardwareMap hw, Telemetry telemetry) {
+    public VisionSubsystem(HardwareMap hw,
+                           Telemetry telemetry,
+                           Set<Integer> scoringTags) {
         this.telemetry = telemetry;
         this.tags = Tags.aprilTags(hw, "Webcam 1");
+        this.scoringTags = scoringTags;
     }
 
-    public AprilTagSensor getTagSensor() {
+    public AprilTagSensor sensor() {
         return tags;
     }
 
-    public Set<Integer> getScoringTagIds() {
-        return scoringTags;
+    public AprilTagObservation bestScoringTag() {
+        return tags.best(scoringTags, MAX_AGE_SEC);
     }
 
     @Override
     public void onTeleopLoop(LoopClock clock) {
-        AprilTagObservation obs = tags.best(scoringTags, 0.3);
+        AprilTagObservation obs = bestScoringTag();
         if (obs.hasTarget) {
-            telemetry.addData("Tag id", obs.id);
-            telemetry.addData("range (in)", "%.1f", obs.rangeInches);
-            telemetry.addData("bearing (deg)", "%.1f", Math.toDegrees(obs.bearingRad));
+            telemetry.addData("tagId", obs.id);
+            telemetry.addData("rangeIn", "%.1f", obs.rangeInches);
+            telemetry.addData("bearingDeg", "%.1f", Math.toDegrees(obs.bearingRad));
         } else {
             telemetry.addLine("No scoring tag visible");
         }
     }
-
-    @Override
-    public void onStop() {
-        // nothing to stop for vision right now
-    }
 }
 ```
 
-### 9.5 Example: ShooterSubsystem (Simple Buttons)
+### 6.4 Example: ShooterSubsystem (power-based)
+
+This simple version just powers two motors together. You can later upgrade it to a velocity-based shooter using `FtcPlants.velocityPair(...)`.
 
 ```java
 package edu.ftcphoenix.robots.phoenix.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
+
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
@@ -728,68 +521,134 @@ public final class ShooterSubsystem implements Subsystem {
                             DriverKit driverKit,
                             Telemetry telemetry) {
         this.telemetry = telemetry;
-        this.gunner = driverKit.p2(); // or p1 if single driver
-
         this.left = FtcHardware.motor(hw, "shooterLeft", false);
         this.right = FtcHardware.motor(hw, "shooterRight", true);
-    }
-
-    @Override
-    public void onTeleopInit() {
-        setPower(0.0);
+        this.gunner = driverKit.p2();
     }
 
     @Override
     public void onTeleopLoop(LoopClock clock) {
-        double power = 0.0;
-        if (gunner.buttonA().isPressed()) {
-            power = 0.5;
-        } else if (gunner.buttonB().isPressed()) {
-            power = 1.0;
-        }
-        setPower(power);
+        double trigger = gunner.rightTrigger().get();
+        double power = trigger;  // simple: power = trigger position
 
-        telemetry.addData("Shooter power", "%.2f", lastPower);
-    }
+        left.setPower(power);
+        right.setPower(power);
 
-    @Override
-    public void onAutoInit() {
-        setPower(0.0);
-    }
+        lastPower = power;
 
-    @Override
-    public void onAutoLoop(LoopClock clock) {
-        // later: add auto shooter behavior
+        telemetry.addData("Shooter power", "%.2f", power);
     }
 
     @Override
     public void onStop() {
-        setPower(0.0);
-    }
-
-    private void setPower(double power) {
-        lastPower = power;
-        left.setPower(power);
-        right.setPower(power);
+        left.setPower(0.0);
+        right.setPower(0.0);
     }
 }
 ```
 
+You can swap this implementation out later for one that uses a velocity plant and an interpolation table.
+
 ---
 
-### 9.6 When to Move to Subsystems
+## 7. PhoenixRobot with Subsystems
 
-You should consider moving to the subsystem structure when:
+Once you have subsystems, `PhoenixRobot` becomes a small “owner” that wires them together and forwards lifecycle calls.
 
-* `PhoenixRobot` starts getting long (150–200+ lines).
-* You find yourself scrolling a lot to find drive vs shooter vs vision code.
-* Multiple students want to work on different parts of the robot at the same time.
+```java
+package edu.ftcphoenix.robots.phoenix;
 
-Until then, it’s perfectly fine to stay with a single-class `PhoenixRobot`.
+import com.qualcomm.robotcore.hardware.HardwareMap;
 
-The **key pattern** stays the same:
+import org.firstinspires.ftc.robotcore.external.Telemetry;
 
-* Thin shells (`PhoenixTeleOp`, `PhoenixAuto`) use `PhoenixTeleOpBase` / `PhoenixAutoBase`.
-* Those shells create a `PhoenixRobot` with `(hardwareMap, driverKit(), telemetry)`.
-* `PhoenixRobot` owns your behavior (either directly or via subsystems).
-* Phoenix framework handles the wiring, math, and boilerplate behind the scenes.
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+import edu.ftcphoenix.fw.input.DriverKit;
+import edu.ftcphoenix.fw.robot.Subsystem;
+import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.robots.phoenix.subsystem.DriveSubsystem;
+import edu.ftcphoenix.robots.phoenix.subsystem.ShooterSubsystem;
+import edu.ftcphoenix.robots.phoenix.subsystem.VisionSubsystem;
+
+public final class PhoenixRobot {
+
+    private final DriverKit driverKit;
+    private final Telemetry telemetry;
+
+    private final List<Subsystem> subsystems = new ArrayList<>();
+
+    public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
+        this.driverKit = driverKit;
+        this.telemetry = telemetry;
+
+        var scoringTags = Set.of(1, 2, 3);
+
+        var vision = new VisionSubsystem(hw, telemetry, scoringTags);
+        var drive = new DriveSubsystem(hw, driverKit, telemetry, vision.sensor(), scoringTags);
+        var shooter = new ShooterSubsystem(hw, driverKit, telemetry);
+
+        subsystems.add(vision);
+        subsystems.add(drive);
+        subsystems.add(shooter);
+    }
+
+    public void onTeleopInit() {
+        for (Subsystem s : subsystems) {
+            s.onTeleopInit();
+        }
+    }
+
+    public void onTeleopLoop(LoopClock clock) {
+        for (Subsystem s : subsystems) {
+            s.onTeleopLoop(clock);
+        }
+        telemetry.update();
+    }
+
+    public void onAutoInit() {
+        for (Subsystem s : subsystems) {
+            s.onAutoInit();
+        }
+    }
+
+    public void onAutoLoop(LoopClock clock) {
+        for (Subsystem s : subsystems) {
+            s.onAutoLoop(clock);
+        }
+        telemetry.update();
+    }
+
+    public void onStop() {
+        for (Subsystem s : subsystems) {
+            s.onStop();
+        }
+    }
+}
+```
+
+Now students mostly learn:
+
+* How to write a `Subsystem`.
+* How to wire it into `PhoenixRobot`.
+* How to use Phoenix helpers (`Drives`, `Tags`, `TagAim`, `FtcHardware`) instead of touching FTC SDK classes directly.
+
+---
+
+## 8. Where to Go Next
+
+Once you have this basic structure working, you can:
+
+* Add more subsystems (intake, transfer, arm, etc.).
+* Replace power-based mechanisms with velocity or position control using `FtcPlants` and `Plant`.
+* Add simple tasks / sequences (e.g., “one-button shoot” that runs shooter + feeder + pusher).
+* Build Auto paths that reuse the same subsystems.
+
+The structure stays the same:
+
+* Thin OpMode shells (`PhoenixTeleOp`, `PhoenixAuto`).
+* A `PhoenixRobot` that owns subsystems.
+* Subsystems that own hardware and behavior.
+* Phoenix framework providing the plumbing so you can focus on **how the robot should play the game**.

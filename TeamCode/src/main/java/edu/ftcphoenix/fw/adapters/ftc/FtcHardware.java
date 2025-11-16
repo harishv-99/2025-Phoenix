@@ -12,22 +12,18 @@ import edu.ftcphoenix.fw.util.MathUtil;
 /**
  * Adapters from FTC SDK devices to Phoenix HAL output interfaces.
  *
- * <p>This is the only place where the Phoenix framework knows about FTC SDK
- * hardware classes. All other code should depend on {@link MotorOutput} and
- * {@link ServoOutput} instead.</p>
+ * <p>The {@code adapters.ftc} package (this class, {@link FtcPlants},
+ * {@link FtcVision}, etc.) is where the Phoenix framework talks
+ * directly to FTC SDK hardware classes. All other framework code
+ * should depend on {@link MotorOutput}, {@link ServoOutput},
+ * {@link edu.ftcphoenix.fw.actuation.Plant}, and other framework
+ * interfaces instead.</p>
  *
  * <h2>Inversion</h2>
- * <ul>
- *   <li>Motors: {@code inverted == true} inverts the sign of the power.</li>
- *   <li>Servos: {@code inverted == true} maps position {@code p} to
- *       {@code 1 - p} before writing.</li>
- * </ul>
- *
- * <p>All methods clamp power/position to their expected ranges:
- * <ul>
- *   <li>Motors: [-1, +1]</li>
- *   <li>Servos: [0, 1]</li>
- * </ul>
+ * <p>Each factory accepts an {@code inverted} flag. When true, the
+ * logical sign of the command is flipped (e.g., power is negated),
+ * allowing you to fix wiring or configuration differences without
+ * sprinkling minus signs throughout your robot code.</p>
  */
 public final class FtcHardware {
 
