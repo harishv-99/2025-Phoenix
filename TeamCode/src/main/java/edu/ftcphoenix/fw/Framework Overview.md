@@ -6,7 +6,7 @@ clear, maintainable robot code.
 The overarching goal:
 
 > **Make robot-specific code as simple and readable as possible, while the framework handles the
-wiring, control patterns, and boilerplate.**
+> wiring, control patterns, and boilerplate.**
 >
 > Students write the *story* of what the robot does; the framework handles the plumbing.
 
@@ -38,7 +38,7 @@ concrete “how do I start a TeleOp?” steps, see the **Beginner’s Guide**.
       adapters.
     * Adapters and HAL convert SDK types → framework interfaces.
     * Robot logic talks to simple interfaces (`DriveSource`, `AprilTagSensor`, `BearingSource`,
-      `Subsystem`), not raw SDK classes.
+      `Subsystem`, `Task`), not raw SDK classes.
 
 3. **Beginner path + advanced escape hatch**
 
@@ -72,7 +72,7 @@ Your code (PhoenixRobot + subsystems + OpModes)
 ├─ fw.robot       – PhoenixTeleOpBase, PhoenixAutoBase, Subsystem
 ├─ fw.drive       – drivebases + drive sources
 ├─ fw.stage       – reusable processing blocks (buffer, setpoint)
-├─ fw.task        – autonomous task graphs
+├─ fw.task        – tasks & macros (time-extended behaviors)
 ├─ fw.sensing     – AprilTags, bearings, etc.
 ├─ fw.input       – Gamepads, axes, buttons, DriverKit
 └─ fw.hal + fw.adapters.ftc
@@ -142,7 +142,7 @@ These interfaces let the rest of the framework treat motors/servos generically, 
 
 **Main entry point**
 
-* `FtcPlants` – static helpers that create `SetpointStage.Plant` implementations from FTC hardware.
+* `FtcPlants` – static helpers that create `Plant` implementations from FTC hardware.
 
 Examples:
 
@@ -153,16 +153,22 @@ Examples:
   `FtcPlants.motorPositionPair(...)` – dual-output variants for mechanisms with two actuators (e.g.,
   dual shooter wheels, dual lift motors).
 
+Behind these helpers are types in `fw.actuation`:
+
+* `Plant` – a small interface that knows how to move hardware toward a numeric target over time.
+* `PlantTasks` – helpers that produce `Task`s for plants (timed holds, go-to-setpoint-and-wait).
+
 **Usage level**
 
 * **Beginner:**
 
-    * Use these helpers from examples to wire shooters, intakes, arms, etc.
-    * Don’t need to understand `SetpointStage.Plant` right away.
+    * Use `FtcPlants` helpers from examples to wire shooters, intakes, arms, etc.
+    * Don’t need to understand `Plant` right away; treat it as a “smart motor/servo wrapper”.
 
 * **Advanced:**
 
-    * Combine `FtcPlants` with `SetpointStage` and `BufferStage` to build structured subsystems.
+    * Combine `FtcPlants` with `SetpointStage`, `BufferStage`, and `PlantTasks` to build structured
+      subsystems.
     * Prefer `FtcPlants.*(hardwareMap, ...)` for simple wiring from configuration names.
     * Use the lower-level overloads (that accept `MotorOutput` / `ServoOutput`) when composing more
       complex mechanisms.
@@ -200,10 +206,29 @@ Examples:
           .build();
   ```
 
+* `DriveTasks`
+
+    * Domain-specific helpers that build `Task`s for the drive system.
+    * Common patterns:
+
+        * `driveForSeconds(drivebase, signal, durationSec)` – hold a `DriveSignal` for a fixed time,
+          then stop.
+        * `driveForSeconds(drivebase, axial, lateral, omega, durationSec)` – convenience overload
+          when you don’t want to construct a `DriveSignal` explicitly.
+        * `stop(drivebase)` – `Task` that simply stops the drivebase once and finishes.
+
 **Usage level**
 
-* **Beginner:** use `Drives.mecanum(...)` to construct your drivebase.
-* **Advanced:** extend `DriveSignal` usage, or create new drivebase types if needed.
+* **Beginner:**
+
+    * Use `Drives.mecanum(...)` to construct your drivebase.
+    * Use `DriveTasks` in TeleOp macros or Auto to express simple scripted motion without writing
+      timers.
+
+* **Advanced:**
+
+    * Extend `DriveSignal` usage, or create new drivebase types if needed.
+    * Build more sophisticated auto routines by composing `DriveTasks` with other tasks.
 
 ---
 
@@ -270,7 +295,8 @@ Examples:
 **Usage level**
 
 * **Beginner:** mostly use `DriverKit` together with `StickDriveSource` and subsystems.
-* **Advanced:** use `Axis`/`Button` and `Bindings` for more complex input logic.
+* **Advanced:** use `Axis`/`Button` and `Bindings` for more complex input logic (including
+  triggering tasks/macros).
 
 ---
 
@@ -318,7 +344,11 @@ Examples:
 
 * `PhoenixAutoBase`
 
-    * Similar wiring, plus `TaskRunner` for autonomous `Task` graphs.
+    * Similar wiring for Autonomous.
+    * Additionally owns a `TaskRunner` for autonomous `Task` graphs:
+
+        * You build `Task` sequences (often using `DriveTasks` / `PlantTasks`).
+        * `PhoenixAutoBase` calls `taskRunner.update(clock())` each loop.
 
 * `Subsystem`
 
@@ -343,6 +373,7 @@ Examples:
 
     * Add more subsystems and tasks over time.
     * Split large subsystems into smaller ones as the robot grows.
+    * Use `TaskRunner` in Auto (and optionally TeleOp) to structure complex behavior.
 
 ---
 
@@ -378,23 +409,52 @@ Stages are reusable processing blocks that you can wire together.
 
 ---
 
-### 3.9 `fw.task` – Autonomous task graphs
+### 3.9 `fw.task` – Tasks, macros, and autonomous graphs
 
 **Main types**
 
 * `Task`
 
-    * Represents a unit of autonomous work (e.g., "drive to pose", "shoot 3 discs").
-    * Composable: can wait for, sequence, or run tasks in parallel.
+    * Represents a unit of work that runs over time (e.g., "drive forward for 0.8s", "move arm to
+      angle and wait")
+    * Composable: can be sequenced, combined, or run in parallel.
 
 * `TaskRunner`
 
-    * Drives a `Task` graph forward each loop.
+    * Owns a queue of tasks and drives them forward each loop.
+    * Non-blocking: you call `update(clock)` once per OpMode loop.
+
+* Common building blocks:
+
+    * `InstantTask` – do something once and finish immediately.
+    * `RunForSecondsTask` – run callbacks for a fixed duration (used by `DriveTasks` and
+      `PlantTasks`).
+    * `SequenceTask` – run tasks one after another.
+    * (More may be added over time.)
+
+**What lives here vs. in domain packages?**
+
+* `fw.task` only knows about time and flow control.
+* Domain packages (like `fw.drive` and `fw.actuation`) provide their own helpers that *return*
+  `Task`s:
+
+    * `fw.drive.DriveTasks` – scripted drive behaviors (drive-for-time, stop, etc.).
+    * `fw.actuation.PlantTasks` – timed holds and setpoint-wait patterns for `Plant`s.
 
 **Usage level**
 
-* **Beginner:** can start with simple `Task` examples (e.g., shoot then park).
-* **Advanced:** uses tasks to structure complex autonomous routines.
+* **Beginner:**
+
+    * Use tasks indirectly through examples and helpers:
+
+        * `PhoenixAutoBase` for Auto.
+        * `DriveTasks` and `PlantTasks` for common macros.
+
+* **Advanced:**
+
+    * Build custom `Task` implementations when needed.
+    * Compose tasks with `SequenceTask` and friends to structure complex autonomous routines and
+      TeleOp macros.
 
 ---
 
@@ -480,6 +540,14 @@ This package contains example TeleOp / Auto OpModes and subsystems that show rec
 * How to wire a mecanum drive with `Drives` + `StickDriveSource`.
 * How to build a shooter subsystem using `FtcPlants.velocityPair(...)`.
 * How to use `Tags.aprilTags(...)` + `TagAim.forTeleOp(...)` for AprilTag-based auto-aim.
+* How to build simple macros using `TaskRunner` + `DriveTasks`.
+
+Examples worth calling out:
+
+* `TeleOpMecanumBasic` – minimal TeleOp using the drive framework.
+* `TeleOpMacroDrive` – TeleOp with a gamepad-triggered drive macro using `TaskRunner` and
+  `DriveTasks`.
+* `ShooterInterpolationExample` – shows how to use `InterpolatingTable1D` for shooter tuning.
 
 **Usage level**
 
@@ -490,18 +558,24 @@ This package contains example TeleOp / Auto OpModes and subsystems that show rec
 
 ## 4. How your robot code fits in
 
-Putting it all together for a typical TeleOp:
+Putting it all together for a typical TeleOp and Auto:
 
-1. **Base class:** extend `PhoenixTeleOpBase`.
+1. **Base classes:** extend `PhoenixTeleOpBase` for TeleOp and `PhoenixAutoBase` for Auto.
 2. **Robot class:** create a `PhoenixRobot` that owns subsystems (`DriveSubsystem`,
    `ShooterSubsystem`, `VisionSubsystem`, etc.).
 3. **Subsystems:** use `Drives`, `StickDriveSource`, `Tags`, `TagAim`, `FtcHardware`, and
-   `FtcPlants` to wire hardware.
-4. **Inputs:** use `Gamepads` + `DriverKit` to read P1/P2 controls.
-5. **Behavior:** in each subsystem’s `onTeleopLoop(...)`, read inputs and set setpoints/commands.
+   `FtcPlants` to wire hardware into plants and drivebases.
+4. **Inputs:** use `Gamepads` + `DriverKit` to read P1/P2 controls, and `Bindings` to map buttons to
+   actions (including starting/cancelling tasks).
+5. **Behavior:**
+
+    * In TeleOp, each subsystem’s `onTeleopLoop(...)` reads inputs and sets setpoints/commands.
+    * In Auto, you build `Task` sequences (often using `DriveTasks` / `PlantTasks`) and let
+      `PhoenixAutoBase` / `TaskRunner` advance them each loop.
 
 If you stick to these patterns:
 
 * Robot-specific code stays small and readable.
 * Framework code absorbs the complexity.
-* The same patterns can carry across seasons with different robots and games.
+* The same patterns can carry across seasons with different robots and games, and can scale from
+  simple TeleOp to sophisticated autonomous routines and macros.

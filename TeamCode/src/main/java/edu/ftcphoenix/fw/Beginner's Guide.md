@@ -22,7 +22,7 @@ In this version of the guide, we also adopt a **standard project structure**:
     * `PhoenixAutoBase` for Autonomous
     * A `PhoenixRobot` class that represents *your robot*.
 
-You don’t have to understand everything at once. Start with TeleOp and a single `PhoenixRobot` class. As your robot grows, you can split it into subsystems (see Section 9).
+You don’t have to understand everything at once. Start with TeleOp and a single `PhoenixRobot` class. As your robot grows, you can split it into subsystems (see Section 6). Later, you can add tasks and macros (see Section 9).
 
 ---
 
@@ -52,14 +52,15 @@ There are three main pieces you’ll work with:
 
     * Base classes that hide FTC OpMode boilerplate.
     * They own the main loop and call into your `PhoenixRobot` methods.
+    * `PhoenixAutoBase` also owns a `TaskRunner` for your autonomous task sequences.
 
 3. **Framework adapters** (in `edu.ftcphoenix.fw.adapters.*`)
 
     * `FtcHardware` turns FTC SDK objects (`DcMotorEx`, `Servo`, etc.) into simple outputs.
-    * `FtcVision` turns camera + processors into a `AprilTagSensor`.
-    * Higher-level helpers like `Drives`, `Tags`, `TagAim`, etc. wire common patterns.
+    * `FtcVision` turns camera + processors into an `AprilTagSensor`.
+    * Higher-level helpers like `Drives`, `Tags`, `TagAim`, `FtcPlants`, etc. wire common patterns.
 
-Your robot code should mostly use **DriverKit**, **Drives**, **Tags**, and your own subsystems. The adapters hide the low‑level details.
+Your robot code should mostly use **DriverKit**, **Drives**, **Tags**, your own subsystems, and (later) simple **Tasks** via helpers like `DriveTasks` and `PlantTasks`. The adapters hide the low‑level details.
 
 ---
 
@@ -94,7 +95,7 @@ edu/ftcphoenix/robots/phoenix
 
 `PhoenixRobot` then owns these subsystems and forwards lifecycle calls to them.
 
-You don’t have to start with subsystems. It’s fine to begin with everything in `PhoenixRobot`. Section 9 shows how to split it into subsystems later.
+You don’t have to start with subsystems. It’s fine to begin with everything in `PhoenixRobot`. Section 6 shows how to split it into subsystems later.
 
 ---
 
@@ -370,6 +371,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
+import java.util.Set;
+
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
@@ -377,10 +380,9 @@ import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.StickDriveSource;
 import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.robot.Subsystem;
+import edu.ftcphoenix.fw.sensing.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.util.LoopClock;
-
-import java.util.Set;
 
 public final class DriveSubsystem implements Subsystem {
 
@@ -643,7 +645,7 @@ Once you have this basic structure working, you can:
 
 * Add more subsystems (intake, transfer, arm, etc.).
 * Replace power-based mechanisms with velocity or position control using `FtcPlants` and `Plant`.
-* Add simple tasks / sequences (e.g., “one-button shoot” that runs shooter + feeder + pusher).
+* Add simple tasks / sequences (e.g., “one-button shoot” that runs shooter + feeder + pusher) using the Phoenix task framework (`Task`, `TaskRunner`, `DriveTasks`, `PlantTasks`).
 * Build Auto paths that reuse the same subsystems.
 
 The structure stays the same:
@@ -652,3 +654,37 @@ The structure stays the same:
 * A `PhoenixRobot` that owns subsystems.
 * Subsystems that own hardware and behavior.
 * Phoenix framework providing the plumbing so you can focus on **how the robot should play the game**.
+
+---
+
+## 9. Going Further: Tasks & Macros (Optional)
+
+Once you are comfortable with TeleOp and subsystems, you can use Phoenix **tasks** to build small "macros" and multi-step routines.
+
+Tasks live in the `fw.task` package and are used for behaviors that take more than one loop to complete, such as:
+
+* Driving in a short scripted path in TeleOp when a button is pressed.
+* Running a shooter sequence (spin up → feed → stop).
+* Moving a mechanism to a target and waiting until it reaches `atSetpoint()`.
+
+You will mostly interact with tasks through **helpers**, not by writing your own `Task` implementations:
+
+* `fw.drive.DriveTasks`
+
+    * `driveForSeconds(...)` – drive with a fixed `DriveSignal` for some time, then stop.
+* `fw.actuation.PlantTasks`
+
+    * `holdForSeconds(...)` – hold a plant (like an intake or shooter) at a target for some time.
+    * `goToSetpointAndWait(...)` – move a plant to a setpoint and finish when it reports `atSetpoint()`.
+
+A typical TeleOp pattern is:
+
+1. Create a `TaskRunner` field in your OpMode.
+2. Build one or more `Task` objects (often using `DriveTasks` / `PlantTasks`).
+3. Use `Bindings` to start a macro when a gamepad button is pressed.
+4. Call `taskRunner.update(clock)` in `loop()`.
+5. If no macro is active, fall back to normal manual control.
+
+For a concrete example, see `fw.examples.TeleOpMacroDrive`, where **button Y** starts a simple drive macro built from `DriveTasks.driveForSeconds(...)`, and **button B** cancels it.
+
+For more details and code snippets, see the **"Phoenix Tasks & Macros Quickstart"** guide, which is meant to be read *after* this Beginner’s Guide.
