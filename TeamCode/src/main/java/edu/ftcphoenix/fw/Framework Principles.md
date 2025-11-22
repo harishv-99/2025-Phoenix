@@ -14,540 +14,489 @@ If you are unsure how to design something in the framework, come back here first
 
 ## 1. High‑Level Goals
 
-Phoenix is a *robot‑first* library: its only reason to exist is to make it easier to write **clear,
-reliable robot code**.
+Phoenix exists to make it easier to write **clear, robust robot code** that can grow from a simple
+TeleOp into a complex system without turning into spaghetti.
 
-We optimize for three main goals:
+High‑level goals:
 
-1. **Simple for beginners, useful for experts.**
-2. **Predictable, explicit behavior.**
-3. **Small, orthogonal building blocks.**
+1. **Simple for beginners, powerful for experts**
 
-### 1.1 Beginner‑first, with progressive disclosure
+    * New students should be able to get a driving TeleOp with a few clear types and helpers.
+    * Advanced users should be able to build sophisticated controllers and interactions on top of
+      the
+      same core abstractions.
 
-* There is always a **“happy path”** for new teams:
+2. **Robot code describes behavior, not plumbing**
 
-    * Drive: `Drives.mecanum(...)` + `StickDriveSource.defaultMecanumWithSlowMode(...)`.
-    * Vision: `Tags.aprilTags(...)` + `TagAim.forTeleOp(...)`.
-    * Robot lifecycle: extend `PhoenixTeleOpBase` / `PhoenixAutoBase` and delegate to a
-      `PhoenixRobot` class.
-    * Tasks/macros: follow the pattern in the Tasks & Macros Quickstart, using `TaskRunner` together
-      with helpers like `DriveTasks` and `PlantTasks`.
+    * Code in your `PhoenixRobot` and subsystems should read like:
 
-* Advanced usage is built as **extensions of the same ideas**, not a completely different API:
+        * "drive with mecanum from gamepad sticks"
+        * "hold shooter at 2000 RPM while feeding discs".
+    * Raw SDK details (`DcMotorEx`, `VisionPortal`, etc.) should live behind adapters and factories.
 
-    * You can still build custom `DriveSource`, `MecanumDrivebase`, subsystems, tasks, etc.
-    * You can bypass helpers when needed, but the mental model stays the same.
+3. **Clear layering and testable core**
 
-When designing a new feature, always ask: *“What does the beginner path look like?”* If you can’t
-show it in a small example, the design is probably too complex.
+    * Core logic should be **plain Java** (POJOs): no hidden lifecycle, no direct OpMode calls.
+    * The framework is layered so most logic can be unit‑tested without an FTC robot controller.
 
-### 1.2 Robot‑centric structure
+4. **One core abstraction per domain**
 
-Robot code should read like “what the robot does”, not like plumbing:
+    * Drive → `DriveSource` produces `DriveSignal` each loop.
+    * Mechanisms → `Plant` wraps a single mechanism.
+    * Behavior → `Task` describes non‑blocking actions.
+    * Sensing → `FeedbackSource<T>` provides time‑stamped sensor values.
 
-* Thin OpMode shells (`PhoenixTeleOpBase`, `PhoenixAutoBase`) own interaction with the FTC SDK
-  (`LinearOpMode`, `Telemetry`, loop timing).
+5. **Composition over inheritance and special cases**
 
-* Each season gets a **robot class** (for example `PhoenixRobot`) living under
-  `edu.ftcphoenix.robots.<season>` that:
+    * Build complex behavior by **wrapping** and **blending** small pieces, not by creating one-off
+      megaclasses.
+    * Example: start from a manual `DriveSource`, wrap it with `TagAim.teleOpAim(...)`, then wrap
+      again with slow mode using `scaledWhen(...)`.
 
-    * Creates subsystems (drive, shooter, intake, etc.).
-    * Owns driver control mapping via `DriverKit`.
-    * Exposes simple lifecycle hooks (`onTeleopInit`, `onTeleopLoop`, `onAutoInit`, ...).
+6. **Non‑blocking, loop‑friendly design**
 
-* Subsystems hide details of plants, sensors, stages, and tasks from the OpMode.
+    * Nothing in the core should call `sleep()` or block the OpMode thread.
+    * TeleOp and Auto both follow the same loop‑driven model: update inputs, compute outputs, update
+      plants/tasks.
 
-The end goal is that OpMode code is boring:
+7. **Documentation and examples are first‑class**
 
-```java
-@TeleOp(name = "MyRobot: TeleOp", group = "Phoenix")
-public final class MyTeleOp extends PhoenixTeleOpBase {
-    private PhoenixRobot robot;
-
-    @Override
-    protected void onInitRobot() {
-        robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
-    }
-
-    @Override
-    protected void onStartRobot() {
-        robot.onTeleopInit();
-    }
-
-    @Override
-    protected void onLoopRobot(double dtSec) {
-        robot.onTeleopLoop(clock());
-    }
-
-    @Override
-    protected void onStopRobot() {
-        robot.onStop();
-    }
-}
-```
-
-### 1.3 Predictability and explicit wiring
-
-* No hidden threads or background work: the framework assumes a **single control loop**, driven by
-  the OpMode.
-
-* Wiring is **explicit in code**:
-
-    * Motors and servos are created from `HardwareMap` in one place (usually the robot or subsystem
-      constructor).
-    * Sensors (including AprilTag cameras) are created once and owned by a subsystem or the robot.
-    * Task graphs (in Auto or TeleOp) are constructed in robot or subsystem code and advanced from the
-      main loop via `TaskRunner`.
-
-* Control logic should be **POJO‑style** (plain Java objects) where possible: easy to unit‑test, no
-  SDK dependencies, no lifecycle magic.
+    * Every new concept should ship with at least one small, realistic example.
+    * Beginner docs define a **small surface area** of names students must learn (the "beginner
+      surface").
 
 ---
 
 ## 2. Layers and Dependencies
 
 Phoenix is intentionally layered. Understanding the layers helps you know **where new code should
-live**.
+live** and what it may depend on.
 
-At a high level:
-
-1. **Robots & subsystems** – season‑specific logic.
-2. **Core framework** – platform‑agnostic building blocks (math, drive, stages, tasks, sensing
-   interfaces, etc.).
-3. **FTC adapters** – `adapters.ftc` and `fw.input` code that talks directly to the FTC SDK.
-
-### 2.1 Robots and OpModes
-
-* Robot code lives under:
-
-    * `org.firstinspires.ftc.teamcode.robots` – thin OpMode shells.
-    * `edu.ftcphoenix.robots.<season>` – robot classes and subsystems for that season.
-
-* `PhoenixTeleOpBase` and `PhoenixAutoBase` own:
-
-    * OpMode lifecycle (`init`, `start`, `loop`, `stop`).
-    * Loop timing (`LoopClock`).
-    * Access to `HardwareMap`, `Telemetry`, and `DriverKit`.
-    * In Auto, a `TaskRunner` that you feed with task graphs built from `fw.task` primitives and
-      domain helpers like `DriveTasks` / `PlantTasks`.
-
-**Principle:** OpMode shells should only coordinate *when* things happen. All logic should live in
-the robot and subsystems.
-
-### 2.2 Core packages (platform‑agnostic)
-
-These packages do *not* depend on FTC SDK types:
-
-* `fw.core` – math and controllers
-
-    * `PidController`, `Pid` and friends.
-
-* `fw.util` – utilities
-
-    * `LoopClock`, `MathUtil`, `Units`.
-
-* `fw.hal` – hardware abstraction interfaces
-
-    * `MotorOutput`, `ServoOutput`: pure “write‑only” outputs, no SDK dependency.
-
-* `fw.drive` – drive math and abstractions
-
-    * `DriveSignal`, `DriveSource`, `MecanumDrivebase`, `Drives` builder.
-    * `DriveTasks` – drive‑specific `Task` helpers (drive‑for‑time, stop, etc.) built on `fw.task`.
-
-* `fw.sensing` – sensor abstractions and derived sources
-
-    * `AprilTagObservation`, `AprilTagSensor`, `BearingSource`, `TagAim`, `Tags`.
-
-* `fw.stage` – reusable update “nodes”
-
-    * `setpoint.SetpointStage` – maps high‑level goals to numeric targets and drives a plant.
-    * `buffer.BufferStage` – rate‑limited or buffered commands.
-
-* `fw.task` – time & flow primitives
-
-    * `Task`, `TaskRunner`, `InstantTask`, `RunForSecondsTask`, `SequenceTask` and other composable
-      task types.
-
-* `fw.actuation` – plants and actuation helpers
-
-    * `Plant` – setpoint‑driven mechanisms.
-    * `PlantTasks` – plant‑specific `Task` helpers (timed holds, go‑to‑setpoint and wait).
-
-* `fw.robot` – base classes and subsystem API
-
-    * `PhoenixTeleOpBase`, `PhoenixAutoBase`, `Subsystem`.
-
-**Principle:** new features that *don’t* need the FTC SDK should go into core packages, not into the
-adapters. `fw.task` remains domain‑agnostic (it only knows about time and flow). Domain packages
-(`fw.drive`, `fw.actuation`, etc.) provide helpers that *return* tasks built from these primitives.
-
-### 2.3 FTC adapters and input
-
-Two places are allowed to touch FTC SDK types directly:
-
-* **`fw.adapters.ftc`**
-
-    * `FtcHardware` – wraps `DcMotor`, `DcMotorEx`, `Servo`, `CRServo` into `MotorOutput` /
-      `ServoOutput`.
-    * `FtcPlants` – builds `Plant` implementations (power, velocity, position, pair
-      variants) from FTC hardware.
-    * `FtcVision` – builds `VisionPortal` / `AprilTagProcessor` and adapts them to `AprilTagSensor`.
-
-* **`fw.input`**
-
-    * `GamepadDevice`, `Gamepads`, `DriverKit` – wrap the FTC `Gamepad` objects and provide a
-      higher‑level view:
-
-        * Debounced buttons.
-        * Triggers as axes.
-        * Named accessors (`p1()`, `p2()`).
-
-This is a conscious exception: gamepad usage is simple and pervasive enough that we keep it in
-`fw.input` instead of adding a second adapter layer.
-
-**Principle:** if your new code needs `HardwareMap`, `Gamepad`, or other SDK types, it probably
-belongs in `fw.adapters.ftc`, `fw.input`, or the robot layer – not inside core packages.
-
-### 2.4 Dependency rules
-
-To keep the design understandable:
-
-* Core packages may depend on each other (for example, `drive` depends on `util`).
-* Adapters may depend on core packages *and* the FTC SDK.
-* Robots and subsystems may depend on both core and adapters.
-
-But:
-
-* Core packages must **never** depend on `fw.adapters.ftc`, `fw.input`, or robot code.
-* Adapters should not depend on robot code or season‑specific classes.
-
-A good mental picture is a set of **downward‑pointing arrows**:
+High‑level picture:
 
 ```text
-robot / subsystems
-        ↓
-   core packages
-        ↓
- FTC adapters + fw.input
-        ↓
-      FTC SDK
+FTC SDK (OpModes, HardwareMap, Gamepad, DcMotorEx, Servo, VisionPortal, etc.)
+    │
+    ▼
+Phoenix adapters + HAL  (fw.adapters.ftc, fw.hal)
+    │
+    ▼
+Core Phoenix APIs        (fw.drive, fw.input, fw.actuation, fw.sensing, fw.task, fw.robot)
+    │
+    ▼
+Robot‑specific code      (PhoenixRobot, subsystems, TeleOp/Auto shells)
 ```
+
+### 2.1 Robot & subsystem layer (season‑specific)
+
+* Lives in your own packages, e.g. `edu.ftcphoenix.robots.phoenix`.
+* Contains `PhoenixRobot` and optional `Subsystem` classes.
+* May depend on:
+
+    * Core Phoenix APIs (`fw.drive`, `fw.input`, `fw.actuation`, `fw.sensing`, `fw.task`,
+      `fw.robot`).
+    * FTC SDK (for hardware names, if needed at construction time).
+* Should **not** depend on low‑level adapter internals beyond factories like `FtcPlants` or
+  `Tags.aprilTags(...)`.
+
+### 2.2 Core Phoenix APIs
+
+* Packages:
+
+    * `fw.robot` – base OpModes (`PhoenixTeleOpBase`, `PhoenixAutoBase`), `Subsystem`.
+    * `fw.drive` – `DriveSignal`, `DriveSource`, drivebases, drive helpers.
+    * `fw.input` – `Gamepads`, `DriverKit`, `Button`, `Axis`, `Bindings`.
+    * `fw.actuation` – `Plant` and plant helpers.
+    * `fw.sensing` – `FeedbackSource`, `FeedbackSample`, `AprilTagSensor`, `TagAim`, etc.
+    * `fw.task` – `Task`, `TaskRunner`, `Tasks`, `DriveTasks`, `PlantTasks`.
+* May depend on:
+
+    * `fw.hal` interfaces.
+    * Simple math/util packages (`fw.util`).
+* Should **not** depend directly on FTC SDK types (`HardwareMap`, `DcMotorEx`, etc.). Those belong
+  in adapters.
+
+### 2.3 Adapters and HAL
+
+* `fw.hal` – hardware abstraction layer:
+
+    * Defines small interfaces like `PowerOutput`, `ServoOutput`, etc.
+    * Core actuation, drive, and sensing can rely on these instead of concrete SDK types.
+* `fw.adapters.ftc` – glue to the FTC SDK:
+
+    * Classes that construct HAL types from FTC hardware (`DcMotorEx`, `Servo`, `VisionPortal`).
+    * FTC‑specific plants via `FtcPlants`, vision helpers via `FtcVision`, etc.
+* These packages are allowed to depend on the FTC SDK.
+
+### 2.4 Dependencies rule of thumb
+
+1. Robot code → may depend on core APIs + selected adapter factories.
+2. Core APIs → may depend on HAL and util packages.
+3. HAL + adapters → may depend on the FTC SDK.
+4. **Never** depend on robot packages from the framework.
+
+If a new feature breaks layering (e.g., core drive code takes a `DcMotorEx` instead of a HAL type),
+rethink the design.
 
 ---
 
-## 3. Actuation Principles
+## 3. Core Abstractions Per Domain
 
-Phoenix has two main levels of actuation abstraction:
+Phoenix follows a "one core abstraction per domain" rule. This keeps concepts small and reusable.
 
-1. **HAL outputs** (`MotorOutput`, `ServoOutput`) – dumb, write‑only sinks.
-2. **Plants** (`Plant`) – semantically meaningful mechanisms driven by setpoints.
+### 3.1 Input
 
-### 3.1 HAL outputs (`fw.hal`)
+* `Gamepads` – wraps `gamepad1` / `gamepad2` and samples once per loop.
+* `DriverKit` – named view of driver inputs (e.g., `p1().leftStickX()`, `p2().rightTrigger()`).
+* `Axis` / `Button` – logical inputs used by higher‑level code.
+* `Bindings` – maps buttons to actions (start/cancel tasks, toggle modes, etc.).
 
-* `MotorOutput`
+**Principles:**
 
-    * `setPower(double power)`
-    * `getLastPower()`
+* Robot code should refer to `DriverKit` instead of raw `gamepad` fields.
+* Most button logic should live in `Bindings` in combination with `TaskRunner`.
 
-* `ServoOutput`
+### 3.2 Drive
 
-    * `setPosition(double position)` in `[0, 1]`
-    * `getLastPosition()`
+**Core types:**
 
-They are intentionally minimal:
+* `DriveSignal` – desired motion for this loop: `(axial, lateral, omega)`.
+* `DriveSource` – something that produces a `DriveSignal` each loop.
+* `MecanumDrivebase` (and other drivebases) – apply a `DriveSignal` to hardware.
 
-* No encoder or velocity methods.
-* No FTC types in signatures.
+**TeleOp presets:**
 
-**Principle:** `MotorOutput` / `ServoOutput` represent “what we can command right now,” not the full
-physical device.
+* `StickDriveSource.teleOpMecanum(DriverKit)` – standard P1 mecanum mapping.
+* `StickDriveSource.teleOpMecanumWithSlowMode(DriverKit, Button slowButton, double slowScale)` –
+  same mapping with a slow‑mode button.
+* `TagAim.teleOpAim(DriveSource baseDrive, Button aimButton, AprilTagSensor sensor,
+  Set<Integer> tagIds)` – wraps a base drive with AprilTag auto‑aim on a button.
 
-### 3.2 Plants (`Plant`) and targets
+These `teleOp...` methods define the **beginner surface** for drive. Examples and docs should use
+these names first.
 
-`Plant` represents a **setpoint‑driven mechanism**:
+**Blending and composition:**
 
-* `setTarget(double target)` – desired target (units are mechanism‑defined).
-* `update(double dtSec)` – advance the mechanism toward its target.
-* `atSetpoint()` – optional “good enough” check.
+* `DriveSignal` is immutable and provides:
+
+    * `scaled(double)` – scale a signal (used for slow mode, fine control).
+    * `plus(DriveSignal)` – add a correction vector.
+    * `lerp(DriveSignal, double alpha)` – blend between two signals.
+* `DriveSource` has default methods for composition:
+
+    * `scaledWhen(BooleanSupplier when, double scale)` – apply global scaling when a condition is
+      true.
+    * `blendedWith(DriveSource other, double alpha)` – mix this source with another using
+      `DriveSignal.lerp(...)`.
+
+Patterns to prefer:
+
+* Start from a simple manual `DriveSource` (e.g., `teleOpMecanum`).
+* Wrap it with behavior sources (`TagAim.teleOpAim(...)`).
+* Add global slow mode via `scaledWhen(...)`.
+* Avoid introducing many special‑case "drive helper" classes when simple composition suffices.
+
+### 3.3 Mechanisms (Plants)
+
+**Core types:**
+
+* `Plant` – mechanism that accepts a target and updates each loop.
+* `FtcPlants` – factories that wrap FTC hardware (`DcMotorEx`, `Servo`, etc.) into plants.
 
 Examples:
 
-* Power plant – target is power in `[-1, 1]` (open‑loop).
-* Velocity plant – target is angular velocity (rad/s).
-* Position plant – target is angle (radians) or servo position `[0, 1]`.
-* Paired plants – two motors/servos treated as one mechanism.
-
-**Principle:** once you know the units (power, rad/s, radians, etc.), you should work in setpoints
-and plants, not raw `setPower` calls scattered around.
-
-### 3.3 FtcHardware and FtcPlants together
-
-These two classes are designed to be **parallel and complementary**:
-
-* `FtcHardware` – raw outputs
-
-    * `motor(hw, "name", inverted)` → `MotorOutput`.
-    * `servo(hw, "name", inverted)` → `ServoOutput`.
-    * `crServoMotor(hw, "name", inverted)` → `MotorOutput` backing a `CRServo`.
-
-* `FtcPlants` – plants built from hardware
-
-    * Power:
-
-        * `power(hw, "intake", false)`
-        * `powerPair(hw, "leftIntake", false, "rightIntake", true)`
-
-    * Velocity (using `DcMotorEx.setVelocity` under the hood):
-
-        * `velocity(hw, "shooter", false, ticksPerRev)`
-        * `velocityPair(hw, "shooterLeft", false, "shooterRight", true, ticksPerRev)`
-
-    * Position:
-
-        * `servoPosition(hw, "pusher", false)`
-        * `servoPositionPair(hw, "clawLeft", false, "clawRight", true)`
-        * `motorPosition(hw, "arm", false, ticksPerRev)`
-        * `motorPositionPair(hw, "armLeft", false, "armRight", true, ticksPerRev)`
-
-**Principles:**
-
-* For **beginners**, prefer `FtcPlants` from `HardwareMap` – they hide SDK details and use physical
-  units.
-* For more complex mechanisms, you can build custom plants on top of `MotorOutput` / `ServoOutput`.
-* Keep units clear in method names and docs (`velocity` = rad/s, `power` = normalized, etc.).
-
----
-
-## 4. Sensing Principles
-
-Sensors are treated as **sources of simple data types**, with small, focused interfaces.
-
-### 4.1 Value types and sources
-
-* Example: AprilTags
-
-    * `AprilTagObservation` – immutable value: id, pose, range, bearing, timestamp, etc.
-    * `AprilTagSensor` – interface for “something that can report tag observations.”
-    * `Tags.aprilTags(...)` – FTC‑specific factory that uses `FtcVision` internally.
-
-Code that *uses* sensor data should depend on:
-
-* The value type (e.g., `AprilTagObservation`).
-* The source interface (e.g., `AprilTagSensor`).
-
-It should not know about `VisionPortal` or vendor‑specific configuration.
-
-### 4.2 Derived sources and helpers
-
-Sometimes we build **derived sources** on top of raw sensors:
-
-* `TagAim` / `TagAimDriveSource` use AprilTag bearing to produce an angular velocity command.
-* Future examples might include gyro‑based heading sources, distance sensors, etc.
-
-**Principles:**
-
-* Keep sensor wrappers small and composable.
-* Separate **hardware acquisition** (in `FtcVision`, `Tags`, etc.) from **behavior** (aiming,
-  alignment, auto‑lift, etc.).
-* Prefer small value types and interfaces over large classes with many responsibilities.
-
----
-
-## 5. Gamepad Input Principles
-
-Gamepad handling lives in `fw.input` and is intentionally **FTC‑aware**.
-
-### 5.1 Goals
-
-* Provide a **clean, consistent API** for driver code:
-
-    * `driverKit.p1().buttonA().isPressed()`
-    * `driverKit.p2().leftTrigger().get()`
-
-* Avoid common pitfalls:
-
-    * Stick center bias.
-    * Y‑axis sign conventions.
-    * Button debouncing and toggles.
-
-### 5.2 Design
-
-* `GamepadDevice` wraps a single FTC `Gamepad` and:
-
-    * Normalizes stick axes.
-    * Exposes button/axis wrappers (e.g., `ButtonInput`, `AxisInput`).
-
-* `Gamepads` owns both gamepads and a registry of inputs.
-
-* `DriverKit` is the main entry point for robot code:
-
-    * `p1()` / `p2()` access primary and secondary drivers.
-    * Central place to wire combos or shared semantics if needed.
-
-**Principles:**
-
-* Robot code should talk to `DriverKit`, not directly to `Gamepad`.
-* All gamepad sampling should be done in one place per loop (typically in `PhoenixTeleOpBase`), then
-  used downstream.
-* Keep common patterns (like slow‑mode and tag‑aim hold buttons) consistent across OpModes.
-
----
-
-## 6. Stages, Tasks, and the Update Model
-
-Phoenix assumes a **single, cooperative control loop** driven from TeleOp/Auto.
-
-### 6.1 Stages as reusable update nodes
-
-Stages live under `fw.stage.*` and follow a common pattern:
-
-* They are **plain Java objects** with:
-
-    * Configuration (provided at construction time).
-    * Small update methods (`update(dtSec)`, or similar).
-
-* They **do not** start threads or manage their own loop.
-
-`SetpointStage<G>` is a key example:
-
-* Maps a high‑level goal (`G`) to a numeric target setpoint.
-* Drives a `Plant` (via `setTarget()` + `update(dtSec)`).
-
-`BufferStage` is another:
-
-* Applies rate limiting or buffering to commands before they reach the hardware.
-
-**Principle:** stages are “math and state”, not “managers.” They should be cheap to construct and
-easy to reason about.
-
-### 6.2 Tasks: structured multi‑step logic
-
-Tasks in the `fw.task` package provide a way to write time‑extended behaviors without sprinkling
-state everywhere:
-
-* `Task` – interface:
-
-    * `start(LoopClock clock)` – called once when the task begins.
-    * `update(LoopClock clock)` – called every loop while the task is active.
-    * `isFinished()` – tells the owning `TaskRunner` when this task is done.
-
-* `TaskRunner` – owns a current task and a queue of pending tasks, and advances them from the main
-  loop via `update(LoopClock clock)`.
-
-* Common building blocks:
-
-    * `InstantTask` – do something once and finish immediately.
-    * `RunForSecondsTask` – run callbacks for a fixed duration (used heavily by domain helpers).
-    * `SequenceTask` – run tasks one after another.
-    * (Parallel and other patterns can be built on top of these primitives as needed.)
-
-`fw.task` itself is **domain‑agnostic**: it knows nothing about drivebases, shooters, or arms. It
-only knows about **time and flow control**.
-
-Domain packages, like `fw.drive` and `fw.actuation`, provide thin helpers that *return* tasks:
-
-* `DriveTasks` – scripted drive behaviors such as “drive forward for 0.8s” or “stop the drivebase.”
-* `PlantTasks` – common patterns for plants such as “hold intake at full power for 0.7s” or
-  “move arm to angle and wait (with optional timeout).”
-
-These helpers let robot code say what it wants in one line, instead of hand‑rolling timers and
-boolean flags in every OpMode.
-
-Typical usage:
-
-* TeleOp:
-
-    * Small macros (e.g., “press Y to do an L‑shaped move” built from `DriveTasks.driveForSeconds`).
-    * One‑button sequences for mechanisms (e.g., shooter spin‑up + feed using `PlantTasks`).
-
-* Auto:
-
-    * Longer sequences combining drive, mechanisms, and waits, often wired into `PhoenixAutoBase`
-      via its built‑in `TaskRunner`.
-
-**Principle:** if you find yourself writing a lot of boolean flags like `isShooting`,
-`hasStartedIntake`, etc., or custom `while` loops inside an OpMode, consider making a `Task`
-instead and driving it with `TaskRunner`.
-
----
-
-## 7. API Style and Naming
-
-Consistency across the framework makes it easier to guess how things work.
-
-### 7.1 Builders and factories
-
-We prefer **builder‑style factories** for complex objects:
-
-* Drives:
-
-    * `Drives.mecanum(hw)
-      .frontLeft("fl").frontRight("fr")
-      .backLeft("bl").backRight("br")
-      .invertRightSide()
-      .build();`
-
-* Plants:
-
-    * `FtcPlants.velocityPair(hw, "shooterLeft", false,
-                             "shooterRight", true, ticksPerRev);`
-
-* Vision:
-
-    * `Tags.aprilTags(hw, "Webcam 1");`
+* `FtcPlants.powerOnly(DcMotorEx motor)` – simple power plant.
+* `FtcPlants.velocity(DcMotorEx motor, double ticksPerRev)` – velocity‑controlled plant.
+* Dual/paired variants for common shooter and conveyor setups.
 
 Principles:
 
-* Avoid giant constructors with many positional parameters.
-* Use method names to make configuration self‑documenting.
-* Prefer immutable configuration after construction (no setters for critical wiring).
+* Robot code should talk to plants, not motors.
+* Plants own any necessary control logic (PID, interpolation tables, etc.).
+* Plants are updated once per loop with `update(clock)`.
 
-### 7.2 Lifecycle naming
+### 3.4 Behavior (Tasks)
 
-Robot and subsystem lifecycle methods are standardized:
+**Core types:**
 
-* `onTeleopInit`, `onTeleopLoop`, `onAutoInit`, `onAutoLoop`, `onStop`.
-
-Principles:
-
-* Subsystems should avoid exposing their own custom lifecycle names.
-* OpModes always call the robot, which calls subsystems – not the other way around.
-* If a subsystem needs an extra one‑time hook, consider adding it as a method on the subsystem and
-  calling it from the robot, rather than inventing a new global lifecycle concept.
-
-### 7.3 Semantic naming for actuation
-
-Some naming rules we strive to follow:
-
-* **“power”** → normalized, unitless `[-1, 1]` (or `[0, 1]` if one‑sided).
-* **“velocity”** → physical angular rate, usually rad/s.
-* **“position” / “angle”** → physical angle (radians) or servo position `[0, 1]`.
-* **“Pair”** → two physical outputs treated as one mechanism (`powerPair`, `velocityPair`, etc.).
+* `Task` – unit of non‑blocking behavior.
+* `TaskRunner` – manages a current `Task` and advances it each loop.
+* `Tasks` – static helpers to create common patterns (sequence, wait, etc.).
+* `DriveTasks` – drive‑oriented tasks.
+* `PlantTasks` – plant‑oriented tasks.
 
 Principles:
 
-* Don’t mix power and velocity semantics in one API.
-* Keep naming between single and pair variants consistent.
-* Document units clearly in Javadoc.
+* Tasks are **non‑blocking**; they never sleep the thread.
+* Long or multi‑step behaviors (like "shoot 3 discs" or "drive to stack, intake, back up") should
+  be expressed as tasks.
+* Tasks are triggered from:
+
+    * Auto code (sequences run at OpMode start).
+    * TeleOp via `Bindings` (buttons start/stop tasks).
+
+### 3.5 Sensing
+
+**Core types:**
+
+* `FeedbackSource<T>` – provides time‑stamped sensor samples.
+* `FeedbackSample<T>` – value + timestamp pair.
+* `AprilTagSensor` – high‑level interface for AprilTag detections.
+* `Tags` – helpers to construct `AprilTagSensor` using FTC VisionPortal.
+* `TagAim` – uses tag bearings to produce rotation commands for drive.
+
+Principles:
+
+* Complex sensors (vision, fused odometry, etc.) should live in `fw.sensing` and expose stable
+  interfaces.
+* Drive and control logic should depend on these interfaces, not directly on SDK vision classes.
+
+### 3.6 Stages (advanced)
+
+Stages organize complex control flows (e.g., a shooter with multiple modes) into named states and
+transitions.
+
+* `Stage` – describes a single mode of operation.
+* Stage machinery – coordinates current stage, transitions, and sub‑tasks.
+
+Stages are an *advanced* concept; they should not appear in the first beginner tutorials. They are
+very useful in case studies (like the shooter) once students are comfortable with plants and
+tasks.
 
 ---
 
-## 8. Checklist for New Code
+## 4. TeleOp Presets and the Beginner Surface
 
-When you add or change framework code, run through this checklist:
+Phoenix intentionally defines a **small beginner surface** – the minimal set of names students must
+know to build a full TeleOp and a simple Auto.
 
-1. **Does this make robot code simpler, or at least more consistent?**
-2. **Is there a clear beginner entry point?** If not, should there be?
-3. **Does it follow existing naming and API shapes (factories, lifecycle, TagAim patterns,
-   task+TaskRunner pattern, etc.)?**
-4. **Is SDK usage confined to adapters and base classes (plus `fw.input` for gamepads)?**
-5. **Is math centralized (via `MathUtil`, etc.) rather than duplicated?**
-6. **Can I explain this feature to a new student using the package map + examples?**
-7. **Did I update or add examples and documentation accordingly?**
+For drive and AprilTags, that surface is:
 
-If the answer to any of these is “no” or “not sure,” revisit the design or update the docs.
+* `PhoenixTeleOpBase`, `PhoenixAutoBase` (for OpModes).
+* `PhoenixRobot` and `Subsystem` (structure).
+* `Gamepads`, `DriverKit`, `Bindings` (input).
+* `Drives`, `MecanumDrivebase` (hardware + drivebase).
+* `DriveSignal`, `DriveSource` (drive abstractions).
+* `StickDriveSource.teleOpMecanum(...)`.
+* `StickDriveSource.teleOpMecanumWithSlowMode(...)`.
+* `Tags.aprilTags(...)`, `AprilTagSensor`.
+* `TagAim.teleOpAim(...)`.
+
+For mechanisms and tasks, the beginner surface is:
+
+* `Plant`, `FtcPlants`.
+* `Task`, `TaskRunner`.
+* `Tasks`, `DriveTasks`, `PlantTasks`.
+
+**Principles:**
+
+1. Beginner docs and examples should primarily show these names.
+2. More advanced entry points should be introduced only in dedicated advanced sections.
+3. When we add new helpers, we should decide explicitly whether they are **beginner‑visible** or
+   **advanced** and document them accordingly.
+
+---
+
+## 5. Composition and Blending Patterns
+
+Instead of adding many one‑off helper classes, Phoenix prefers small, reusable composition
+patterns.
+
+### 5.1 Drive composition
+
+Typical pattern for drive in TeleOp:
+
+1. Start with manual sticks:
+
+   ```java
+   DriveSource manual = StickDriveSource.teleOpMecanum(driverKit);
+   ```
+
+2. Wrap with auto‑aim while a button is held:
+
+   ```java
+   DriveSource aimed = TagAim.teleOpAim(
+           manual,
+           driverKit.p1().leftBumper(),
+           tagSensor,
+           scoringTagIds);
+   ```
+
+3. Add slow mode as an outer wrapper:
+
+   ```java
+   DriveSource drive = aimed.scaledWhen(
+           () -> driverKit.p1().rightBumper().isPressed(),
+           0.30);
+   ```
+
+4. Each loop:
+
+   ```java
+   DriveSignal cmd = drive.get(clock);
+   drivebase.drive(cmd);
+   ```
+
+Other common patterns:
+
+* Add a small auto‑correction with `plus(...)`:
+
+  ```java
+  DriveSignal corrected = base.plus(correction);
+  ```
+
+* Blend driver and auto behaviors with `blendedWith(...)`:
+
+  ```java
+  DriveSource mixed = driver.blendedWith(autoAlign, 0.4); // 40% assist
+  ```
+
+### 5.2 Tasks and plants
+
+For mechanisms, composition often happens at the task level rather than by blending numeric
+outputs directly.
+
+Patterns:
+
+* Use plants to encapsulate low‑level control of motors/servos.
+* Use tasks to coordinate plants over time:
+
+    * Wait for shooter at speed, then feed.
+    * Move arm to position, then open claw.
+* Use `Tasks.sequence(...)` / `Tasks.parallel(...)` (or similar helpers) rather than inlining
+  complex state machines in OpMode code.
+
+---
+
+## 6. Naming and API Shape
+
+Consistent naming makes it easier to navigate and guess APIs.
+
+Guidelines:
+
+1. **TeleOp presets use `teleOp...` prefix**
+
+    * Examples:
+
+        * `StickDriveSource.teleOpMecanum(...)`.
+        * `StickDriveSource.teleOpMecanumWithSlowMode(...)`.
+        * `TagAim.teleOpAim(...)`.
+    * Reserved for high‑level, ready‑to‑use configurations appropriate for tutorials and examples.
+
+2. **Factories vs. builders vs. static helpers**
+
+    * Use **`of`/`from`** for simple factories:
+
+        * `DriverKit.of(Gamepads)`.
+    * Use **builder patterns** for multi‑step wiring:
+
+        * `Drives.mecanum(hw).names(...).invertFrontRight().build();`
+    * Use **static utility classes** when there is no clear owning type:
+
+        * `Tasks.sequence(...)`, `DriveTasks.driveForSeconds(...)`.
+
+3. **FTC‑specific types are prefixed with `Ftc` or live in `fw.adapters.ftc`**
+
+    * Examples:
+
+        * `FtcPlants`, `FtcVision`.
+    * This makes platform‑dependent code easy to spot.
+
+4. **Avoid leaking SDK types into core APIs**
+
+    * Core packages should use HAL interfaces instead of `DcMotorEx`, `Servo`, etc.
+    * If a new API needs SDK types, it probably belongs in `fw.adapters.ftc`.
+
+5. **Keep method names descriptive and avoid ambiguous short forms**
+
+    * Prefer `leftBumper()` over `lb()`, `dpadRight()` over `dr()`.
+    * Abbreviations are acceptable when they are standard and unambiguous.
+
+6. **Immutability and side‑effect boundaries**
+
+    * Data objects like `DriveSignal` should be immutable.
+    * Side effects (writing to hardware) should happen in well‑defined places:
+
+        * Plants writing to motors.
+        * Drivebases writing to motors.
+    * Helper methods that transform data should not write to hardware.
+
+---
+
+## 7. Code Style and Safety
+
+To keep the framework robust and approachable:
+
+1. **No global mutable state in core packages**
+
+    * Avoid singletons in core code. Configuration should be passed explicitly or built via
+      factories.
+
+2. **Clear lifecycle**
+
+    * Base classes (`PhoenixTeleOpBase`, `PhoenixAutoBase`) own the OpMode lifecycle.
+    * Other classes should not depend on being called in a particular global order, beyond their
+      documented lifecycle methods.
+
+3. **Error reporting**
+
+    * Framework code should fail fast and loudly when misconfigured (e.g., missing hardware names),
+      with readable error messages.
+    * Prefer throwing clear `IllegalArgumentException` / `IllegalStateException` over silently
+      ignoring problems.
+
+4. **Math and units**
+
+    * Centralize math helpers in `fw.util` (`MathUtil`, etc.).
+    * Be explicit about units in names and documentation (`ticksPerRev`, `radPerSec`, `dtSec`).
+
+5. **Logging and telemetry**
+
+    * Framework code may add minimal telemetry/logging for diagnostics but should not spam the
+      driver station by default.
+    * Robot code is free to add more detailed telemetry as needed.
+
+---
+
+## 8. Review Checklist
+
+When adding or changing framework code, use this checklist:
+
+1. **Layering**
+
+    * Does this change respect the layering rules (robot → core → adapters → SDK)?
+    * Are any SDK types leaking into core packages?
+
+2. **Core abstractions**
+
+    * Am I reusing `DriveSource`, `DriveSignal`, `Plant`, `Task`, `FeedbackSource`, etc., instead of
+      inventing new top‑level concepts?
+    * If a new abstraction is needed, can it be explained in terms of existing ones?
+
+3. **TeleOp presets and beginner surface**
+
+    * Does this change affect the beginner surface (the small set of names students must know)?
+    * If yes, are the docs and examples updated to reflect the new patterns?
+    * Are new `teleOp...` helpers justified and named consistently?
+
+4. **Composition and blending**
+
+    * Am I using composition patterns (`scaledWhen`, `blendedWith`, `Tasks.sequence`, etc.) instead
+      of duplicating logic?
+    * Could a small helper method or default method remove duplication?
+
+5. **Testability and clarity**
+
+    * Can this logic be unit‑tested without a robot?
+    * Does the code read like a description of robot behavior rather than SDK boilerplate?
+
+6. **Naming and documentation**
+
+    * Does the naming follow the guidelines in this document?
+    * Is there at least one example or documentation snippet that shows how to use the new code?
+
+If the answer to any of these is “no” or “not sure,” revisit the design or update the docs before
+merging.
 
 ---
 

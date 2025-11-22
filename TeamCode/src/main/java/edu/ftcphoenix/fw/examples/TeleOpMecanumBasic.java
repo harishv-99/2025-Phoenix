@@ -68,7 +68,7 @@ public final class TeleOpMecanumBasic extends OpMode {
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
 
         // 3) Default mecanum mapping from DriverKit sticks
-        stickDrive = StickDriveSource.defaultMecanumWithSlowMode(
+        stickDrive = StickDriveSource.teleOpMecanumWithSlowMode(
                 driverKit,
                 driverKit.p1().rightBumper(),
                 0.30

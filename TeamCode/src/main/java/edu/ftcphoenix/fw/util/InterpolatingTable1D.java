@@ -34,10 +34,18 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
     }
 
     /**
-     * Create a table from sorted x / y arrays.
+     * Create a table from sorted x-values and corresponding y-values.
      *
-     * @param xs strictly increasing x-values (e.g., distance in inches)
-     * @param ys corresponding y-values (e.g., velocity in rad/s)
+     * <p>Preconditions:</p>
+     * <ul>
+     *   <li>{@code xs.length == ys.length}</li>
+     *   <li>{@code xs.length >= 1}</li>
+     *   <li>{@code xs} must be strictly increasing (no duplicates).</li>
+     * </ul>
+     *
+     * @param xs sorted x-values
+     * @param ys corresponding y-values
+     * @return a new {@link InterpolatingTable1D}
      */
     public static InterpolatingTable1D ofSorted(double[] xs, double[] ys) {
         Objects.requireNonNull(xs, "xs is required");
@@ -52,15 +60,55 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
         double[] xsCopy = xs.clone();
         double[] ysCopy = ys.clone();
 
+        // Verify strict monotonicity
         for (int i = 1; i < xsCopy.length; i++) {
             if (!(xsCopy[i] > xsCopy[i - 1])) {
-                throw new IllegalArgumentException(
-                        "xs must be strictly increasing; xs[" + (i - 1) + "]=" + xsCopy[i - 1]
-                                + ", xs[" + i + "]=" + xsCopy[i]);
+                throw new IllegalArgumentException("xs must be strictly increasing");
             }
         }
 
         return new InterpolatingTable1D(xsCopy, ysCopy);
+    }
+
+    /**
+     * Create a table from arbitrary x-values and corresponding y-values.
+     *
+     * <p>The points are sorted by x internally. Duplicate x-values are not
+     * allowed.</p>
+     *
+     * @param xs unsorted x-values
+     * @param ys corresponding y-values
+     * @return a new {@link InterpolatingTable1D}
+     */
+    public static InterpolatingTable1D ofUnsorted(double[] xs, double[] ys) {
+        Objects.requireNonNull(xs, "xs is required");
+        Objects.requireNonNull(ys, "ys is required");
+        if (xs.length != ys.length) {
+            throw new IllegalArgumentException("xs and ys must have same length");
+        }
+        if (xs.length == 0) {
+            throw new IllegalArgumentException("xs/ys must contain at least one point");
+        }
+
+        int n = xs.length;
+        double[] xsCopy = xs.clone();
+        double[] ysCopy = ys.clone();
+
+        // Sort by xs, keeping ys aligned via index indirection.
+        Integer[] indices = new Integer[n];
+        for (int i = 0; i < n; i++) {
+            indices[i] = i;
+        }
+        Arrays.sort(indices, (i, j) -> Double.compare(xsCopy[i], xsCopy[j]));
+
+        double[] sortedX = new double[n];
+        double[] sortedY = new double[n];
+        for (int i = 0; i < n; i++) {
+            sortedX[i] = xsCopy[indices[i]];
+            sortedY[i] = ysCopy[indices[i]];
+        }
+
+        return ofSorted(sortedX, sortedY);
     }
 
     /**
@@ -81,7 +129,8 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
     public static InterpolatingTable1D ofSortedPairs(double... xsAndYs) {
         Objects.requireNonNull(xsAndYs, "xsAndYs is required");
         if (xsAndYs.length == 0 || xsAndYs.length % 2 != 0) {
-            throw new IllegalArgumentException("xsAndYs must contain an even number of values (x0, y0, x1, y1, ...)");
+            throw new IllegalArgumentException(
+                    "xsAndYs must contain an even number of values (x0, y0, x1, y1, ...)");
         }
         int n = xsAndYs.length / 2;
         double[] xs = new double[n];
@@ -97,16 +146,14 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
     /**
      * Builder for readable table declarations in robot code.
      *
-     * <p>Example:</p>
-     * <pre>
-     * private static final InterpolatingTable1D SHOOTER_TABLE =
-     *     InterpolatingTable1D.builder()
+     * <pre>{@code
+     * InterpolatingTable1D table = InterpolatingTable1D.builder()
      *         .add(24.0, 180.0)
      *         .add(30.0, 190.0)
      *         .add(36.0, 205.0)
      *         .add(42.0, 220.0)
-     *         .build();
-     * </pre>
+     *         .buildSorted();
+     * }</pre>
      */
     public static Builder builder() {
         return new Builder();
@@ -152,11 +199,13 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
         double y1 = ys[i1];
 
         if (x1 == x0) {
+            // Should not happen if xs is strictly increasing, but guard anyway.
             return y0;
         }
 
         double t = (x - x0) / (x1 - x0);
-        return y0 + t * (y1 - y0);
+        // Use shared interpolation helper for consistency.
+        return MathUtil.lerp(y0, y1, t);
     }
 
     /**
@@ -188,27 +237,6 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
         return ys.clone();
     }
 
-    /**
-     * @return minimum x in the table.
-     */
-    public double minX() {
-        return xs[0];
-    }
-
-    /**
-     * @return maximum x in the table.
-     */
-    public double maxX() {
-        return xs[xs.length - 1];
-    }
-
-    /**
-     * @return true if x is within [minX, maxX].
-     */
-    public boolean isInRange(double x) {
-        return x >= xs[0] && x <= xs[xs.length - 1];
-    }
-
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("InterpolatingTable1D{");
@@ -224,19 +252,12 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
      * Builder for InterpolatingTable1D.
      *
      * <p>Note: x-values must be added in strictly increasing order.
-     * This is enforced when build() is called.</p>
+     * This is enforced when {@link #buildSorted()} is called.</p>
      */
     public static final class Builder {
         private final List<Double> xs = new ArrayList<>();
         private final List<Double> ys = new ArrayList<>();
 
-        /**
-         * Add a calibration sample (x, y).
-         *
-         * @param x x-value (e.g., distance)
-         * @param y y-value (e.g., shooter velocity)
-         * @return this builder for chaining
-         */
         public Builder add(double x, double y) {
             xs.add(x);
             ys.add(y);
@@ -244,9 +265,10 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
         }
 
         /**
-         * Build an immutable table. Validates that x-values are strictly increasing.
+         * Build a table from the added points, assuming they are already
+         * sorted by x and strictly increasing.
          */
-        public InterpolatingTable1D build() {
+        public InterpolatingTable1D buildSorted() {
             int n = xs.size();
             if (n == 0) {
                 throw new IllegalStateException("No points added to table");

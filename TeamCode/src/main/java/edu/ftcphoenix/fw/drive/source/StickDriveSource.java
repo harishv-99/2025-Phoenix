@@ -32,10 +32,10 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * DriverKit dk = DriverKit.of(pads);
  *
  * // No slow mode:
- * StickDriveSource drive = StickDriveSource.defaultMecanum(dk);
+ * StickDriveSource drive = StickDriveSource.teleOpMecanum(dk);
  *
  * // Or, with slow mode on p1 right bumper (30% speed):
- * StickDriveSource drive = StickDriveSource.defaultMecanumWithSlowMode(
+ * StickDriveSource drive = StickDriveSource.teleOpMecanumWithSlowMode(
  *         dk,
  *         dk.p1().rightBumper(),
  *         0.30
@@ -45,14 +45,6 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * DriveSignal sig = drive.get(clock);
  * drivebase.drive(sig);
  * }</pre>
- *
- * <h2>Why shaping (and slow mode) live here</h2>
- * <ul>
- *   <li>Most robots want the same shaping on their main drive sticks.</li>
- *   <li>Centralizing it here avoids duplication and keeps OpModes thin.</li>
- *   <li>Slow mode is just another form of shaping (a context-dependent gain), so
- *       it belongs with deadband/expo.</li>
- * </ul>
  */
 public final class StickDriveSource implements DriveSource {
 
@@ -112,8 +104,8 @@ public final class StickDriveSource implements DriveSource {
      * Create a stick drive source using the given player and parameters,
      * with no slow mode.
      *
-     * <p>For most robots, prefer {@link #defaultMecanum(DriverKit)} or
-     * {@link #defaultMecanumWithSlowMode(DriverKit, Button, double)}.</p>
+     * <p>For most robots, prefer {@link #teleOpMecanum(DriverKit)} or
+     * {@link #teleOpMecanumWithSlowMode(DriverKit, Button, double)}.</p>
      */
     public StickDriveSource(DriverKit.Player player, Params params) {
         this(player, params, null, 1.0);
@@ -153,11 +145,11 @@ public final class StickDriveSource implements DriveSource {
     }
 
     /**
-     * Default factory: player 1, robot-centric mecanum, no slow mode.
+     * TeleOp preset: player 1, robot-centric mecanum, no slow mode.
      *
      * <p>This is the recommended entry point for basic mecanum teleop.</p>
      */
-    public static StickDriveSource defaultMecanum(DriverKit kit) {
+    public static StickDriveSource teleOpMecanum(DriverKit kit) {
         if (kit == null) {
             throw new IllegalArgumentException("DriverKit is required");
         }
@@ -165,23 +157,24 @@ public final class StickDriveSource implements DriveSource {
     }
 
     /**
-     * Factory: player 1, robot-centric mecanum, with a slow-mode button.
+     * TeleOp preset: player 1, robot-centric mecanum, with slow mode.
      *
-     * <p>When {@code slowButton.isPressed()} is true, all outputs are scaled by
-     * {@code slowScale} (typically 0.2–0.5). When false, outputs are unscaled.</p>
+     * <p>This configures mecanum drive with stick shaping as described in the
+     * class Javadoc and uses {@code slowButton} to scale all commands by
+     * {@code slowScale} when held.</p>
      *
-     * <p>Example:</p>
      * <pre>{@code
-     * StickDriveSource drive = StickDriveSource.defaultMecanumWithSlowMode(
+     * // Example: p1 right bumper as slow mode (30% speed)
+     * StickDriveSource drive = StickDriveSource.teleOpMecanumWithSlowMode(
      *         dk,
      *         dk.p1().rightBumper(),
      *         0.30
      * );
      * }</pre>
      */
-    public static StickDriveSource defaultMecanumWithSlowMode(DriverKit kit,
-                                                              Button slowButton,
-                                                              double slowScale) {
+    public static StickDriveSource teleOpMecanumWithSlowMode(DriverKit kit,
+                                                             Button slowButton,
+                                                             double slowScale) {
         if (kit == null) {
             throw new IllegalArgumentException("DriverKit is required");
         }
@@ -234,24 +227,33 @@ public final class StickDriveSource implements DriveSource {
     // ------------------------------------------------------------------------
 
     /**
-     * Apply deadband + exponent + scale to a raw axis value in [-1,1].
+     * Apply deadband, shaping exponent, and scaling to a raw stick value.
      *
-     * <p>Process:</p>
+     * <p>Steps:</p>
      * <ol>
-     *   <li>Apply deadband: values within +/- deadband → 0.</li>
-     *   <li>Renormalize remaining range back to [0,1].</li>
-     *   <li>Apply exponent: exponent &gt; 1 biases toward finer control near center
-     *       (squared sticks is approx expo=2).</li>
-     *   <li>Apply final scale (max magnitude &le; scale).</li>
+     *   <li>Apply symmetric deadband around zero (using {@link MathUtil#deadband(double, double)}).</li>
+     *   <li>Normalize the remaining magnitude to [0,1].</li>
+     *   <li>Apply exponent (1 = linear, &gt;1 = more gentle near center).</li>
+     *   <li>Restore sign and apply scale.</li>
      * </ol>
+     *
+     * @param x        raw stick value in [-1, +1]
+     * @param deadband deadband radius (0..1)
+     * @param expo     shaping exponent (&gt;= 1)
+     * @param scale    output scale (typically &lt;= 1)
+     * @return shaped output in [-scale, +scale]
      */
-    private static double shape(double x, double deadband, double expo, double scale) {
+    private static double shape(double x,
+                                double deadband,
+                                double expo,
+                                double scale) {
+        // Apply deadband
         double ax = Math.abs(x);
         if (ax <= deadband) {
             return 0.0;
         }
 
-        // Remove deadband then renormalize to [0,1].
+        // Map [deadband, 1] → [0, 1]
         double norm = (ax - deadband) / (1.0 - deadband);
         // Use shared clamp to avoid re-implementing bounds logic.
         norm = MathUtil.clamp01(norm);

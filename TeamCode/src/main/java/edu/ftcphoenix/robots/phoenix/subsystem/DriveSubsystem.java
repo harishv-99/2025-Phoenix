@@ -39,13 +39,13 @@ public final class DriveSubsystem implements Subsystem {
                 .build();
 
         StickDriveSource sticks =
-                StickDriveSource.defaultMecanumWithSlowMode(
+                StickDriveSource.teleOpMecanumWithSlowMode(
                         driverKit,
                         driverKit.p1().rightBumper(), // hold for slow mode
                         0.30);
 
         // Beginner TagAim API: AprilTagSensor directly.
-        this.driveSource = TagAim.forTeleOp(
+        this.driveSource = TagAim.teleOpAim(
                 sticks,
                 driverKit.p1().leftBumper(),   // hold to aim at tag
                 vision.sensor(),

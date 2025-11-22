@@ -111,7 +111,7 @@ public final class TeleOpMacroDrive extends OpMode {
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
 
         // --- Default mecanum stick mapping with slow mode on right bumper ---
-        stickDrive = StickDriveSource.defaultMecanumWithSlowMode(
+        stickDrive = StickDriveSource.teleOpMecanumWithSlowMode(
                 driverKit,
                 driverKit.p1().rightBumper(), // slow-mode button
                 0.30                          // slow-mode scale (30% speed)

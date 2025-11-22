@@ -103,7 +103,7 @@ public final class TeleOpSimple extends OpMode {
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
 
         // Default mecanum mapping: leftX, leftY (up is +), rightX
-        stickDrive = StickDriveSource.defaultMecanum(driverKit);
+        stickDrive = StickDriveSource.teleOpMecanum(driverKit);
 
         // 3) Mechanism wiring
         pusher = FtcHardware.servo(hardwareMap, HW_PUSHER, false);

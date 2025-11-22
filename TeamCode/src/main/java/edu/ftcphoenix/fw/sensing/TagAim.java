@@ -1,5 +1,6 @@
 package edu.ftcphoenix.fw.sensing;
 
+import java.util.Objects;
 import java.util.Set;
 
 import edu.ftcphoenix.fw.core.PidController;
@@ -13,38 +14,42 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * Helpers for tag-based auto-aim that wrap an existing {@link DriveSource}.
  *
  * <h2>Role</h2>
- * <p>{@code TagAim} is a convenience facade that lets you say:
+ * <p>{@code TagAim} is a convenience facade that lets you say:</p>
  *
  * <pre>{@code
- * DriveSource sticks = StickDriveSource.defaultMecanumWithSlowMode(...);
- * DriveSource drive  = TagAim.forTeleOp(
- *         sticks,
- *         driverKit.p1().leftBumper(),  // hold to aim
- *         tags,                         // AprilTagSensor
- *         Set.of(1, 2, 3));             // IDs we care about
+ * DriveSource manual = StickDriveSource.teleOpMecanum(driverKit);
+ * DriveSource drive  = TagAim.teleOpAim(
+ *         manual,
+ *         driverKit.p1().leftBumper(),
+ *         tagSensor,
+ *         scoringTagIds);
  * }</pre>
  *
- * <p>Under the hood it:
- * <ul>
- *   <li>Builds a {@link BearingSource} from an {@link AprilTagSensor}.</li>
- *   <li>Uses a {@link TagAimController} to turn bearing into omega.</li>
- *   <li>Wraps the original {@link DriveSource} so that when the aim
- *       button is held, {@code omega} is overridden to aim at the tag,
- *       while axial/lateral commands come from the driver sticks.</li>
- * </ul>
+ * <p>and get all of the following behavior:</p>
  *
- * <p>Only the robot's <em>turn rate</em> (omega) is modified; this keeps
- * behavior simple and predictable: drivers still choose how fast to
- * drive forward/sideways while the framework auto-aims the heading.
+ * <ul>
+ *   <li>The driver still controls axial/lateral motion with sticks.</li>
+ *   <li>When {@code aimButton} is held and a valid tag is visible:
+ *     <ul>
+ *       <li>The robot automatically turns (omega) to aim at that tag.</li>
+ *       <li>Axial/lateral commands from the driver are preserved.</li>
+ *     </ul>
+ *   </li>
+ *   <li>When the tag is not visible or the button is not held:
+ *     <ul>
+ *       <li>The underlying {@code baseDrive} behavior is passed through unchanged.</li>
+ *     </ul>
+ *   </li>
+ * </ul>
  *
  * <h2>Beginner vs advanced</h2>
  * <ul>
  *   <li><b>Beginner:</b> call
- *   {@link #forTeleOp(DriveSource, Button, AprilTagSensor, Set)} and
+ *   {@link #teleOpAim(DriveSource, Button, AprilTagSensor, Set)} and
  *   ignore the controller details.</li>
  *   <li><b>Advanced:</b> build your own {@link BearingSource} and
  *   {@link TagAimController}, then call
- *   {@link #forTeleOp(DriveSource, Button, BearingSource, TagAimController)}.</li>
+ *   {@link #teleOpAim(DriveSource, Button, BearingSource, TagAimController)}.</li>
  * </ul>
  */
 public final class TagAim {
@@ -80,14 +85,18 @@ public final class TagAim {
     /**
      * Wrap an existing drive source with AprilTag-based auto-aim for TeleOp.
      *
-     * <p>This is the simplest entry point:
+     * <p>This is the simplest entry point:</p>
      * <ul>
      *   <li>The driver uses sticks as usual for axial/lateral motion.</li>
      *   <li>When {@code aimButton} is held:
      *     <ul>
-     *       <li>The robot turns to face the best visible tag from {@code tagIds}.</li>
-     *       <li>{@code omega} is computed by an internal {@link TagAimController}
-     *           using a simple proportional control law.</li>
+     *       <li>We find the \"best\" AprilTag from {@code tagIds} using
+     *           {@link AprilTagSensor#best(Set, double)} with a default
+     *           age limit ({@value #DEFAULT_MAX_AGE_SEC} seconds).</li>
+     *       <li>We compute a bearing to that tag and feed it into a default
+     *           P-only {@link TagAimController}.</li>
+     *       <li>We override the {@code omega} component of {@code baseDrive}
+     *           while preserving axial and lateral commands.</li>
      *     </ul>
      *   </li>
      * </ul>
@@ -98,15 +107,20 @@ public final class TagAim {
      * @param tagIds    set of tag IDs the robot cares about (e.g., scoring tags)
      * @return a new {@link DriveSource} that adds aiming behavior on top of {@code baseDrive}
      */
-    public static DriveSource forTeleOp(
+    public static DriveSource teleOpAim(
             DriveSource baseDrive,
             Button aimButton,
             AprilTagSensor sensor,
             Set<Integer> tagIds) {
 
+        Objects.requireNonNull(baseDrive, "baseDrive must not be null");
+        Objects.requireNonNull(aimButton, "aimButton must not be null");
+        Objects.requireNonNull(sensor, "sensor must not be null");
+        Objects.requireNonNull(tagIds, "tagIds must not be null");
+
         BearingSource bearing = bearingFromAprilTags(sensor, tagIds, DEFAULT_MAX_AGE_SEC);
         TagAimController controller = defaultTeleOpController();
-        return forTeleOp(baseDrive, aimButton, bearing, controller);
+        return teleOpAim(baseDrive, aimButton, bearing, controller);
     }
 
     // ------------------------------------------------------------------------
@@ -116,25 +130,16 @@ public final class TagAim {
     /**
      * Wrap an existing drive source with generic bearing-based auto-aim for TeleOp.
      *
-     * <p>This overload lets advanced users customize:
+     * <p>This overload lets advanced users customize:</p>
      * <ul>
      *   <li>Where bearing information comes from ({@link BearingSource}).</li>
      *   <li>How bearing is converted into omega ({@link TagAimController}).</li>
      * </ul>
      *
-     * <p>Behavior:
-     * <ul>
-     *   <li>If {@code aimButton} is <b>not</b> pressed, this returns the
-     *       {@link DriveSignal} from {@code baseDrive} unchanged.</li>
-     *   <li>If {@code aimButton} <b>is</b> pressed:
-     *     <ul>
-     *       <li>Call {@link BearingSource#sample(LoopClock)} to get bearing.</li>
-     *       <li>Call {@link TagAimController#update(LoopClock, BearingSample)} to get omega.</li>
-     *       <li>Return a {@link DriveSignal} with axial/lateral from {@code baseDrive}
-     *           but omega from the controller.</li>
-     *     </ul>
-     *   </li>
-     * </ul>
+     * <p>Behavior is the same as
+     * {@link #teleOpAim(DriveSource, Button, AprilTagSensor, Set)}:
+     * we preserve the driver's axial/lateral commands and only override
+     * {@code omega} while {@code aimButton} is pressed.</p>
      *
      * @param baseDrive  existing drive source (e.g., sticks, path planner, etc.)
      * @param aimButton  button that enables aiming while pressed
@@ -142,15 +147,24 @@ public final class TagAim {
      * @param controller controller that turns bearing into omega
      * @return a new {@link DriveSource} that adds aiming behavior on top of {@code baseDrive}
      */
-    public static DriveSource forTeleOp(
+    public static DriveSource teleOpAim(
             DriveSource baseDrive,
             Button aimButton,
             BearingSource bearing,
             TagAimController controller) {
 
+        Objects.requireNonNull(baseDrive, "baseDrive must not be null");
+        Objects.requireNonNull(aimButton, "aimButton must not be null");
+        Objects.requireNonNull(bearing, "bearing must not be null");
+        Objects.requireNonNull(controller, "controller must not be null");
+
+        // We implement this in-place instead of delegating to a separate
+        // class to keep the beginner surface small. Advanced users can still
+        // use TagAimController and BearingSource directly if they wish.
         return new DriveSource() {
             @Override
             public DriveSignal get(LoopClock clock) {
+                // Start with the underlying drive behavior
                 DriveSignal base = baseDrive.get(clock);
 
                 if (!aimButton.isPressed()) {
@@ -172,17 +186,8 @@ public final class TagAim {
     // ------------------------------------------------------------------------
 
     /**
-     * Build a {@link BearingSource} from an {@link AprilTagSensor}.
-     *
-     * <p>This helper:
-     * <ul>
-     *   <li>Uses {@link AprilTagSensor#best(Set, double)} to pick the best tag from
-     *       {@code tagIds} whose observation is younger than {@code maxAgeSec}.</li>
-     *   <li>Converts that into a {@link BearingSample} for aiming.</li>
-     * </ul>
-     *
-     * <p>If no suitable tag is found, it returns a sample with
-     * {@code hasTarget = false}.
+     * Build a {@link BearingSource} that derives bearing information from
+     * AprilTag observations returned by {@link AprilTagSensor}.
      *
      * @param sensor    AprilTag sensor
      * @param tagIds    set of tag IDs the robot cares about
@@ -204,25 +209,18 @@ public final class TagAim {
     }
 
     /**
-     * Construct a reasonable default {@link TagAimController} for TeleOp use.
+     * Construct a default controller for TeleOp aiming.
      *
-     * <p>This uses:
-     * <ul>
-     *   <li>A simple proportional-only PID-style implementation with gain {@link #DEFAULT_KP}.</li>
-     *   <li>A deadband of {@link #DEFAULT_DEADBAND_DEG} degrees around zero.</li>
-     *   <li>Maximum omega of {@link #DEFAULT_MAX_OMEGA}.</li>
-     *   <li>{@link TagAimController.LossPolicy#ZERO_OUTPUT_RESET_I} for target loss.</li>
-     * </ul>
-     *
-     * <p>Teams can always provide their own PID and controller if they want more
-     * precise tuning via the advanced API.
+     * <p>This uses a simple P-only controller with gain
+     * {@value #DEFAULT_KP}, a deadband of
+     * {@value #DEFAULT_DEADBAND_DEG} degrees around zero, and a maximum
+     * turn rate of {@value #DEFAULT_MAX_OMEGA}.</p>
      */
     private static TagAimController defaultTeleOpController() {
-        // Simple proportional controller to keep dependencies light.
+        // Simple P-only controller: omega = Kp * error
         PidController pid = new PidController() {
             @Override
             public double update(double error, double dtSec) {
-                // P-only: omega = Kp * error
                 return DEFAULT_KP * error;
             }
             // Default reset() is fine (no internal state).

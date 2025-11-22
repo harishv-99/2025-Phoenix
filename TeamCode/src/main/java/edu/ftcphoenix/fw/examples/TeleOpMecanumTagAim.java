@@ -47,7 +47,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *       by {@link Tags#aprilTags}.</li>
  *   <li>Tag-based aiming PID is encapsulated in
  *       {@link edu.ftcphoenix.fw.sensing.TagAimController} and used through
- *       {@link TagAim#forTeleOp(DriveSource, edu.ftcphoenix.fw.input.Button, AprilTagSensor, Set)}.</li>
+ *       {@link TagAim#teleOpAim(DriveSource, edu.ftcphoenix.fw.input.Button, AprilTagSensor, Set)}.</li>
  * </ul>
  *
  * <p>This OpMode is marked {@link Disabled} so it does not appear by default
@@ -108,7 +108,7 @@ public final class TeleOpMecanumTagAim extends OpMode {
         // 5) Wrap base drive with tag-based auto-aim.
         // While left bumper is held, the robot will automatically rotate
         // to face the closest tag with ID in SCORING_TAGS.
-        drive = TagAim.forTeleOp(
+        drive = TagAim.teleOpAim(
                 sticks,
                 driverKit.p1().leftBumper(),
                 tags,

@@ -96,7 +96,7 @@ public final class TeleOpStaged extends OpMode {
         MotorOutput br = FtcHardware.motor(hardwareMap, HW_BR, false);
 
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
-        stickDrive = StickDriveSource.defaultMecanum(driverKit);
+        stickDrive = StickDriveSource.teleOpMecanum(driverKit);
 
         // 3) Shooter: SetpointStage + velocity Plant
         shooterStage = SetpointStage.enumBuilder(ShooterGoal.class)

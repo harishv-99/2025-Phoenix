@@ -86,7 +86,7 @@ public final class ShooterInterpolationExample {
                     .add(36.0, 195.0)
                     .add(42.0, 210.0)
                     .add(48.0, 225.0)
-                    .build();
+                    .buildSorted();
 
     /**
      * The table actually used by this example.

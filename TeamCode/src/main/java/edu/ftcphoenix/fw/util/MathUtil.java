@@ -12,7 +12,7 @@ package edu.ftcphoenix.fw.util;
  *   <li>We avoid re-implementing the same logic in multiple packages.</li>
  * </ul>
  *
- * <p>As the framework evolves, new helpers should only be added here when:
+ * <p>As the framework evolves, new helpers should only be added here when:</p>
  * <ul>
  *   <li>They are used in multiple places, and</li>
  *   <li>Their behavior can be specified clearly and kept simple.</li>
@@ -46,13 +46,11 @@ public final class MathUtil {
         if (Double.isNaN(value)) {
             return value;
         }
-
         if (min > max) {
             double tmp = min;
             min = max;
             max = tmp;
         }
-
         if (value < min) {
             return min;
         }
@@ -80,9 +78,32 @@ public final class MathUtil {
     }
 
     /**
+     * Simple linear interpolation between {@code a} and {@code b}.
+     *
+     * <p>No clamping is applied to {@code t}:</p>
+     * <ul>
+     *   <li>{@code t = 0} → returns {@code a}.</li>
+     *   <li>{@code t = 1} → returns {@code b}.</li>
+     *   <li>{@code t < 0} or {@code t > 1} → extrapolates linearly.</li>
+     * </ul>
+     *
+     * <p>Callers that require strictly in-range interpolation should clamp
+     * {@code t} first (for example, using {@link #clamp(double, double, double)}).</p>
+     *
+     * @param a first value (t = 0)
+     * @param b second value (t = 1)
+     * @param t blend factor (typically in [0, 1])
+     * @return interpolated value {@code a + t * (b - a)}
+     */
+    public static double lerp(double a, double b, double t) {
+        return a + t * (b - a);
+    }
+
+    /**
      * Clamp a value to the interval [0, 1].
      *
-     * <p>This is a common pattern for normalized quantities such as
+     * <p>This is a small convenience wrapper around {@link #clamp(double, double, double)}
+     * for values that are conceptually fractions or normalized parameters, such as
      * trigger values, servo positions, and scale factors.</p>
      *
      * @param value value to clamp

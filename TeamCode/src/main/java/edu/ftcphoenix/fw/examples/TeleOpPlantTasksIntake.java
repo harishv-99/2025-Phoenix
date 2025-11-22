@@ -98,7 +98,7 @@ public final class TeleOpPlantTasksIntake extends OpMode {
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
 
         // 3) Default mecanum mapping from DriverKit sticks (with slow mode)
-        stickDrive = StickDriveSource.defaultMecanumWithSlowMode(
+        stickDrive = StickDriveSource.teleOpMecanumWithSlowMode(
                 driverKit,
                 driverKit.p1().rightBumper(), // hold for slow mode
                 0.30
