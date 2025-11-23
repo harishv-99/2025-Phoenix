@@ -1,5 +1,6 @@
 package org.firstinspires.ftc.teamcode.robots;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.CRServo;
@@ -8,6 +9,7 @@ import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.JavaUtil;
 
+@Disabled
 @TeleOp(name = "GameDayCode")
 public class GameDayCode extends LinearOpMode {
 
@@ -95,7 +97,8 @@ public class GameDayCode extends LinearOpMode {
         // First subtract the error from the position, then stretch or shrink
         if (pos >= err) {
             newpos = (pos - err) / (1 - err);
-        } else {
+        }
+        else {
             newpos = (pos - err) / (1 + err);
         }
         return newpos;
