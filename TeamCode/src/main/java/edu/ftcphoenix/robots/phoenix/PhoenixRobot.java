@@ -8,9 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import edu.ftcphoenix.fw.adapters.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.robot.Subsystem;
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.util.NullDebugSink;
 import edu.ftcphoenix.robots.phoenix.subsystem.DriveSubsystem;
 import edu.ftcphoenix.robots.phoenix.subsystem.ShooterSubsystem;
 import edu.ftcphoenix.robots.phoenix.subsystem.VisionSubsystem;
@@ -22,7 +25,12 @@ import edu.ftcphoenix.robots.phoenix.subsystem.VisionSubsystem;
  */
 public final class PhoenixRobot {
 
+    // --- Configuration ---
+    private final boolean debugEnabled = false;
+    // --- End configuration ---
+
     private final DriverKit driverKit;
+    private final DebugSink debugSink;
     private final Telemetry telemetry;
 
     private final DriveSubsystem drive;
@@ -35,20 +43,23 @@ public final class PhoenixRobot {
                         DriverKit driverKit,
                         Telemetry telemetry) {
         this.driverKit = driverKit;
+
+        this.debugSink = debugEnabled
+                ? new FtcTelemetryDebugSink(telemetry)
+                : NullDebugSink.INSTANCE;
         this.telemetry = telemetry;
 
         // Vision first so others can depend on it
         vision = new VisionSubsystem(
                 hw,
-                telemetry,
                 Set.of(1, 2, 3)); // TODO: scoring tag IDs for this game
 
         drive = new DriveSubsystem(hw, driverKit, vision);
-        shooter = new ShooterSubsystem(hw, driverKit, telemetry, vision);
+        shooter = new ShooterSubsystem(hw, driverKit, vision);
 
         subsystems.add(drive);
-        subsystems.add(shooter);
-        subsystems.add(vision);
+//        subsystems.add(shooter);
+//        subsystems.add(vision);
     }
 
     public void onTeleopInit() {
@@ -81,5 +92,11 @@ public final class PhoenixRobot {
         for (Subsystem s : subsystems) {
             s.onStop();
         }
+    }
+
+    public void debugDump(DebugSink dbg) {
+        drive.debugDump(dbg, "drive");
+        vision.debugDump(dbg, "vision");
+        shooter.debugDump(dbg, "shooter");
     }
 }

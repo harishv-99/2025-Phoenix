@@ -283,4 +283,15 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
             return InterpolatingTable1D.ofSorted(xsArr, ysArr);
         }
     }
+
+    /**
+     * Emit a small summary of this table (size and range).
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "table" : prefix;
+        int n = xs.length;
+        dbg.addData(p + ".size", n)
+                .addData(p + ".xMin", xs[0])
+                .addData(p + ".xMax", xs[n - 1]);
+    }
 }

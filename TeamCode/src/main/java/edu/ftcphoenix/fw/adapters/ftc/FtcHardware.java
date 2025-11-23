@@ -2,6 +2,7 @@ package edu.ftcphoenix.fw.adapters.ftc;
 
 import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
 
@@ -40,12 +41,14 @@ public final class FtcHardware {
      */
     public static MotorOutput motor(HardwareMap hw, String name, boolean inverted) {
         final DcMotorEx m = hw.get(DcMotorEx.class, name);
+        if (inverted)
+            m.setDirection(DcMotorSimple.Direction.REVERSE);
         return new MotorOutput() {
             private double last;
 
             @Override
             public void setPower(double p) {
-                double cmd = MathUtil.clampAbs(inverted ? -p : p, 1.0);
+                double cmd = MathUtil.clampAbs(p, 1.0);
                 last = cmd;
                 m.setPower(cmd);
             }
@@ -65,12 +68,14 @@ public final class FtcHardware {
      */
     public static MotorOutput crServoMotor(HardwareMap hw, String name, boolean inverted) {
         final CRServo s = hw.get(CRServo.class, name);
+        if (inverted)
+            s.setDirection(CRServo.Direction.REVERSE);
         return new MotorOutput() {
             private double last;
 
             @Override
             public void setPower(double p) {
-                double cmd = MathUtil.clampAbs(inverted ? -p : p, 1.0);
+                double cmd = MathUtil.clampAbs(p, 1.0);
                 last = cmd;
                 s.setPower(cmd);
             }
@@ -91,12 +96,14 @@ public final class FtcHardware {
      */
     public static ServoOutput servo(HardwareMap hw, String name, boolean inverted) {
         final Servo s = hw.get(Servo.class, name);
+        if (inverted)
+            s.setDirection(Servo.Direction.REVERSE);
         return new ServoOutput() {
             private double last;
 
             @Override
             public void setPosition(double pos) {
-                double p = inverted ? (1.0 - pos) : pos;
+                double p = pos;
                 double cmd = MathUtil.clamp01(p);
                 last = cmd;
                 s.setPosition(cmd);

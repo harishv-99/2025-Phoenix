@@ -1,5 +1,7 @@
 package edu.ftcphoenix.robots.phoenix.subsystem;
 
+import android.os.Debug;
+
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -13,6 +15,7 @@ import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.stage.setpoint.SetpointStage;
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.InterpolatingTable1D;
 import edu.ftcphoenix.fw.util.LoopClock;
 
@@ -25,8 +28,8 @@ public final class ShooterSubsystem implements Subsystem {
 
     // --- Hardware names (edit to match your config) ---
     private static final String HW_PUSHER = "pusher";
-    private static final String HW_FEED_LEFT = "feederLeft";
-    private static final String HW_FEED_RIGHT = "feederRight";
+    private static final String HW_FEED_LEFT = "transferLeft";
+    private static final String HW_FEED_RIGHT = "transferRight";
     private static final String HW_SHOOT_LEFT = "shooterLeft";
     private static final String HW_SHOOT_RIGHT = "shooterRight";
 
@@ -55,7 +58,6 @@ public final class ShooterSubsystem implements Subsystem {
             rpmToRadPerSec(4000.0)
     };
 
-    private final Telemetry telemetry;
     private final DriverKit driverKit;
     private final VisionSubsystem vision;
 
@@ -72,10 +74,8 @@ public final class ShooterSubsystem implements Subsystem {
 
     public ShooterSubsystem(HardwareMap hw,
                             DriverKit driverKit,
-                            Telemetry telemetry,
                             VisionSubsystem vision) {
         this.driverKit = driverKit;
-        this.telemetry = telemetry;
         this.vision = vision;
 
         // Pusher positional servo
@@ -171,15 +171,12 @@ public final class ShooterSubsystem implements Subsystem {
                 vision.getBestScoringTag(MAX_TAG_AGE_SEC);
 
         if (!obs.hasTarget) {
-            telemetry.addLine("Shooter: no fresh tag; target=0");
+            // Shooter has no fresh tag; target=0
             return 0.0;
         }
 
         double rangeIn = obs.rangeInches;
         double target = rangeToVelocity.interpolate(rangeIn);
-
-        telemetry.addData("Shooter/rangeIn", "%.1f", rangeIn);
-        telemetry.addData("Shooter/targetRadPerSec", "%.1f", target);
 
         return target;
     }
@@ -190,10 +187,14 @@ public final class ShooterSubsystem implements Subsystem {
     }
 
     private void addTelemetry() {
-        telemetry.addData("Shooter/enabled", shooterEnabled);
-        telemetry.addData("Shooter/target", "%.1f", shooterTargetRadPerSec);
-        telemetry.addData("Pusher/lastPos", pusher.getLastPosition());
-        telemetry.addData("Feeder/powerL", feederLeft.getLastPower());
-        telemetry.addData("Feeder/powerR", feederRight.getLastPower());
+
+    }
+
+    public void debugDump(DebugSink dbg, String prefix) {
+        dbg.addData(prefix + ".enabled", shooterEnabled);
+        dbg.addData(prefix + ".targetRadPerSec", "%.1f", shooterTargetRadPerSec);
+        dbg.addData(prefix + ".pusher.lastPos", pusher.getLastPosition());
+        dbg.addData(prefix + ".feeder.powerL", feederLeft.getLastPower());
+        dbg.addData(prefix + ".feeder.powerR", feederRight.getLastPower());
     }
 }

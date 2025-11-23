@@ -2,6 +2,7 @@ package edu.ftcphoenix.fw.sensing;
 
 import edu.ftcphoenix.fw.core.PidController;
 import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
@@ -73,6 +74,10 @@ public final class TagAimController {
 
     private double lastOmega = 0.0;
 
+    // For debugging:
+    private double lastErrorRad = 0.0;
+    private boolean lastHasTarget = false;
+
     /**
      * Construct a tag aim controller.
      *
@@ -117,22 +122,25 @@ public final class TagAimController {
      */
     public double update(LoopClock clock, BearingSample sample) {
         double dtSec = clock.dtSec();
+        lastHasTarget = sample.hasTarget;
 
         if (!sample.hasTarget) {
+            lastErrorRad = 0.0;
             handleLoss();
             return lastOmega;
         }
 
-        double error = sample.bearingRad; // we want bearing → 0
+        double error = sample.bearingRad;
+        lastErrorRad = error;
 
-        // Inside deadband: treat as on-target; no turn command.
         if (Math.abs(error) < deadbandRad) {
             lastOmega = 0.0;
             return lastOmega;
         }
 
         double raw = pid.update(error, dtSec);
-        lastOmega = MathUtil.clamp(raw, -maxOmega, maxOmega);
+        double clamped = MathUtil.clampAbs(raw, maxOmega);
+        lastOmega = clamped;
         return lastOmega;
     }
 
@@ -166,5 +174,24 @@ public final class TagAimController {
                 // PID state is preserved; integral may continue when target reappears.
                 break;
         }
+    }
+
+    /**
+     * Emit current aiming configuration and last update state.
+     *
+     * @param dbg    debug sink (never null)
+     * @param prefix base key prefix, e.g. "tagAim"
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "tagAim" : prefix;
+        dbg.addLine(p)
+                .addData(p + ".deadbandRad", deadbandRad)
+                .addData(p + ".deadbandDeg", Math.toDegrees(deadbandRad))
+                .addData(p + ".maxOmega", maxOmega)
+                .addData(p + ".lossPolicy", lossPolicy.name())
+                .addData(p + ".lastHasTarget", lastHasTarget)
+                .addData(p + ".lastErrorRad", lastErrorRad)
+                .addData(p + ".lastErrorDeg", Math.toDegrees(lastErrorRad))
+                .addData(p + ".lastOmega", lastOmega);
     }
 }

@@ -1,10 +1,13 @@
 package edu.ftcphoenix.fw.drive.source;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.input.Axis;
 import edu.ftcphoenix.fw.input.Button;
 import edu.ftcphoenix.fw.input.DriverKit;
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
@@ -99,6 +102,9 @@ public final class StickDriveSource implements DriveSource {
     // Optional slow-mode support
     private final Button slowButton;   // may be null if no slow mode
     private final double slowScale;    // only used if slowButton != null
+
+    // Track last output for debugging.
+    private DriveSignal lastSignal = DriveSignal.ZERO;
 
     /**
      * Create a stick drive source using the given player and parameters,
@@ -215,11 +221,13 @@ public final class StickDriveSource implements DriveSource {
             modeScale = slowScale;
         }
 
-        return new DriveSignal(
+        DriveSignal out = new DriveSignal(
                 ax * modeScale,
                 lat * modeScale,
                 om * modeScale
         );
+        lastSignal = out;
+        return out;
     }
 
     // ------------------------------------------------------------------------
@@ -267,5 +275,27 @@ public final class StickDriveSource implements DriveSource {
         // Restore sign and apply scale.
         double sign = (x >= 0.0) ? 1.0 : -1.0;
         return sign * shaped * scale;
+    }
+
+    /**
+     * Emit current stick shaping parameters and last output command.
+     *
+     * @param dbg    debug sink (never null)
+     * @param prefix base key prefix, e.g. "drive.sticks"
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "drive.sticks" : prefix;
+
+        dbg.addLine(p)
+                .addData(p + ".deadband",        params.deadband)
+                .addData(p + ".translateExpo",   params.translateExpo)
+                .addData(p + ".rotateExpo",      params.rotateExpo)
+                .addData(p + ".translateScale",  params.translateScale)
+                .addData(p + ".rotateScale",     params.rotateScale)
+                .addData(p + ".slowConfigured",  slowButton != null)
+                .addData(p + ".slowScale",       slowButton != null ? slowScale : 1.0)
+                .addData(p + ".lastAxial",       lastSignal.axial)
+                .addData(p + ".lastLateral",     lastSignal.lateral)
+                .addData(p + ".lastOmega",       lastSignal.omega);
     }
 }

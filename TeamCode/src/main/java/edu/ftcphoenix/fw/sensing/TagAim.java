@@ -176,7 +176,7 @@ public final class TagAim {
                 double omega = controller.update(clock, sample);
 
                 // Keep axial/lateral from driver sticks, override omega to aim at target.
-                return new DriveSignal(base.axial, base.lateral, omega);
+                return base.withOmega(omega);
             }
         };
     }

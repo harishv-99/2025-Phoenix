@@ -8,7 +8,7 @@ import edu.ftcphoenix.robots.phoenix.PhoenixRobot;
 /**
  * Thin TeleOp shell. All interesting logic lives in PhoenixRobot + subsystems.
  */
-@TeleOp(name = "Phoenix: Drive + Shooter (Subsystems)", group = "Phoenix")
+@TeleOp(name = "Phoenix: TeleOp Test", group = "Phoenix")
 public final class PhoenixTeleOp extends PhoenixTeleOpBase {
 
     private PhoenixRobot robot;

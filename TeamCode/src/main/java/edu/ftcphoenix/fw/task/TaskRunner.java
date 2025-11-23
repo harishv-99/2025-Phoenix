@@ -3,6 +3,7 @@ package edu.ftcphoenix.fw.task;
 import java.util.ArrayList;
 import java.util.List;
 
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
@@ -111,6 +112,24 @@ public final class TaskRunner {
         // If we now have an active task, update it.
         if (current != null && !current.isFinished()) {
             current.update(clock);
+        }
+    }
+
+    /**
+     * Emit current queue and active task information.
+     *
+     * @param dbg    debug sink (never null)
+     * @param prefix base key prefix, e.g. "tasks"
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "tasks" : prefix;
+
+        dbg.addData(p + ".queueSize", queue.size())
+                .addData(p + ".hasCurrent", current != null);
+
+        if (current != null) {
+            dbg.addData(p + ".currentClass", current.getClass().getSimpleName())
+                    .addData(p + ".currentFinished", current.isFinished());
         }
     }
 }

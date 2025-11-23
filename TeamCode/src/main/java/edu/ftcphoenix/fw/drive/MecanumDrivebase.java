@@ -1,6 +1,9 @@
 package edu.ftcphoenix.fw.drive;
 
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+
 import edu.ftcphoenix.fw.hal.MotorOutput;
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
@@ -146,5 +149,26 @@ public final class MecanumDrivebase {
      */
     public double getLastBrPower() {
         return lastBrPower;
+    }
+
+    /**
+     * Emit last drive command and wheel powers.
+     *
+     * <p>Useful for debugging mixer behavior and verifying that the front/back
+     * and left/right motors are receiving sane commands.</p>
+     *
+     * @param dbg    debug sink (never null)
+     * @param prefix base key prefix, e.g. "drive.base"
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "drive.base" : prefix;
+        dbg.addLine(p)
+                .addData(p + ".maxAxial", cfg.maxAxial)
+                .addData(p + ".maxLateral", cfg.maxLateral)
+                .addData(p + ".maxOmega", cfg.maxOmega)
+                .addData(p + ".lastFlPower", lastFlPower)
+                .addData(p + ".lastFrPower", lastFrPower)
+                .addData(p + ".lastBlPower", lastBlPower)
+                .addData(p + ".lastBrPower", lastBrPower);
     }
 }

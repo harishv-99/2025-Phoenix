@@ -11,6 +11,7 @@ import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.Tags;
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
@@ -20,15 +21,15 @@ public final class VisionSubsystem implements Subsystem {
 
     private static final double DEFAULT_MAX_AGE_SEC = 0.30;
 
-    private final Telemetry telemetry;
     private final AprilTagSensor tags;
     private final Set<Integer> scoringTagIds;
 
+    private AprilTagObservation lastObs = null;
+
     public VisionSubsystem(HardwareMap hw,
-                           Telemetry telemetry,
                            Set<Integer> scoringTagIds) {
-        this.telemetry = telemetry;
-        this.tags = Tags.aprilTags(hw, "Webcam 1"); // TODO: match your config name
+        this.tags = null;
+//        this.tags = Tags.aprilTags(hw, "Webcam 1"); // TODO: match your config name
         this.scoringTagIds = Collections.unmodifiableSet(scoringTagIds);
     }
 
@@ -62,15 +63,18 @@ public final class VisionSubsystem implements Subsystem {
 
     @Override
     public void onTeleopLoop(LoopClock clock) {
+        lastObs = getBestScoringTag(DEFAULT_MAX_AGE_SEC);
+    }
+
+    public void debugDump(DebugSink dbg, String prefix) {
         // Optional debugging; safe to comment out later.
-        AprilTagObservation obs = getBestScoringTag(DEFAULT_MAX_AGE_SEC);
-        if (obs.hasTarget) {
-            telemetry.addData("Vision/tagId", obs.id);
-            telemetry.addData("Vision/rangeIn", "%.1f", obs.rangeInches);
-            telemetry.addData("Vision/bearingDeg", "%.1f",
-                    Math.toDegrees(obs.bearingRad));
+        if (lastObs != null && lastObs.hasTarget) {
+            dbg.addData("Vision/tagId", lastObs.id);
+            dbg.addData("Vision/rangeIn", "%.1f", lastObs.rangeInches);
+            dbg.addData("Vision/bearingDeg", "%.1f",
+                    Math.toDegrees(lastObs.bearingRad));
         } else {
-            telemetry.addLine("Vision: no scoring tag visible");
+            dbg.addLine("Vision: no scoring tag visible");
         }
     }
 }

@@ -1,5 +1,6 @@
 package edu.ftcphoenix.fw.core;
 
+import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
@@ -221,4 +222,28 @@ public final class Pid implements PidController {
     public double getIntegral() {
         return integral;
     }
+
+    /**
+     * Emit current PID configuration and internal state.
+     *
+     * <p>This is useful when tuning controllers from the Driver Station.</p>
+     *
+     * @param dbg    debug sink (never null)
+     * @param prefix base key prefix, e.g. "shooter.pid" or "heading.pid"
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "pid" : prefix;
+        dbg.addLine(p)
+                .addData(p + ".kP", kP)
+                .addData(p + ".kI", kI)
+                .addData(p + ".kD", kD)
+                .addData(p + ".integral", integral)
+                .addData(p + ".prevError", prevError)
+                .addData(p + ".firstUpdate", firstUpdate)
+                .addData(p + ".integralMin", integralMin)
+                .addData(p + ".integralMax", integralMax)
+                .addData(p + ".outputMin", outputMin)
+                .addData(p + ".outputMax", outputMax);
+    }
+
 }

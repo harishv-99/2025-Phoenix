@@ -117,4 +117,18 @@ public final class LoopClock {
     public double dtSec() {
         return dtSec;
     }
+
+    /**
+     * Emit basic timing info for debugging.
+     *
+     * @param dbg    debug sink (never null)
+     * @param prefix base key prefix, e.g. "clock" or "robot.clock"
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        String p = (prefix == null || prefix.isEmpty()) ? "clock" : prefix;
+        dbg.addData(p + ".nowSec", nowSec)
+                .addData(p + ".lastSec", lastSec)
+                .addData(p + ".dtSec", dtSec)
+                .addData(p + ".started", started);
+    }
 }
