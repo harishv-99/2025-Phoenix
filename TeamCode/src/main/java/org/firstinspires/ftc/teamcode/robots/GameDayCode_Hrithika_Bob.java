@@ -6,7 +6,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import edu.ftcphoenix.fw2.robotbase.RobotBase;
 import edu.ftcphoenix.robots.phoenix2.Robot;
 
-@TeleOp(name = "GameDayCode_Hrithika_Bob")
+@TeleOp(name = "GameDayCode_Hrithika_Bob", group = "Phoenix")
 public class GameDayCode_Hrithika_Bob extends LinearOpMode {
     Robot robot;
 

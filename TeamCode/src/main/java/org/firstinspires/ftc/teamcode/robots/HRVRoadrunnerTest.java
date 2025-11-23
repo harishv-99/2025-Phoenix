@@ -3,7 +3,10 @@ package org.firstinspires.ftc.teamcode.robots;
 import com.acmerobotics.roadrunner.Pose2d;
 import com.acmerobotics.roadrunner.Trajectory;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+
+@Disabled
 @Autonomous(name="HRVRoadrunnerTest", group="Autonomous")
 public class HRVRoadrunnerTest extends LinearOpMode {
 

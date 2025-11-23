@@ -1,11 +1,13 @@
 package org.firstinspires.ftc.teamcode.robots;
 
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import org.firstinspires.ftc.robotcore.external.JavaUtil;
 
+@Disabled
 @TeleOp(name = "GameDayCode3")
 public class GameDayCode3 extends LinearOpMode {
 
