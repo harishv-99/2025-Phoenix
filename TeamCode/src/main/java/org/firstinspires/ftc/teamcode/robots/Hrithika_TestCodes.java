@@ -81,9 +81,12 @@ public class Hrithika_TestCodes extends LinearOpMode {
                     telemetry.addData("roll", tag.ftcPose.roll);
                     telemetry.addData("pitch", tag.ftcPose.pitch);
                     telemetry.addData("yaw", tag.ftcPose.yaw);
+                    if (tag.metadata.id == 23) {
+                        telemetry.addLine("This tag is number 23");
+                    }
+                    telemetry.update();
                 }
             }
-            telemetry.update();
         }
 
     }
