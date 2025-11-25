@@ -1,4 +1,4 @@
-package edu.ftcphoenix.fw.util;
+package edu.ftcphoenix.fw.debug;
 
 /**
  * {@link DebugSink} implementation that silently discards all debug output.

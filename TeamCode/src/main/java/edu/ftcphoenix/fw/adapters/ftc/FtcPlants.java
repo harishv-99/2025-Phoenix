@@ -104,6 +104,11 @@ public final class FtcPlants {
         }
 
         @Override
+        public double getTarget() {
+            return target;
+        }
+
+        @Override
         public void update(double dtSec) {
             // No-op: open-loop, last commanded power is held.
         }
@@ -192,6 +197,11 @@ public final class FtcPlants {
         }
 
         @Override
+        public double getTarget() {
+            return target;
+        }
+
+        @Override
         public void update(double dtSec) {
             // No-op: open-loop, last commanded power is held.
         }
@@ -271,6 +281,11 @@ public final class FtcPlants {
             double revPerSec = radPerSec / (2.0 * Math.PI);
             double ticksPerSec = revPerSec * ticksPerRev;
             motor.setVelocity(ticksPerSec);
+        }
+
+        @Override
+        public double getTarget() {
+            return targetRadPerSec;
         }
 
         @Override
@@ -374,6 +389,11 @@ public final class FtcPlants {
         }
 
         @Override
+        public double getTarget() {
+            return targetRadPerSec;
+        }
+
+        @Override
         public void update(double dtSec) {
             // No-op; rely on SDK's internal velocity control.
         }
@@ -436,6 +456,11 @@ public final class FtcPlants {
             double pos = MathUtil.clamp01(target);
             this.target = pos;
             servo.setPosition(pos);
+        }
+
+        @Override
+        public double getTarget() {
+            return target;
         }
 
         @Override
@@ -508,6 +533,11 @@ public final class FtcPlants {
             this.target = pos;
             a.setPosition(pos);
             b.setPosition(pos);
+        }
+
+        @Override
+        public double getTarget() {
+            return target;
         }
 
         @Override
@@ -602,6 +632,11 @@ public final class FtcPlants {
             targetTicks = (int) Math.round(rev * ticksPerRev);
             motor.setTargetPosition(targetTicks);
             motor.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        }
+
+        @Override
+        public double getTarget() {
+            return targetRad;
         }
 
         @Override
@@ -720,6 +755,11 @@ public final class FtcPlants {
 
             a.setTargetPosition(targetTicksA);
             b.setTargetPosition(targetTicksB);
+        }
+
+        @Override
+        public double getTarget() {
+            return targetRad;
         }
 
         @Override

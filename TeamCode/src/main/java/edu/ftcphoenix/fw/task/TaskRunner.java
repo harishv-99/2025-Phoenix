@@ -3,7 +3,7 @@ package edu.ftcphoenix.fw.task;
 import java.util.ArrayList;
 import java.util.List;
 
-import edu.ftcphoenix.fw.util.DebugSink;
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
@@ -116,12 +116,15 @@ public final class TaskRunner {
     }
 
     /**
-     * Emit current queue and active task information.
+     * Emit a compact summary of queue + current task for debugging.
      *
-     * @param dbg    debug sink (never null)
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
      * @param prefix base key prefix, e.g. "tasks"
      */
     public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
         String p = (prefix == null || prefix.isEmpty()) ? "tasks" : prefix;
 
         dbg.addData(p + ".queueSize", queue.size())

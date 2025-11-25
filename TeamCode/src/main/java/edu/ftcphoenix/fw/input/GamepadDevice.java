@@ -2,8 +2,7 @@ package edu.ftcphoenix.fw.input;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
 
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
@@ -88,11 +87,11 @@ public final class GamepadDevice {
     }
 
     public Axis leftTrigger() {
-        return Axis.of(() -> clamp01(gp.left_trigger));
+        return Axis.of(() -> MathUtil.clamp01(gp.left_trigger));
     }
 
     public Axis rightTrigger() {
-        return Axis.of(() -> clamp01(gp.right_trigger));
+        return Axis.of(() -> MathUtil.clamp01(gp.right_trigger));
     }
 
     // Short aliases
@@ -171,26 +170,23 @@ public final class GamepadDevice {
 
     /**
      * Emit calibration info to telemetry.
+     *
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
+     * @param prefix base key prefix, e.g. "gp1" or "gamepad1"
      */
-    public void addCalibrationTelemetry(Telemetry telemetry, String prefix) {
-        telemetry.addData(prefix + " lx0", fmt(lx0));
-        telemetry.addData(prefix + " ly0", fmt(ly0));
-        telemetry.addData(prefix + " rx0", fmt(rx0));
-        telemetry.addData(prefix + " ry0", fmt(ry0));
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "gamepad" : prefix;
+        dbg.addData(p + ".lx0", lx0)
+                .addData(p + ".ly0", ly0)
+                .addData(p + ".rx0", rx0)
+                .addData(p + ".ry0", ry0);
     }
+
 
     // ---------------- Helpers ----------------
-
-    private static String fmt(double v) {
-        return String.format("%.3f", v);
-    }
-
-    /**
-     * Clamp a value to [0, 1] for triggers or other normalized quantities.
-     */
-    private static double clamp01(double v) {
-        return MathUtil.clamp01(v);
-    }
 
     /**
      * Apply piecewise normalization around offset and clamp to [-1..+1].

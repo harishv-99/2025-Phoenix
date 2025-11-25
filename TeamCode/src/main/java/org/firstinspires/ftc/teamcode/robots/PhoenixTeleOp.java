@@ -1,35 +1,29 @@
 package org.firstinspires.ftc.teamcode.robots;
 
+import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import edu.ftcphoenix.fw.robot.PhoenixTeleOpBase;
 import edu.ftcphoenix.robots.phoenix.PhoenixRobot;
 
-/**
- * Thin TeleOp shell. All interesting logic lives in PhoenixRobot + subsystems.
- */
-@TeleOp(name = "Phoenix: TeleOp Test", group = "Phoenix")
-public final class PhoenixTeleOp extends PhoenixTeleOpBase {
+@TeleOp(name = "Phoenix TeleOp", group = "Phoenix")
+public final class PhoenixTeleOp extends OpMode {
+    private final PhoenixRobot robot = new PhoenixRobot();
 
-    private PhoenixRobot robot;
 
     @Override
-    protected void onInitRobot() {
-        robot = new PhoenixRobot(hardwareMap, driverKit(), telemetry);
+    public void init() {
+        robot.initHardware(hardwareMap, telemetry, gamepad1, gamepad2);
     }
 
-    @Override
-    protected void onStartRobot() {
-        robot.onTeleopInit();
-    }
 
     @Override
-    protected void onLoopRobot(double dtSec) {
-        robot.onTeleopLoop(clock());
+    public void start() {
+        robot.startTeleOp(getRuntime());
     }
 
+
     @Override
-    protected void onStopRobot() {
-        robot.onStop();
+    public void loop() {
+        robot.loopTeleOp(getRuntime());
     }
 }

@@ -1,4 +1,4 @@
-package edu.ftcphoenix.fw.util;
+package edu.ftcphoenix.fw.debug;
 
 import java.util.Locale;
 

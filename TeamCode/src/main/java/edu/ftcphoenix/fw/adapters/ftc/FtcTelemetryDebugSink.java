@@ -2,7 +2,7 @@ package edu.ftcphoenix.fw.adapters.ftc;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
-import edu.ftcphoenix.fw.util.DebugSink;
+import edu.ftcphoenix.fw.debug.DebugSink;
 
 /**
  * {@link DebugSink} implementation backed by FTC {@link Telemetry}.

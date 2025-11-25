@@ -1,8 +1,6 @@
-package edu.ftcphoenix.robots.phoenix.subsystem;
+package edu.ftcphoenix.robots.phoenix_subsystem.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
-
-import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import java.util.Collections;
 import java.util.Set;
@@ -10,8 +8,7 @@ import java.util.Set;
 import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
-import edu.ftcphoenix.fw.sensing.Tags;
-import edu.ftcphoenix.fw.util.DebugSink;
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**

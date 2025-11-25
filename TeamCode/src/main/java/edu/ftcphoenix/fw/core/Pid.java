@@ -1,6 +1,6 @@
 package edu.ftcphoenix.fw.core;
 
-import edu.ftcphoenix.fw.util.DebugSink;
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
@@ -224,14 +224,15 @@ public final class Pid implements PidController {
     }
 
     /**
-     * Emit current PID configuration and internal state.
+     * Debug helper: emit current gains & state.
      *
-     * <p>This is useful when tuning controllers from the Driver Station.</p>
-     *
-     * @param dbg    debug sink (never null)
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
      * @param prefix base key prefix, e.g. "shooter.pid" or "heading.pid"
      */
     public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
         String p = (prefix == null || prefix.isEmpty()) ? "pid" : prefix;
         dbg.addLine(p)
                 .addData(p + ".kP", kP)
@@ -245,5 +246,4 @@ public final class Pid implements PidController {
                 .addData(p + ".outputMin", outputMin)
                 .addData(p + ".outputMax", outputMax);
     }
-
 }

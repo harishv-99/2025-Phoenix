@@ -1,21 +1,16 @@
-package edu.ftcphoenix.robots.phoenix.subsystem;
-
-import android.os.Debug;
+package edu.ftcphoenix.robots.phoenix_subsystem.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
-
-import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
 import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
 import edu.ftcphoenix.fw.hal.MotorOutput;
 import edu.ftcphoenix.fw.hal.ServoOutput;
-import edu.ftcphoenix.fw.input.DriverKit;
+import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
-import edu.ftcphoenix.fw.stage.setpoint.SetpointStage;
-import edu.ftcphoenix.fw.util.DebugSink;
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.util.InterpolatingTable1D;
 import edu.ftcphoenix.fw.util.LoopClock;
 
@@ -58,7 +53,7 @@ public final class ShooterSubsystem implements Subsystem {
             rpmToRadPerSec(4000.0)
     };
 
-    private final DriverKit driverKit;
+    private final Gamepads gamepads;
     private final VisionSubsystem vision;
 
     private final ServoOutput pusher;
@@ -73,9 +68,9 @@ public final class ShooterSubsystem implements Subsystem {
     private boolean shooterEnabled = false;
 
     public ShooterSubsystem(HardwareMap hw,
-                            DriverKit driverKit,
+                            Gamepads gamepads,
                             VisionSubsystem vision) {
-        this.driverKit = driverKit;
+        this.gamepads = gamepads;
         this.vision = vision;
 
         // Pusher positional servo
@@ -134,16 +129,16 @@ public final class ShooterSubsystem implements Subsystem {
 
     private void updatePusher() {
         // P2 A: extend; P2 B: retract.
-        if (driverKit.p2().buttonA().isPressed()) {
+        if (gamepads.p2().buttonA().isPressed()) {
             pusher.setPosition(PUSHER_EXTEND);
-        } else if (driverKit.p2().buttonB().isPressed()) {
+        } else if (gamepads.p2().buttonB().isPressed()) {
             pusher.setPosition(PUSHER_RETRACT);
         }
     }
 
     private void updateFeeder() {
-        double lt = driverKit.p2().leftTrigger().get();
-        double rt = driverKit.p2().rightTrigger().get();
+        double lt = gamepads.p2().leftTrigger().get();
+        double rt = gamepads.p2().rightTrigger().get();
 
         double power = 0.0;
         if (lt >= FEED_TRIGGER_THRESHOLD && rt < FEED_TRIGGER_THRESHOLD) {
@@ -157,7 +152,7 @@ public final class ShooterSubsystem implements Subsystem {
 
     private void updateShooter() {
         // P2 Y: while held, aim for distance-based shooter velocity.
-        if (driverKit.p2().buttonY().isPressed()) {
+        if (gamepads.p2().buttonY().isPressed()) {
             shooterEnabled = true;
             shooterTargetRadPerSec = computeTargetVelocityFromRange();
         } else {

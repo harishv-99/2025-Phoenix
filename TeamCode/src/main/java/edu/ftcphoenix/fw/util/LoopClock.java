@@ -1,5 +1,7 @@
 package edu.ftcphoenix.fw.util;
 
+import edu.ftcphoenix.fw.debug.DebugSink;
+
 /**
  * Minimal loop timing helper.
  *
@@ -121,10 +123,13 @@ public final class LoopClock {
     /**
      * Emit basic timing info for debugging.
      *
-     * @param dbg    debug sink (never null)
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
      * @param prefix base key prefix, e.g. "clock" or "robot.clock"
      */
     public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
         String p = (prefix == null || prefix.isEmpty()) ? "clock" : prefix;
         dbg.addData(p + ".nowSec", nowSec)
                 .addData(p + ".lastSec", lastSec)

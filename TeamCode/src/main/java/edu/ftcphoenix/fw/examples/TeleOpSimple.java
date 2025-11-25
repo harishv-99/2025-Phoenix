@@ -6,13 +6,13 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
 import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.StickDriveSource;
 import edu.ftcphoenix.fw.hal.MotorOutput;
 import edu.ftcphoenix.fw.hal.ServoOutput;
 import edu.ftcphoenix.fw.input.Button;
-import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.util.LoopClock;
@@ -42,6 +42,8 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * <ul>
  *   <li>All edge detection and while-held logic is in {@link Bindings}.</li>
  *   <li>All drive shaping (deadband/expo) is in {@link StickDriveSource}.</li>
+ *   <li>Drive mapping uses {@link StickDriveSource#teleOpMecanum(Gamepads)}, which
+ *       applies lateral rate limiting via {@code RateLimitedDriveSource}.</li>
  *   <li>OpMode code reads as pure intent: “on press → do X”, “while held → do Y”.</li>
  * </ul>
  */
@@ -74,13 +76,12 @@ public final class TeleOpSimple extends OpMode {
 
     // --- Input / bindings ---
     private Gamepads gamepads;
-    private DriverKit driverKit;
     private Bindings bindings;
     private final LoopClock clock = new LoopClock();
 
     // --- Drive ---
     private MecanumDrivebase drivebase;
-    private StickDriveSource stickDrive;
+    private DriveSource stickDrive;
 
     // --- Mechanisms ---
     private ServoOutput pusher;
@@ -92,7 +93,6 @@ public final class TeleOpSimple extends OpMode {
     public void init() {
         // 1) Inputs
         gamepads = Gamepads.create(gamepad1, gamepad2);
-        driverKit = DriverKit.of(gamepads);
         bindings = new Bindings();
 
         // 2) Drivebase wiring (HAL adapters hide FTC details)
@@ -102,8 +102,10 @@ public final class TeleOpSimple extends OpMode {
         MotorOutput br = FtcHardware.motor(hardwareMap, HW_BR, false);
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
 
-        // Default mecanum mapping: leftX, leftY (up is +), rightX
-        stickDrive = StickDriveSource.teleOpMecanum(driverKit);
+        // Default mecanum mapping: leftX, leftY (up is +), rightX.
+        // Internally this wraps a StickDriveSource in a RateLimitedDriveSource
+        // that smooths lateral motion by DEFAULT_LATERAL_RATE_PER_SEC.
+        stickDrive = StickDriveSource.teleOpMecanum(gamepads);
 
         // 3) Mechanism wiring
         pusher = FtcHardware.servo(hardwareMap, HW_PUSHER, false);
@@ -120,7 +122,7 @@ public final class TeleOpSimple extends OpMode {
 
         // Pusher control: A extend, B retract
         bindings.onPress(
-                driverKit.p1().buttonA(),
+                gamepads.p1().buttonA(),
                 new Runnable() {
                     @Override
                     public void run() {
@@ -130,7 +132,7 @@ public final class TeleOpSimple extends OpMode {
         );
 
         bindings.onPress(
-                driverKit.p1().buttonB(),
+                gamepads.p1().buttonB(),
                 new Runnable() {
                     @Override
                     public void run() {
@@ -140,7 +142,7 @@ public final class TeleOpSimple extends OpMode {
         );
 
         // Feeder forward while left trigger is past threshold
-        Button feedForwardButton = driverKit.p1().leftTriggerOver(FEED_TRIGGER_THRESHOLD);
+        Button feedForwardButton = gamepads.p1().leftTrigger().asButton(FEED_TRIGGER_THRESHOLD);
         bindings.whileHeld(
                 feedForwardButton,
                 new Runnable() {
@@ -159,7 +161,7 @@ public final class TeleOpSimple extends OpMode {
 
         // Feeder reverse while right bumper held
         bindings.whileHeld(
-                driverKit.p1().rightBumper(),
+                gamepads.p1().rightBumper(),
                 new Runnable() {
                     @Override
                     public void run() {
@@ -176,7 +178,7 @@ public final class TeleOpSimple extends OpMode {
 
         // Shooter toggle on X
         bindings.toggle(
-                driverKit.p1().buttonX(),
+                gamepads.p1().buttonX(),
                 new java.util.function.Consumer<Boolean>() {
                     @Override
                     public void accept(Boolean on) {

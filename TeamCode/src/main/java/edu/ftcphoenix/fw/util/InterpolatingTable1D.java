@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
 
+import edu.ftcphoenix.fw.debug.DebugSink;
+
 /**
  * Simple immutable 1D lookup table with linear interpolation.
  *
@@ -286,8 +288,14 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
 
     /**
      * Emit a small summary of this table (size and range).
+     *
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
+     * @param prefix base key prefix, e.g. "lookup.shooterRpm"
      */
     public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
         String p = (prefix == null || prefix.isEmpty()) ? "table" : prefix;
         int n = xs.length;
         dbg.addData(p + ".size", n)

@@ -1,8 +1,8 @@
 package edu.ftcphoenix.fw.sensing;
 
 import edu.ftcphoenix.fw.core.PidController;
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
-import edu.ftcphoenix.fw.util.DebugSink;
 import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
@@ -17,9 +17,11 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *
  * <p>It does <strong>not</strong> know or care how the bearing was measured
  * (AprilTags, other vision targets, synthetic sources, etc.). That wiring is
- * handled elsewhere (for example, by {@code TagAim} helpers).
+ * handled elsewhere (for example, by {@code TagAim} helpers or
+ * {@link edu.ftcphoenix.fw.drive.source.TagAimDriveSource}).
  *
  * <h2>Typical usage</h2>
+ *
  * <pre>{@code
  * BearingSource bearing = ...;  // e.g., built from AprilTagSensor
  * PidController pid = ...;     // your PID implementation/config
@@ -28,7 +30,8 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *         pid,
  *         Math.toRadians(1.0),                 // deadband: 1 degree
  *         0.8,                                 // max omega
- *         TagAimController.LossPolicy.ZERO_OUTPUT_RESET_I);
+ *         TagAimController.LossPolicy.ZERO_OUTPUT_RESET_I
+ * );
  *
  * // In your TeleOp or Auto loop:
  * BearingSample sample = bearing.sample(clock);
@@ -42,27 +45,39 @@ public final class TagAimController {
      */
     public enum LossPolicy {
         /**
-         * Set output omega to zero and reset the underlying PID state.
+         * Set output omega to zero and reset the PID integral state.
          *
-         * <p>This is a safe default for TeleOp: as soon as the target is lost,
-         * the robot stops turning and the controller forgets any accumulated
-         * integral error.
+         * <p>
+         * This is the safest default for most robots: when vision loses the
+         * target, aiming immediately stops and any accumulated integral term
+         * is cleared so that it does not cause a large jump when the target
+         * reappears.
+         * </p>
          */
         ZERO_OUTPUT_RESET_I,
 
         /**
          * Hold the last computed omega and prevent further integral accumulation.
          *
-         * <p>Useful when you want aiming to coast briefly through short vision
-         * dropouts, but do not want integral windup.
+         * <p>
+         * Useful when you want aiming to coast briefly through short vision
+         * dropouts, but do not want integral windup during the loss. While the
+         * target is lost, {@link #update(LoopClock, BearingSample)} does not
+         * call {@link PidController#update(double, double)}, so no further
+         * integral or derivative updates occur.
+         * </p>
          */
         HOLD_LAST_NO_I,
 
         /**
          * Set output omega to zero, but do not reset the PID.
          *
-         * <p>Can be useful if you expect the same target to reappear quickly
-         * and you want to keep accumulated integral state.
+         * <p>
+         * Can be useful if you expect the same target to reappear quickly and
+         * you want to keep accumulated integral state. During the loss window,
+         * output is zero, but the PID state is preserved for when the target
+         * comes back.
+         * </p>
          */
         ZERO_NO_RESET
     }
@@ -73,10 +88,6 @@ public final class TagAimController {
     private final LossPolicy lossPolicy;
 
     private double lastOmega = 0.0;
-
-    // For debugging:
-    private double lastErrorRad = 0.0;
-    private boolean lastHasTarget = false;
 
     /**
      * Construct a tag aim controller.
@@ -90,6 +101,21 @@ public final class TagAimController {
                             double deadbandRad,
                             double maxOmega,
                             LossPolicy lossPolicy) {
+        if (pid == null) {
+            throw new IllegalArgumentException("PidController is required");
+        }
+        if (lossPolicy == null) {
+            lossPolicy = LossPolicy.ZERO_OUTPUT_RESET_I;
+        }
+
+        // Interpret deadband and maxOmega as magnitudes.
+        if (deadbandRad < 0.0) {
+            deadbandRad = -deadbandRad;
+        }
+        if (maxOmega < 0.0) {
+            maxOmega = -maxOmega;
+        }
+
         this.pid = pid;
         this.deadbandRad = deadbandRad;
         this.maxOmega = maxOmega;
@@ -97,71 +123,99 @@ public final class TagAimController {
     }
 
     /**
-     * Update the controller for a new bearing sample.
+     * Update the controller based on a new bearing sample.
      *
-     * <p>This method applies the following logic:
-     * <ol>
-     *   <li>If the target is lost:
+     * <p>High-level behavior:</p>
+     * <ul>
+     *   <li>If {@code !sample.hasTarget}, apply the configured
+     *       {@link LossPolicy} and return the resulting {@code lastOmega}.</li>
+     *   <li>If {@code |bearing| < deadbandRad}, treat as on-target:
      *     <ul>
-     *       <li>Apply the configured {@link LossPolicy}.</li>
-     *       <li>Return the resulting {@code omega}.</li>
+     *       <li>Set {@code lastOmega = 0}.</li>
+     *       <li>Do <em>not</em> update the PID (no further integral/d-state).</li>
      *     </ul>
      *   </li>
      *   <li>Otherwise:
      *     <ul>
-     *       <li>Compute error = {@code bearingRad} (we want bearing → 0).</li>
-     *       <li>If {@code |error| < deadbandRad}, output zero.</li>
-     *       <li>Else, run the PID and clamp omega to [-maxOmega, +maxOmega].</li>
+     *       <li>Compute {@code error = bearingRad} (we want bearing → 0).</li>
+     *       <li>Call {@link PidController#update(double, double)} with
+     *           {@code (error, clock.dtSec())}.</li>
+     *       <li>Clamp the result to {@code [-maxOmega, +maxOmega]}.</li>
+     *       <li>Store and return the clamped value as {@code lastOmega}.</li>
      *     </ul>
      *   </li>
-     * </ol>
+     * </ul>
      *
-     * @param clock  loop clock for the current iteration (used for dtSec)
-     * @param sample current bearing sample from a {@link BearingSource}
+     * @param clock  loop timing source (for dt); must not be null
+     * @param sample latest bearing sample; must not be null
      * @return commanded turn rate omega, in [-maxOmega, +maxOmega]
      */
     public double update(LoopClock clock, BearingSample sample) {
-        double dtSec = clock.dtSec();
-        lastHasTarget = sample.hasTarget;
-
-        if (!sample.hasTarget) {
-            lastErrorRad = 0.0;
+        if (sample == null) {
+            // Treat "no sample" as equivalent to "no target".
             handleLoss();
             return lastOmega;
         }
 
-        double error = sample.bearingRad;
-        lastErrorRad = error;
+        double dtSec = clock.dtSec();
 
+        if (!sample.hasTarget) {
+            handleLoss();
+            return lastOmega;
+        }
+
+        double error = sample.bearingRad; // we want bearing → 0
+
+        // Inside deadband: treat as on-target; no turn command.
         if (Math.abs(error) < deadbandRad) {
             lastOmega = 0.0;
             return lastOmega;
         }
 
         double raw = pid.update(error, dtSec);
-        double clamped = MathUtil.clampAbs(raw, maxOmega);
-        lastOmega = clamped;
+        lastOmega = MathUtil.clamp(raw, -maxOmega, maxOmega);
         return lastOmega;
     }
 
     /**
      * Last commanded omega value.
      *
-     * <p>This can be useful for logging or for advanced loss policies that
-     * need to inspect the previous output.
+     * <p>This can be useful for logging or for advanced logic that wants to
+     * inspect the most recent controller output.</p>
      */
     public double getLastOmega() {
         return lastOmega;
     }
 
     /**
-     * Apply the configured loss policy when the target is not visible.
+     * @return configured deadband (radians).
+     */
+    public double getDeadbandRad() {
+        return deadbandRad;
+    }
+
+    /**
+     * @return configured maximum omega magnitude.
+     */
+    public double getMaxOmega() {
+        return maxOmega;
+    }
+
+    /**
+     * @return loss policy used when no target is visible.
+     */
+    public LossPolicy getLossPolicy() {
+        return lossPolicy;
+    }
+
+    /**
+     * Apply the configured loss policy (when no target is visible).
      */
     private void handleLoss() {
         switch (lossPolicy) {
             case ZERO_OUTPUT_RESET_I:
-                pid.reset();
                 lastOmega = 0.0;
+                pid.reset();
                 break;
 
             case HOLD_LAST_NO_I:
@@ -176,22 +230,31 @@ public final class TagAimController {
         }
     }
 
+    // ------------------------------------------------------------------------
+    // Debug support
+    // ------------------------------------------------------------------------
+
     /**
-     * Emit current aiming configuration and last update state.
+     * Emit controller configuration and last omega to the provided {@link DebugSink}.
      *
-     * @param dbg    debug sink (never null)
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
      * @param prefix base key prefix, e.g. "tagAim"
      */
     public void debugDump(DebugSink dbg, String prefix) {
-        String p = (prefix == null || prefix.isEmpty()) ? "tagAim" : prefix;
-        dbg.addLine(p)
-                .addData(p + ".deadbandRad", deadbandRad)
-                .addData(p + ".deadbandDeg", Math.toDegrees(deadbandRad))
-                .addData(p + ".maxOmega", maxOmega)
-                .addData(p + ".lossPolicy", lossPolicy.name())
-                .addData(p + ".lastHasTarget", lastHasTarget)
-                .addData(p + ".lastErrorRad", lastErrorRad)
-                .addData(p + ".lastErrorDeg", Math.toDegrees(lastErrorRad))
-                .addData(p + ".lastOmega", lastOmega);
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "tagAimCtrl" : prefix;
+
+        dbg.addLine(p + ": TagAimController");
+
+        // Static configuration.
+        dbg.addData(p + ".deadbandRad", deadbandRad);
+        dbg.addData(p + ".maxOmega", maxOmega);
+        dbg.addData(p + ".lossPolicy", lossPolicy.name());
+        dbg.addData(p + ".pid.class", pid.getClass().getSimpleName());
+
+        // Dynamic state.
+        dbg.addData(p + ".lastOmega", lastOmega);
     }
 }

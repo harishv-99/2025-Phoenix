@@ -1,6 +1,7 @@
 package edu.ftcphoenix.fw.drive;
 
 import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.debug.DebugSink;
 
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -51,17 +52,41 @@ public interface DriveSource {
     DriveSignal get(LoopClock clock);
 
     /**
+     * Optional debug hook: emit a compact summary of this source's state.
+     *
+     * <p>The default implementation only records the implementing class name.
+     * Concrete sources are encouraged to override this to include additional
+     * details such as last output, configuration parameters, and any internal
+     * filter/controller state.</p>
+     *
+     * <p>Framework classes consistently follow the pattern that if
+     * {@code dbg} is {@code null}, the method simply does nothing. This
+     * lets callers freely pass either a real sink or a {@code NullDebugSink}
+     * (or {@code null}) without having to guard every call.</p>
+     *
+     * @param dbg    debug sink to write to (may be {@code null})
+     * @param prefix key prefix for all entries (may be {@code null} or empty)
+     */
+    default void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
+        dbg.addData(p + ".class", getClass().getSimpleName());
+    }
+
+    /**
      * Return a new {@link DriveSource} that applies a uniform scale factor
      * to this source's output whenever {@code when} is true.
      *
-     * <p>This is a convenient way to implement \"slow mode\" or fine control
+     * <p>This is a convenient way to implement "slow mode" or fine control
      * that wraps any existing drive behavior (manual drive, tag aim, etc.).</p>
      *
      * <p>Example:</p>
      * <pre>{@code
-     * DriveSource manual = StickDriveSource.teleOpMecanum(driverKit);
+     * DriveSource manual = StickDriveSource.teleOpMecanum(gamepads);
      * DriveSource drive  = manual.scaledWhen(
-     *         () -> driverKit.p1().rightBumper().isPressed(),
+     *         () -> gamepads.p1().rightBumper().isPressed(),
      *         0.30);
      * }</pre>
      *
@@ -98,13 +123,13 @@ public interface DriveSource {
      *   <li>Values in-between produce a simple linear mix.</li>
      * </ul>
      *
-     * <p>This is useful for \"driver-assist\" behaviors, where you want to
+     * <p>This is useful for "driver-assist" behaviors, where you want to
      * mix manual control with an automatic behavior (e.g., auto-align) at
      * some fixed strength.</p>
      *
      * <p>Example:</p>
      * <pre>{@code
-     * DriveSource manual   = StickDriveSource.teleOpMecanum(driverKit);
+     * DriveSource manual   = StickDriveSource.teleOpMecanum(gamepads);
      * DriveSource autoAim  = TagAim.teleOpAim(manual, aimButton, tagSensor, ids);
      *
      * // 40% assist from autoAim, 60% from manual

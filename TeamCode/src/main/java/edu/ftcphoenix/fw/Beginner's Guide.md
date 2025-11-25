@@ -1,4 +1,4 @@
-# Phoenix FTC Beginner’s Guide
+# Phoenix FTC Beginner’s Guide (PhoenixRobot-based)
 
 This guide is for students who are **new to programming FTC robots** using the Phoenix framework.
 
@@ -7,681 +7,563 @@ The goal:
 > You focus on what the robot should do.
 > Phoenix handles the wiring, math, and boilerplate.
 
-You’ll learn how to:
+In this version of the guide, we standardize around **one central robot class** called `PhoenixRobot` and a few **thin OpModes** (TeleOp and Autos) that delegate to it.
 
-* Set up your project structure.
-* Use `PhoenixTeleOpBase` as your TeleOp base class.
-* Create a season-specific `PhoenixRobot` class for your robot.
-* Read gamepads using `Gamepads` and `DriverKit`.
-* Drive a mecanum robot with `Drives`, `MecanumDrivebase`, and `StickDriveSource`.
-* (Optional) Add AprilTag auto-aim with `Tags` and `TagAim`.
-* (Optional) Add simple mechanisms using `Plant` and `FtcPlants`.
+* All your real robot logic lives in **one place**: `PhoenixRobot`.
+* TeleOp and Auto OpModes are tiny wrappers that call into `PhoenixRobot`.
+* Under the hood, Phoenix uses:
 
-For tasks/macros and more advanced control, see:
-
-* **`Tasks & Macros Quickstart.md`** – non-blocking sequences and button-activated macros.
-* **`Stages & Tasks Quickstart - Shooter Case Study.md`** – staged control for things like shooters and buffers.
-* **`Framework Overview.md`** – bigger-picture tour of all packages.
+    * `Gamepads` + `Bindings` for inputs
+    * `DriveSource` / `DriveSignal` + `MecanumDrivebase` for driving
+    * `Plant` and helpers for mechanisms
+    * Optional **Tasks**, **TagAim**, and lookup tables for more advanced behavior.
 
 ---
 
-## 0. Big Picture: Who Does What?
+## 1. Project structure
 
-There are four main pieces you’ll work with:
+We recommend a simple, consistent project layout. You don’t have to use this, but it makes examples easier to share.
 
-1. **PhoenixTeleOpBase** (in `edu.ftcphoenix.fw.robot`)
+* **OpModes (thin shells)**
 
-    * Your TeleOp OpModes extend this base class.
-    * It wires:
+    * `org.firstinspires.ftc.teamcode.robots.phoenix.PhoenixTeleOp`
+    * `org.firstinspires.ftc.teamcode.robots.phoenix.PhoenixAutoClose`
+    * `org.firstinspires.ftc.teamcode.robots.phoenix.PhoenixAutoFar`
+    * `org.firstinspires.ftc.teamcode.robots.phoenix.PhoenixAutoTwelveBall`
 
-        * `Gamepads` → `DriverKit` → `Bindings`.
-        * A `LoopClock` for timing.
-    * It calls your robot-specific hooks:
+* **Robot logic (central class)**
 
-        * `onInitRobot()`
-        * `onStartRobot()`
-        * `onLoopRobot(double dtSec)`
-        * `onStopRobot()`
+    * `edu.ftcphoenix.robots.phoenix.PhoenixRobot`
 
-2. **Your PhoenixRobot class** (in your own package)
+* **Framework (do not edit in season unless you know what you’re doing)**
 
-    * Represents *your* robot for this season.
+    * `edu.ftcphoenix.fw.*`
 
-    * Knows about motors, servos, sensors, and subsystems.
+As a **student**, you will spend almost all your time in:
 
-    * Has methods like:
-
-      ```java
-      public final class PhoenixRobot {
-          public PhoenixRobot(HardwareMap hw,
-                              DriverKit driverKit,
-                              Telemetry telemetry) { ... }
- 
-          public void onTeleopInit() { ... }
-          public void onTeleopLoop(LoopClock clock) { ... }
- 
-          public void onAutoInit() { ... }
-          public void onAutoLoop(LoopClock clock) { ... }
- 
-          public void onStop() { ... }
-      }
-      ```
-
-    * TeleOp and Auto OpModes both delegate to this class.
-
-3. **Drive + input helpers**
-
-    * `Gamepads` + `DriverKit` – reading gamepads.
-    * `Drives` and `MecanumDrivebase` – drivebase wiring + holonomic math.
-    * `StickDriveSource` – mapping gamepad sticks → `DriveSource` for TeleOp.
-    * `Tags` and `TagAim` – optional helpers to aim at AprilTags.
-
-4. **Mechanism + task helpers (later)**
-
-    * `Plant` and `FtcPlants` – mechanisms (intake, lifts, shooters, etc.).
-    * `Task`, `TaskRunner`, `Tasks`, `PlantTasks`, `DriveTasks` – for timed/autonomous behaviors and macros.
-
-You mostly work in your own `robots.phoenix` package; the `fw.*` code is the framework.
+1. `PhoenixRobot` (the main brain)
+2. Occasionally the thin OpModes (to add new autos or rename them)
 
 ---
 
-## 1. Recommended Project Structure
+## 2. The core idea: PhoenixRobot + thin OpModes
 
-To keep big robots manageable, we recommend this structure:
+In the Phoenix pattern:
 
-* **OpMode shells** (thin, FTC-facing):
+* `PhoenixRobot` owns **everything** about your robot:
 
-    * Package: `org.firstinspires.ftc.teamcode.robots`
+    * hardware mapping
+    * gamepad input
+    * driving (mecanum, slow mode, auto-aim)
+    * mechanisms (intake, transfer, shooter, pusher)
+    * vision (AprilTags)
+    * macros and autos
 
-  Example:
+* TeleOp and Auto OpModes are very small and just call methods on `PhoenixRobot`.
 
-  ```text
-  org.firstinspires.ftc.teamcode.robots
-  ├─ PhoenixTeleOpMain.java
-  └─ PhoenixAutoMain.java
-  ```
-
-* **Robot implementation** (season-specific):
-
-    * Package: `edu.ftcphoenix.robots.phoenix` (or your own namespace)
-
-  Example:
-
-  ```text
-  edu.ftcphoenix.robots.phoenix
-  ├─ PhoenixRobot.java
-  └─ subsystems/
-     ├─ DriveSubsystem.java
-     ├─ ShooterSubsystem.java
-     └─ IntakeSubsystem.java
-  ```
-
-* **Framework** (don’t usually modify):
-
-    * Package: `edu.ftcphoenix.fw.*` – the Phoenix library:
-
-        * `fw.robot` – `PhoenixTeleOpBase`, `PhoenixAutoBase`, `Subsystem`.
-        * `fw.drive` – drivebases and drive sources.
-        * `fw.input` – gamepads, axes, buttons, `DriverKit`.
-        * `fw.sensing` – AprilTags and other sensors.
-        * `fw.actuation` – `Plant` and plant helpers.
-        * `fw.task` – tasks and macros.
-        * `fw.adapters.ftc` + `fw.hal` – hardware abstraction.
-
----
-
-## 2. TeleOp: The Minimal Phoenix Pattern
-
-### 2.1 Skeleton: TeleOp OpMode using PhoenixTeleOpBase
-
-A typical TeleOp looks like this:
+### 2.1 A thin TeleOp
 
 ```java
-package org.firstinspires.ftc.teamcode.robots;
-
-import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-
-import edu.ftcphoenix.fw.robot.PhoenixTeleOpBase;
-import edu.ftcphoenix.robots.phoenix.PhoenixRobot;
-
-@TeleOp(name = "Phoenix: Main TeleOp", group = "Phoenix")
-public final class PhoenixTeleOpMain extends PhoenixTeleOpBase {
-
-    private PhoenixRobot robot;
+@TeleOp(name = "Phoenix TeleOp", group = "Phoenix")
+public final class PhoenixTeleOp extends OpMode {
+    private final PhoenixRobot robot = new PhoenixRobot();
 
     @Override
-    protected void onInitRobot() {
-        // PhoenixTeleOpBase has already created:
-        // - Gamepads
-        // - DriverKit
-        // - Bindings
-        // - LoopClock
-
-        robot = new PhoenixRobot(
-                hardwareMap,
-                driverKit(),   // from base class
-                telemetry);
-        robot.onTeleopInit();
+    public void init() {
+        robot.initHardware(hardwareMap, telemetry, gamepad1, gamepad2);
     }
 
     @Override
-    protected void onStartRobot() {
-        // Called once after the referee presses Play.
-        // Optional; leave empty if not needed.
+    public void start() {
+        robot.startTeleOp(getRuntime());
     }
 
     @Override
-    protected void onLoopRobot(double dtSec) {
-        // Called every loop after gamepads + bindings are updated.
-        robot.onTeleopLoop(clock());
-    }
-
-    @Override
-    protected void onStopRobot() {
-        robot.onStop();
+    public void loop() {
+        robot.loopTeleOp(getRuntime());
     }
 }
 ```
 
-Notes:
+Notice how **simple** this class is. The only state it owns is a `PhoenixRobot`.
 
-* `PhoenixTeleOpBase` handles:
+### 2.2 A thin Autonomous
 
-    * Creating `Gamepads` and `DriverKit`.
-    * Updating them every loop.
-    * Updating `Bindings` (for button-based macros).
-    * Maintaining a `LoopClock`.
-* You focus on:
+```java
+@Autonomous(name = "Phoenix Auto Close", group = "Phoenix")
+public final class PhoenixAutoClose extends LinearOpMode {
+    private final PhoenixRobot robot = new PhoenixRobot();
 
-    * Constructing `PhoenixRobot` in `onInitRobot()`.
-    * Calling its per-loop method in `onLoopRobot(...)`.
+    @Override
+    public void runOpMode() throws InterruptedException {
+        robot.initHardware(hardwareMap, telemetry, gamepad1, gamepad2);
+
+        waitForStart();
+        double t0 = getRuntime();
+        robot.startAuto(t0, PhoenixRobot.AutoMode.CLOSE);
+
+        while (opModeIsActive()) {
+            robot.loopAuto(getRuntime(), PhoenixRobot.AutoMode.CLOSE);
+        }
+    }
+}
+```
+
+Other autos (far side, 12-ball, etc.) look the same, but pass different `AutoMode` values.
 
 ---
 
-## 3. PhoenixRobot: One Class for Your Whole Robot
+## 3. PhoenixRobot: the one class students care about
 
-Here’s a minimal `PhoenixRobot` with only drive:
+`PhoenixRobot` is where you:
+
+* wire hardware
+* define button mappings
+* implement drive logic
+* implement auto-aim and shooter behavior
+* implement macros and autos
+
+A typical `PhoenixRobot` has these sections:
 
 ```java
-package edu.ftcphoenix.robots.phoenix;
-
-import com.qualcomm.robotcore.hardware.HardwareMap;
-
-import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
-import edu.ftcphoenix.fw.input.DriverKit;
-import edu.ftcphoenix.fw.util.LoopClock;
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-
 public final class PhoenixRobot {
+    // 1) Public AutoMode enum
+    public enum AutoMode { CLOSE, FAR, TWELVE_BALL }
 
-    // --- Drive hardware names (match your configuration) ---
-    private static final String HW_FL = "frontLeft";
-    private static final String HW_FR = "frontRight";
-    private static final String HW_BL = "backLeft";
-    private static final String HW_BR = "backRight";
+    // 2) FTC wiring: HardwareMap, Telemetry, Gamepads, Bindings, Clock
+    private HardwareMap hardwareMap;
+    private Telemetry telemetry;
+    private Gamepads gamepads;
+    private Bindings bindings;
+    private final LoopClock clock = new LoopClock();
 
-    // --- Framework plumbing ---
-    private final Telemetry telemetry;
+    // 3) Drive: mecanum + drive sources
+    private MecanumDrivebase drivebase;
+    private DriveSource manualDrive;    // sticks + slow mode
+    private DriveSource driveWithAim;   // manualDrive wrapped with TagAim
 
-    // --- Drive ---
-    private final MecanumDrivebase drivebase;
-    private DriveSource driveSource;
+    // 4) Mechanisms as Plants
+    private Plant intake;
+    private Plant transfer;
+    private Plant shooter;
+    private Plant pusher;
 
-    public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-        this.telemetry = telemetry;
+    // 5) Task runners
+    private final TaskRunner macroRunner = new TaskRunner();
+    private final TaskRunner autoRunner  = new TaskRunner();
 
-        // 1) Build the mecanum drivebase (holonomic math + motor wiring)
-        this.drivebase = Drives
-                .mecanum(hw)
-                .names(HW_FL, HW_FR, HW_BL, HW_BR)
-                .invertFrontRight() // typical wiring; adjust for your robot
-                .invertBackRight()
-                .build();
+    // 6) Vision + auto-aim
+    private AprilTagSensor tagSensor;
+    // private InterpolatingTable1D shooterLookup; // optional
 
-        // 2) Create a TeleOp drive source: P1 sticks, with slow mode on right bumper
-        this.driveSource = StickDriveSource.teleOpMecanumWithSlowMode(
-                driverKit,
-                driverKit.p1().rightBumper(), // hold for slow mode
-                0.30                          // 30% speed in slow mode
-        );
-    }
+    // 7) Constructor
+    public PhoenixRobot() { }
 
-    // ---------------------------------------------------------------------
-    // TeleOp lifecycle
-    // ---------------------------------------------------------------------
-
-    public void onTeleopInit() {
-        telemetry.addLine("PhoenixRobot: TeleOp init complete");
-        telemetry.update();
-    }
-
-    public void onTeleopLoop(LoopClock clock) {
-        // 1) Get the drive command for this loop
-        DriveSignal cmd = driveSource.get(clock);
-
-        // 2) Apply it to the drivebase
-        drivebase.drive(cmd);
-
-        // 3) Push basic drive telemetry (optional)
-        telemetry.addData("Drive", "axial=%.2f lateral=%.2f omega=%.2f",
-                cmd.axial, cmd.lateral, cmd.omega);
-        telemetry.update();
-    }
-
-    public void onStop() {
-        // Stop the drive and any mechanisms on disable
-        drivebase.drive(DriveSignal.ZERO);
-        telemetry.addLine("PhoenixRobot: stopped");
-        telemetry.update();
-    }
+    // 8) initHardware / startTeleOp / loopTeleOp / startAuto / loopAuto
 }
 ```
 
-This is your “Hello TeleOp” Phoenix robot:
-
-* Uses `Drives` to build a mecanum drivebase.
-* Uses `StickDriveSource.teleOpMecanumWithSlowMode(...)` to map gamepad sticks → `DriveSource`.
-* Each loop:
-
-    * `driveSource.get(clock)` produces a `DriveSignal`.
-    * `drivebase.drive(signal)` drives the robot.
-
-Later, you can evolve `PhoenixRobot` into:
-
-* A set of subsystems (implementing `Subsystem`).
-* A robot that can be used by both `PhoenixTeleOpBase` and `PhoenixAutoBase`.
+The **important idea** is: **all behavior is here**, not scattered across multiple base classes or subsystems.
 
 ---
 
-## 4. Inputs: Gamepads and DriverKit
+## 4. initHardware: wiring the robot once
 
-Phoenix wraps the raw FTC gamepads into a small input layer:
-
-* `Gamepads` – samples `gamepad1` / `gamepad2` from the SDK once per loop.
-* `DriverKit` – gives you a *named* view of player inputs:
-
-    * `driverKit.p1().leftStickX()` instead of `gamepad1.left_stick_x`.
-    * `driverKit.p2().rightTrigger()` instead of `gamepad2.right_trigger`.
-* `Button` / `Axis` – represent logical buttons/axes and are used by higher-level code.
-
-In `PhoenixTeleOpBase`:
-
-* `Gamepads`, `DriverKit`, `Bindings`, and `LoopClock` are constructed for you.
-* You can access them via protected helpers:
-
-  ```java
-  protected DriverKit driverKit() { ... }  // full DriverKit
-  protected DriverKit.Player p1() { ... }  // primary driver
-  protected DriverKit.Player p2() { ... }  // secondary driver
-  protected Bindings bind() { ... }        // for macros (later)
-  protected LoopClock clock() { ... }      // timing helper
-  ```
-
-In your `PhoenixRobot`, you usually pass in the `DriverKit` from the TeleOp base and keep it in fields or build drive sources directly.
-
----
-
-## 5. Driving: DriveSignal + DriveSource + MecanumDrivebase
-
-The Phoenix drive stack is:
-
-```text
-DriverKit (gamepad inputs)
-          │
-          ▼
-StickDriveSource  ──►  DriveSource  ──►  DriveSignal  ──►  MecanumDrivebase.drive(...)
-                                                (axial, lateral, omega)
-```
-
-### 5.1 DriveSignal: blendable drive commands
-
-`DriveSignal` is a simple data class:
+`initHardware` is called from both TeleOp and Auto `init()`.
 
 ```java
-public final class DriveSignal {
-    public final double axial;
-    public final double lateral;
-    public final double omega;
-
-    // Common helpers:
-    public DriveSignal scaled(double scale) { ... }
-    public DriveSignal clamped() { ... }
-
-    // New helpers to make it easy to mix commands:
-    public DriveSignal plus(DriveSignal other) { ... }
-    public DriveSignal lerp(DriveSignal other, double alpha) { ... }
-
-    public static final DriveSignal ZERO = new DriveSignal(0, 0, 0);
-}
-```
-
-Conceptually:
-
-* `scaled(s)` – “shrink or grow the whole command” (used by slow mode).
-* `plus(other)` – “combine two commands” (for example, driver input + auto correction).
-* `lerp(other, t)` – “blend between A and B”:
-
-    * `t = 0.0` → pure A,
-    * `t = 1.0` → pure B,
-    * `0 < t < 1` → smooth mix.
-
-Phoenix uses these helpers internally, and more advanced examples can use them directly when you mix driver control with auto behaviors.
-
-### 5.2 DriveSource: “how to decide the DriveSignal”
-
-`DriveSource` is an interface:
-
-```java
-public interface DriveSource {
-    DriveSignal get(LoopClock clock);
-
-    // Optional helpers for composition
-    default DriveSource scaledWhen(BooleanSupplier when, double scale) { ... }
-
-    default DriveSource blendedWith(DriveSource other, double alpha) { ... }
-}
-```
-
-You can think of `DriveSource` as:
-
-> “Anything that decides what the drive command should be this loop.”
-
-Some examples:
-
-* `StickDriveSource.teleOpMecanum(...)` – pure TeleOp sticks.
-* `TagAim.teleOpAim(...)` – wraps a base drive to add AprilTag auto-aim on a button.
-* (Later) trajectory followers, heading hold, auto-alignment helpers, etc.
-
-The default methods:
-
-* `scaledWhen(when, scale)` – apply slow-mode-style scaling to whatever this source outputs, but only if `when.getAsBoolean()` is true.
-* `blendedWith(other, alpha)` – blend this source’s output with another source, using `DriveSignal.lerp(...)`. This is useful for “driver assist” behaviors.
-
-For beginners, you don’t need to *implement* `DriveSource`, you just use the factories and helpers provided by `StickDriveSource` and `TagAim`.
-
-### 5.3 StickDriveSource TeleOp helpers
-
-For beginners, you only need to remember these two static factories:
-
-```java
-// P1: standard robot-centric mecanum
-StickDriveSource teleOpMecanum(DriverKit kit)
-
-// P1: mecanum with a slow-mode button
-StickDriveSource teleOpMecanumWithSlowMode(
-        DriverKit kit,
-        Button slowButton,
-        double slowScale)
-```
-
-Example:
-
-```java
-this.driveSource = StickDriveSource.teleOpMecanumWithSlowMode(
-        driverKit,
-        driverKit.p1().rightBumper(), // hold for precision driving
-        0.30);
-```
-
-Internally, `StickDriveSource` handles:
-
-* Reading the sticks from `DriverKit`.
-* Deadband.
-* Optional shaping (exponent) near center.
-* Mapping the sticks to `(axial, lateral, omega)`.
-
-Your TeleOp code stays clean and high-level.
-
-### 5.4 MecanumDrivebase
-
-`MecanumDrivebase`:
-
-* Knows how to convert `(axial, lateral, omega)` to power commands for the four mecanum motors.
-* Encapsulates the details of motor inversion / scaling.
-
-You build it through the `Drives` factory:
-
-```java
-this.drivebase = Drives
-        .mecanum(hw)
-        .names(HW_FL, HW_FR, HW_BL, HW_BR)
-        .invertFrontRight()
-        .invertBackRight()
-        .build();
-```
-
-Each loop you just call:
-
-```java
-DriveSignal cmd = driveSource.get(clock);
-drivebase.drive(cmd);
-```
-
----
-
-## 6. Adding AprilTag Auto-Aim (Optional)
-
-Once your robot drives well, you can add AprilTag-based auto-aim.
-
-The Phoenix sensing stack for tags:
-
-```text
-VisionPortal / camera (FTC SDK)
-         │
-         ▼
-FtcVision + Tags.aprilTags(...) ──► AprilTagSensor
-         │
-         ▼
-TagAim.teleOpAim(...) ──► DriveSource (wraps your existing drive)
-```
-
-### 6.1 Getting an AprilTagSensor
-
-In your `PhoenixRobot`:
-
-```java
-import edu.ftcphoenix.fw.adapters.ftc.FtcVision;
-import edu.ftcphoenix.fw.sensing.AprilTagSensor;
-import edu.ftcphoenix.fw.sensing.Tags;
-
-// ...
-
-private static final String HW_WEBCAM = "Webcam 1";
-
-private final AprilTagSensor tagSensor;
-
-public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-    this.telemetry = telemetry;
-
-    // Drivebase as before...
-    this.drivebase = Drives
-            .mecanum(hw)
-            .names(HW_FL, HW_FR, HW_BL, HW_BR)
-            .invertFrontRight()
-            .invertBackRight()
-            .build();
-
-    // Build the tag sensor using the FTC VisionPortal setup
-    this.tagSensor = Tags.aprilTags(
-            hw,
-            HW_WEBCAM,
-            FtcVision.defaultTagProcessorConfig());
-}
-```
-
-(Your actual `FtcVision` helper may differ; see the sensing docs or examples for exact usage.)
-
-### 6.2 Wrapping your drive with TagAim
-
-Once you have:
-
-* A `DriveSource` from `StickDriveSource`.
-* An `AprilTagSensor` from `Tags.aprilTags(...)`.
-
-You can wrap the manual drive with tag-based auto-aim:
-
-```java
-import edu.ftcphoenix.fw.sensing.TagAim;
-
-private DriveSource driveSource;
-
-public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-    // ... drivebase and tagSensor wiring ...
-
-    DriveSource manual = StickDriveSource.teleOpMecanumWithSlowMode(
-            driverKit,
-            driverKit.p1().rightBumper(),
-            0.30);
-
-    // IDs of the tags you care about (example)
-    java.util.Set<Integer> scoringTagIds = java.util.Set.of(1, 2, 3);
-
-    // Hold left bumper to auto-aim; otherwise, pure manual control
-    this.driveSource = TagAim.teleOpAim(
-            manual,
-            driverKit.p1().leftBumper(),
-            tagSensor,
-            scoringTagIds);
-}
-```
-
-Behavior:
-
-* **No buttons pressed**: pure mecanum stick drive.
-* **Right bumper held**: slow mode scaling for precise movement.
-* **Left bumper held**: robot rotates to face the nearest matching AprilTag while still using the driver’s axial/lateral commands.
-
-Because `DriveSource` is composable, you could further wrap this with `scaledWhen(...)` or `blendedWith(...)` for more advanced behaviors, but that’s optional.
-
----
-
-## 7. Adding a Simple Mechanism (Plant) – Optional First Steps
-
-Phoenix uses **plants** to represent mechanisms like intakes, arms, and shooters.
-
-* `Plant` – “something that accepts a target and updates each loop”.
-* `FtcPlants` – helpers that build plants from FTC hardware (`DcMotorEx`, `Servo`, etc.).
-* `PlantTasks` – higher-level patterns (e.g., “hold this power for 0.7 seconds”).
-
-For your very first TeleOp, you can simply:
-
-* Use raw FTC motors/servos **or**
-* Start with a simple plant.
-
-Example: an intake motor controlled by button A:
-
-```java
-import com.qualcomm.robotcore.hardware.DcMotorEx;
-import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
-
-// in PhoenixRobot:
-
-private static final String HW_INTAKE = "intake";
-
-private final Plant intake;
-private final DriverKit driverKit;
-
-public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
-    this.telemetry = telemetry;
-    this.driverKit = driverKit;
-
-    // ... drive wiring ...
-
-    // Build a simple “power-only” plant for the intake
-    DcMotorEx intakeMotor = hw.get(DcMotorEx.class, HW_INTAKE);
-    this.intake = FtcPlants.powerOnly(intakeMotor);
-}
-
-public void onTeleopLoop(LoopClock clock) {
-    // Drive as before...
-    DriveSignal cmd = driveSource.get(clock);
-    drivebase.drive(cmd);
-
-    // Simple intake control: button A to run, otherwise stop
-    double intakePower = driverKit.p1().a().isPressed() ? +1.0 : 0.0;
-    intake.setTarget(intakePower);
-    intake.update(clock);
-
-    telemetry.addData("IntakePower", "%.2f", intakePower);
+public void initHardware(HardwareMap hw,
+                         Telemetry tel,
+                         Gamepad gp1,
+                         Gamepad gp2) {
+    this.hardwareMap = hw;
+    this.telemetry   = tel;
+
+    initInputs(gp1, gp2);
+    initDrive();
+    initMechanisms();
+    initVision();
+    wireBindings();
+
+    telemetry.addLine("PhoenixRobot: initHardware complete");
     telemetry.update();
 }
 ```
 
-This keeps the pattern consistent: plants get:
+We split it into small helpers for clarity.
 
-* a `setTarget(...)`, and
-* an `update(clock)` call each loop.
+### 4.1 Inputs: Gamepads + Bindings
 
-Later, you can replace simple power plants with PID plants, setpoint controllers, interpolation tables, and tasks.
+```java
+private void initInputs(Gamepad gp1, Gamepad gp2) {
+    gamepads = Gamepads.create(gp1, gp2);
+    bindings = new Bindings();
+}
+```
+
+* `Gamepads` is a small wrapper that normalizes stick directions, handles calibration, etc.
+* `Bindings` lets you say things like:
+
+    * "when I press A, run this macro"
+    * "while held, do X; otherwise do Y"
+    * "toggle this boolean every time I press X"
+
+### 4.2 Drive: mecanum, slow mode, and rate limiting
+
+We recommend using the **builder** and the **stick mapping helper**:
+
+```java
+private void initDrive() {
+    drivebase = Drives
+            .mecanum(hardwareMap)
+            .names("fl", "fr", "bl", "br")   // standard naming
+            .invertFrontRight()
+            .invertBackRight()
+            .build();
+
+    // Base TeleOp drive: sticks + slow mode on right bumper.
+    DriveSource sticks = StickDriveSource.teleOpMecanumWithSlowMode(
+            gamepads,
+            gamepads.p1().rightBumper(),
+            0.30   // slow mode scale: 30% speed
+    );
+
+    manualDrive = sticks;
+}
+```
+
+**Rate filtering:**
+
+* `StickDriveSource.teleOpMecanumWithSlowMode(...)` internally wraps the raw stick mapping in a **rate-limited drive source**.
+* The lateral axis (strafing) is automatically smoothed.
+* You don’t have to do anything special in your code to get this behavior.
+
+### 4.3 Vision and TagAim (optional but powerful)
+
+You can layer **auto-aim** on top of the manual drive using `TagAim`:
+
+```java
+private static final Set<Integer> SCORING_TAGS = Set.of(1, 2, 3);
+
+private void initVision() {
+    tagSensor = Tags.aprilTags(hardwareMap, "Webcam 1");
+
+    // Wrap manual drive with TagAim: while LB is held, robot auto-aims.
+    driveWithAim = TagAim.teleOpAim(
+            manualDrive,
+            gamepads.p1().leftBumper(),
+            tagSensor,
+            SCORING_TAGS
+    );
+}
+```
+
+During TeleOp, you’ll usually drive with `driveWithAim`:
+
+```java
+private void updateTeleOpDrive() {
+    DriveSignal cmd = driveWithAim.get(clock).clamped();
+    drivebase.drive(cmd);
+}
+```
+
+* When **left bumper is not held**, `driveWithAim` behaves just like `manualDrive`.
+* When **left bumper is held**, `driveWithAim` adjusts the rotation to align with the best scoring tag.
 
 ---
 
-## 8. Where to Go Next
+## 5. Mechanisms as Plants
 
-Once your TeleOp robot:
+Mechanisms (intake, transfer, shooter, pusher) are modeled as `Plant`s.
 
-* drives via `StickDriveSource` + `MecanumDrivebase`,
-* optionally aims using `TagAim.teleOpAim(...)`, and
-* controls one or two mechanisms,
+* A `Plant` is a setpoint-driven mechanism with methods:
 
-you’re ready for the next layers:
+    * `setTarget(double target)`
+    * `update(double dtSec)`
+    * `boolean atSetpoint()`
+    * `double getTarget()`
 
-1. **Tasks and macros**
-   *File:* `Tasks & Macros Quickstart.md`
-   Learn how to create non-blocking sequences using `Task`, `TaskRunner`, `Tasks`, `DriveTasks`, and `PlantTasks`.
-   Example: “Press Y to auto-shoot 3 discs, then stop, while still allowing manual driving.”
+### 5.1 Wiring basic Plants
 
-2. **Stages and advanced shooters**
-   *File:* `Stages & Tasks Quickstart - Shooter Case Study.md`
-   See how stages help you structure more complex control flows like buffer + shooter velocity + indexing.
+```java
+private void initMechanisms() {
+    // Intake: open-loop power
+    intake = FtcPlants.power(hardwareMap, "intake", /*inverted=*/false);
 
-3. **Framework overview and principles**
-   *Files:*
+    // Transfer/indexer: open-loop power
+    transfer = FtcPlants.power(hardwareMap, "transfer", false);
 
-    * `Framework Overview.md` – tour of all packages and how they fit.
-    * `Framework Principles.md` – design philosophy and rationale.
+    // Shooter: velocity pair (left + right motors)
+    shooter = FtcPlants.velocityPair(
+            hardwareMap,
+            "shooterL",
+            "shooterR",
+            /*invertLeft=*/false,
+            /*invertRight=*/true,
+            /*ticksPerRev=*/28.0   // tune to your hardware
+    );
+
+    // Pusher: positional servo (0..1)
+    pusher = FtcPlants.servoPosition(hardwareMap, "pusher", false);
+}
+```
+
+### 5.2 Updating Plants each loop
+
+In TeleOp and Auto loops, you’ll typically:
+
+1. Decide your targets (based on buttons, tasks, or autos).
+2. Call `setTarget(...)` as needed.
+3. Call `update(dtSec)` once per loop.
+
+For example, a very simple TeleOp intake control:
+
+```java
+private void updateMechanisms(double dtSec) {
+    // Update any macros first
+    macroRunner.update(clock);
+
+    if (!macroRunner.hasActiveTask()) {
+        // Manual intake on right trigger when no macro is running
+        double intakePower = gamepads.p1().rightTrigger().get(); // 0..1
+        intake.setTarget(intakePower);
+    }
+
+    // Update all plants once
+    intake.update(dtSec);
+    transfer.update(dtSec);
+    shooter.update(dtSec);
+    pusher.update(dtSec);
+}
+```
+
+Later, you can replace the simple `intake.setTarget` logic with **macros** built from `PlantTasks` and `TaskRunner`.
 
 ---
 
-## 9. Cheat Sheet: Names Beginners Should Remember
+## 6. Buttons and Bindings
 
-To keep things simple, here’s the short list of names you should know in the first couple of weeks:
+All your **button mappings** live in one place: `wireBindings()`.
 
-**Robot + OpMode**
+```java
+private void wireBindings() {
+    // Shooter: A = shoot, B = stop (very simple to start)
+    bindings.onPress(
+            gamepads.p1().buttonA(),
+            new Runnable() {
+                @Override
+                public void run() {
+                    // Example: set shooter target to SHOOT_RPM
+                    // shooter.setTarget(shootRpmRadPerSec);
+                }
+            }
+    );
 
-* `PhoenixTeleOpBase`
-* `PhoenixAutoBase` (later)
-* Your `PhoenixRobot` class
-* Optional `Subsystem` classes
+    bindings.onPress(
+            gamepads.p1().buttonB(),
+            new Runnable() {
+                @Override
+                public void run() {
+                    // Stop shooter
+                    // shooter.setTarget(0.0);
+                }
+            }
+    );
 
-**Inputs**
+    // Intake macro on X (e.g., intake forward for 0.7 s)
+    bindings.onPress(
+            gamepads.p1().buttonX(),
+            new Runnable() {
+                @Override
+                public void run() {
+                    // startIntakePulseForward();
+                }
+            }
+    );
 
-* `Gamepads`
-* `DriverKit` (and `DriverKit.Player` via `p1()` / `p2()`)
+    // Fire one ring on Y (pusher + transfer + shooter ready)
+    bindings.onPress(
+            gamepads.p1().buttonY(),
+            new Runnable() {
+                @Override
+                public void run() {
+                    // fireOneRing();
+                }
+            }
+    );
+}
+```
 
-**Drive**
+In `loopTeleOp`, you always call:
 
-* `Drives`
-* `MecanumDrivebase`
-* `DriveSignal`
-* `DriveSource`
-* `StickDriveSource.teleOpMecanum(...)`
-* `StickDriveSource.teleOpMecanumWithSlowMode(...)`
-* `TagAim.teleOpAim(...)`
+```java
+private void updateInputs(double dtSec) {
+    gamepads.update(dtSec);   // stick sampling (future: filters)
+    bindings.update(dtSec);   // press/held/release/toggle logic
+}
+```
 
-**Sensing (optional early)**
+This pattern makes the TeleOp loop very regular and easy to read.
 
-* `Tags.aprilTags(...)`
-* `AprilTagSensor`
+---
 
-**Mechanisms (optional early)**
+## 7. TeleOp and Auto loops inside PhoenixRobot
 
-* `Plant`
-* `FtcPlants`
+### 7.1 TeleOp
 
-If you can comfortably use these types, you already understand most of the Phoenix “beginner surface”. The rest of the framework builds on top of the same patterns.
+```java
+public void startTeleOp(double runtimeSec) {
+    clock.reset(runtimeSec);
+    macroRunner.clear();
+    autoRunner.clear();
+    // Set any TeleOp-specific initial goals here (e.g., shooter off)
+}
+
+public void loopTeleOp(double runtimeSec) {
+    clock.update(runtimeSec);
+    double dtSec = clock.dtSec();
+
+    updateInputs(dtSec);
+    updateTeleOpDrive();
+    updateMechanisms(dtSec);
+    updateTeleOpVisionAndShooter(dtSec);
+    updateTelemetry();
+}
+```
+
+### 7.2 Auto
+
+Autos use the same robot, just in a different mode:
+
+```java
+public void startAuto(double runtimeSec, AutoMode mode) {
+    clock.reset(runtimeSec);
+    macroRunner.clear();
+    autoRunner.clear();
+
+    // Build your autonomous script here based on mode
+    // e.g. enqueue Tasks into autoRunner
+}
+
+public void loopAuto(double runtimeSec, AutoMode mode) {
+    clock.update(runtimeSec);
+    double dtSec = clock.dtSec();
+
+    updateInputs(dtSec);    // often minimal in auto but safe to call
+    updateAutoScript(dtSec, mode);
+    updateTelemetry();
+}
+```
+
+`updateAutoScript` is where you’ll use **Tasks** and **TaskRunner** to define sequences like:
+
+* Drive to pick up rings
+* Spin up shooter
+* Fire N rings
+* Park in a specific spot
+
+---
+
+## 8. Auto-aim and auto shooter velocity (advanced)
+
+Once you’re comfortable with basic TeleOp, you can enable more advanced behaviors **without** changing your overall structure.
+
+### 8.1 Auto-aim using TagAim
+
+We already saw how `driveWithAim` wraps your manual drive. You don’t need to change your TeleOp loop; just drive with `driveWithAim`.
+
+In `initVision`:
+
+```java
+private void initVision() {
+    tagSensor = Tags.aprilTags(hardwareMap, "Webcam 1");
+
+    driveWithAim = TagAim.teleOpAim(
+            manualDrive,
+            gamepads.p1().leftBumper(),
+            tagSensor,
+            SCORING_TAGS
+    );
+}
+```
+
+In `updateTeleOpDrive`:
+
+```java
+private void updateTeleOpDrive() {
+    DriveSignal cmd = driveWithAim.get(clock).clamped();
+    drivebase.drive(cmd);
+}
+```
+
+That’s it: hold LB to aim.
+
+### 8.2 Auto shooter velocity with a lookup table
+
+You can use `InterpolatingTable1D` to map distance to target velocity.
+
+Conceptually:
+
+```java
+private InterpolatingTable1D shooterLookup;
+
+private void initShooterLookup() {
+    double[] distancesIn = {24, 30, 36, 42};
+    double[] rpm         = {3000, 3200, 3400, 3600};
+    shooterLookup = new InterpolatingTable1D(distancesIn, rpm);
+}
+
+private void updateTeleOpVisionAndShooter(double dtSec) {
+    AprilTagObservation obs = tagSensor.best(SCORING_TAGS, 0.3);
+    if (!obs.hasTarget) {
+        return; // keep current shooter target
+    }
+
+    double rangeIn = obs.rangeInches;
+    double targetRpm = shooterLookup.interpolate(rangeIn);
+
+    double targetRadPerSec = Units.rpmToRadPerSec(targetRpm);
+    shooter.setTarget(targetRadPerSec);
+}
+```
+
+The exact details will depend on your field and shooter, but the pattern stays the same.
+
+---
+
+## 9. Debugging with debugDump (optional)
+
+Phoenix includes a lightweight `DebugSink` interface so you can print structured debug information from core classes without manually writing a lot of telemetry code.
+
+* Many core classes implement `debugDump(DebugSink dbg, String prefix)`:
+
+    * `LoopClock`
+    * `MecanumDrivebase`
+    * `Pid`
+    * `TagAim` and related classes
+    * `Plant` has a default `debugDump` implementation
+* You can pass a `NullDebugSink` (does nothing), a telemetry-backed sink, or your own filtered sink.
+
+For beginners, this is **optional**. It becomes more useful later when you want to inspect the internal state of the framework quickly.
+
+---
+
+## 10. Summary
+
+* You work mainly in **one class**: `PhoenixRobot`.
+* TeleOp and Autos are **thin shells** delegating to `PhoenixRobot`.
+* **Inputs**: `Gamepads` + `Bindings`.
+* **Drive**: `StickDriveSource` + `MecanumDrivebase`, with **rate filtering** built in.
+* **Mechanisms**: modeled as `Plant`s for consistent setpoint-style control.
+* **Advanced features** (optional):
+
+    * Tasks and macros
+    * TagAim auto-aim
+    * InterpolatingTable1D for shooter velocity
+    * debugDump for introspection
+
+This structure aims to be:
+
+* **Approachable for beginners** (everything in one place)
+* **Reusable across TeleOp and multiple Autos**
+* **Powerful enough** for advanced features as your robot grows.

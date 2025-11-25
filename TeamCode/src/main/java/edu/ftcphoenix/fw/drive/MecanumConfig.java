@@ -3,11 +3,33 @@ package edu.ftcphoenix.fw.drive;
 /**
  * Configuration for {@link MecanumDrivebase}.
  *
- * <p>This class currently controls simple per-axis scaling of the
- * high-level {@link DriveSignal} components before they are mixed into
- * wheel powers. It is intentionally small and immutable.</p>
+ * <p>
+ * This class is a simple <strong>mutable data object</strong> that controls how
+ * a high-level {@link DriveSignal} is mapped into wheel power commands.
+ * Typical usage is:
+ * </p>
+ *
+ * <pre>{@code
+ * // Start from the Phoenix defaults.
+ * MecanumConfig cfg = MecanumConfig.defaults();
+ *
+ * // Optional: tweak per-axis scaling (example: slightly slower rotation).
+ * cfg.maxOmega = 0.8;
+ *
+ * // Optional: tweak rate limits (example: smoother lateral / strafe).
+ * cfg.maxLateralRatePerSec = 4.0;
+ *
+ * // Pass the config into your drivebase or wiring helper.
+ * MecanumDrivebase drive = new MecanumDrivebase(fl, fr, bl, br, cfg);
+ * }</pre>
  *
  * <h2>Scaling semantics</h2>
+ *
+ * <p>
+ * The three scale factors {@link #maxAxial}, {@link #maxLateral}, and
+ * {@link #maxOmega} are applied directly to the components of a
+ * {@link DriveSignal} before the mecanum mixing:
+ * </p>
  *
  * <ul>
  *   <li>{@link #maxAxial}: scales forward/back commands.</li>
@@ -15,73 +37,210 @@ package edu.ftcphoenix.fw.drive;
  *   <li>{@link #maxOmega}: scales rotation commands.</li>
  * </ul>
  *
- * <p>All three values are typically in the range (0, 1], where 1.0 means
- * "full power allowed" and values less than 1.0 reduce the maximum power
- * in that axis.</p>
+ * <p>
+ * For example, if {@code maxLateral = 0.7}, then a full strafe command
+ * ({@code lateral = +1.0}) will be treated as {@code lateral = +0.7} before
+ * being mixed into wheel powers. This is a simple way to “de-tune” a robot
+ * that feels too aggressive on one axis.
+ * </p>
  *
- * <p>For most teams, the {@link #defaults()} configuration (all ones) is
- * sufficient. More advanced teams may construct modified configs using
- * the {@code withXxx(...)} methods.</p>
+ * <h2>Rate limiting semantics (optional)</h2>
+ *
+ * <p>
+ * The three rate limit fields {@link #maxAxialRatePerSec},
+ * {@link #maxLateralRatePerSec}, and {@link #maxOmegaRatePerSec} are intended
+ * to control how quickly the commanded drive signal is allowed to change over
+ * time. They are expressed in “command units per second.” A value
+ * {@code <= 0} means “no limit” for that axis.
+ * </p>
+ *
+ * <p>
+ * For example, if {@code maxLateralRatePerSec = 4.0}, then the lateral command
+ * will be limited to changing by at most {@code 4.0} per second. At ~50 Hz,
+ * that corresponds to going from 0 to full strafe in roughly a quarter-second,
+ * which can make mecanum drivetrains feel less “tippy.”
+ * </p>
+ *
+ * <p>
+ * <strong>Note:</strong> the exact way these rate limits are applied is
+ * implemented inside {@link MecanumDrivebase}. This config class simply
+ * carries the desired parameters.
+ * </p>
+ *
+ * <h2>Mutability and usage pattern</h2>
+ *
+ * <p>
+ * This class is intentionally mutable and designed to be configured during
+ * robot initialization:
+ * </p>
+ *
+ * <pre>{@code
+ * MecanumConfig cfg = MecanumConfig.defaults();
+ * cfg.maxAxial = 0.9;
+ * cfg.maxLateralRatePerSec = 3.0;
+ *
+ * MecanumDrivebase drive = new MecanumDrivebase(fl, fr, bl, br, cfg);
+ * }</pre>
+ *
+ * <p>
+ * Implementations that accept a {@link MecanumConfig} (such as
+ * {@link MecanumDrivebase} or helpers in {@link Drives}) are expected to make
+ * a <em>defensive copy</em> of the config at construction time. Changing the
+ * fields of a {@code MecanumConfig} instance <strong>after</strong> you pass
+ * it into a drivebase will <strong>not</strong> affect that already-created
+ * drivebase.
+ * </p>
  */
 public final class MecanumConfig {
 
-    /**
-     * Maximum scale factor for axial (forward/back) commands.
-     */
-    public final double maxAxial;
+    // ------------------------------------------------------------------------
+    // Per-axis scaling (high-level DriveSignal components)
+    // ------------------------------------------------------------------------
 
     /**
-     * Maximum scale factor for lateral (strafe left/right) commands.
+     * Maximum scale for axial (forward/back) commands.
+     *
+     * <p>Default: {@code 1.0} (no scaling).</p>
      */
-    public final double maxLateral;
+    public double maxAxial = 1.0;
 
     /**
-     * Maximum scale factor for rotational (omega) commands.
+     * Maximum scale for lateral (strafe left/right) commands.
+     *
+     * <p>Default: {@code 1.0} (no scaling).</p>
      */
-    public final double maxOmega;
+    public double maxLateral = 1.0;
 
-    private MecanumConfig(double maxAxial, double maxLateral, double maxOmega) {
-        this.maxAxial = maxAxial;
-        this.maxLateral = maxLateral;
-        this.maxOmega = maxOmega;
+    /**
+     * Maximum scale for rotational (omega) commands.
+     *
+     * <p>Default: {@code 1.0} (no scaling).</p>
+     */
+    public double maxOmega = 1.0;
+
+    // ------------------------------------------------------------------------
+    // Optional per-axis rate limiting (advanced)
+    // ------------------------------------------------------------------------
+
+    /**
+     * Maximum change in axial command per second.
+     *
+     * <p>
+     * Units: “command units per second” in the same [-1, +1] domain as
+     * {@link DriveSignal#axial}. A value {@code <= 0} means “no limit.”
+     * </p>
+     *
+     * <p>Default: {@code 0.0} (no axial rate limit).</p>
+     */
+    public double maxAxialRatePerSec = 0.0;
+
+    /**
+     * Maximum change in lateral command per second.
+     *
+     * <p>
+     * Units: “command units per second” in the same [-1, +1] domain as
+     * {@link DriveSignal#lateral}. A value {@code <= 0} means “no limit.”
+     * </p>
+     *
+     * <p>
+     * Default: {@code 0.0}. A typical Phoenix tuning might set this to a
+     * small value like {@code 4.0} to smooth strafing.
+     * </p>
+     */
+    public double maxLateralRatePerSec = 0.0;
+
+    /**
+     * Maximum change in rotational command per second.
+     *
+     * <p>
+     * Units: “command units per second” in the same [-1, +1] domain as
+     * {@link DriveSignal#omega}. A value {@code <= 0} means “no limit.”
+     * </p>
+     *
+     * <p>Default: {@code 0.0} (no omega rate limit).</p>
+     */
+    public double maxOmegaRatePerSec = 0.0;
+
+    // ------------------------------------------------------------------------
+    // Construction helpers
+    // ------------------------------------------------------------------------
+
+    /**
+     * Private constructor to force use of {@link #defaults()}.
+     *
+     * <p>
+     * The Phoenix philosophy for config objects is:
+     * </p>
+     *
+     * <ul>
+     *   <li>Use {@link #defaults()} to get a fresh config with standard values.</li>
+     *   <li>Mutate the fields you care about during robot initialization.</li>
+     *   <li>Pass the config into the drivebase or helper that needs it.</li>
+     * </ul>
+     *
+     * <p>
+     * This keeps all configs starting from a known, well-documented baseline.
+     * </p>
+     */
+    private MecanumConfig() {
+        // Defaults are assigned directly in field initializers above.
     }
 
     /**
-     * Default configuration: no additional scaling (all axes = 1.0).
+     * Create a new {@link MecanumConfig} with Phoenix default values.
      *
-     * <p>This is the recommended starting point for most robots.</p>
+     * <p>
+     * Defaults are chosen to be safe and intuitive:
+     * </p>
+     *
+     * <ul>
+     *   <li>{@link #maxAxial}   = 1.0</li>
+     *   <li>{@link #maxLateral} = 1.0</li>
+     *   <li>{@link #maxOmega}   = 1.0</li>
+     *   <li>{@link #maxAxialRatePerSec}   = 0.0 (no limit)</li>
+     *   <li>{@link #maxLateralRatePerSec} = 0.0 (no limit by default)</li>
+     *   <li>{@link #maxOmegaRatePerSec}   = 0.0 (no limit)</li>
+     * </ul>
+     *
+     * <p>
+     * Most robots can start with {@code defaults()} unchanged, and only tune
+     * individual fields as needed.
+     * </p>
+     *
+     * @return a new config instance with default values
      */
     public static MecanumConfig defaults() {
-        return new MecanumConfig(1.0, 1.0, 1.0);
+        return new MecanumConfig();
     }
 
     /**
-     * Create a copy of this config with a different maximum axial scale.
+     * Create a deep copy of this config.
      *
-     * @param maxAxial new axial scale factor
-     * @return new {@link MecanumConfig} with updated axial scale
+     * <p>
+     * This is useful when you want to start from a base configuration and
+     * tweak a few fields without mutating the original object.
+     * </p>
+     *
+     * <pre>{@code
+     * MecanumConfig base = MecanumConfig.defaults();
+     * base.maxOmega = 0.8;
+     *
+     * MecanumConfig copy = base.copy();
+     * copy.maxLateral = 0.7;
+     * }</pre>
+     *
+     * @return a new {@link MecanumConfig} with the same field values
      */
-    public MecanumConfig withMaxAxial(double maxAxial) {
-        return new MecanumConfig(maxAxial, this.maxLateral, this.maxOmega);
-    }
+    public MecanumConfig copy() {
+        MecanumConfig c = new MecanumConfig();
+        c.maxAxial = this.maxAxial;
+        c.maxLateral = this.maxLateral;
+        c.maxOmega = this.maxOmega;
 
-    /**
-     * Create a copy of this config with a different maximum lateral scale.
-     *
-     * @param maxLateral new lateral scale factor
-     * @return new {@link MecanumConfig} with updated lateral scale
-     */
-    public MecanumConfig withMaxLateral(double maxLateral) {
-        return new MecanumConfig(this.maxAxial, maxLateral, this.maxOmega);
-    }
+        c.maxAxialRatePerSec = this.maxAxialRatePerSec;
+        c.maxLateralRatePerSec = this.maxLateralRatePerSec;
+        c.maxOmegaRatePerSec = this.maxOmegaRatePerSec;
 
-    /**
-     * Create a copy of this config with a different maximum omega scale.
-     *
-     * @param maxOmega new rotational scale factor
-     * @return new {@link MecanumConfig} with updated omega scale
-     */
-    public MecanumConfig withMaxOmega(double maxOmega) {
-        return new MecanumConfig(this.maxAxial, this.maxLateral, maxOmega);
+        return c;
     }
 }

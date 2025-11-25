@@ -9,11 +9,11 @@ import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.actuation.PlantTasks;
 import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.StickDriveSource;
 import edu.ftcphoenix.fw.hal.MotorOutput;
-import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.task.SequenceTask;
@@ -26,7 +26,8 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * to build simple intake macros.
  *
  * <ul>
- *   <li>Mecanum drive via {@link StickDriveSource}.</li>
+ *   <li>Mecanum drive via {@link StickDriveSource} with slow mode, and
+ *       optional lateral rate limiting via {@link MecanumConfig}.</li>
  *   <li>Intake modeled as a {@link Plant} from {@link FtcPlants#power}.</li>
  *   <li>One-shot intake macros (forward / forward+reverse) using {@link PlantTasks}.</li>
  *   <li>Manual intake control via trigger when no macro is active.</li>
@@ -44,6 +45,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   <li>A: intake forward pulse.</li>
  *   <li>Y: intake forward-then-reverse macro.</li>
  *   <li>B: cancel intake macros and stop intake.</li>
+ *   <li>Right bumper: slow mode (scaled drive) while held.</li>
  * </ul>
  */
 @Disabled
@@ -67,47 +69,56 @@ public final class TeleOpPlantTasksIntake extends OpMode {
 
     // Input & drive plumbing
     private Gamepads gamepads;
-    private DriverKit driverKit;
     private Bindings bindings;
 
-    private StickDriveSource stickDrive;
-    private MecanumDrivebase drivebase;
+    private final LoopClock clock = new LoopClock();
 
-    // Intake modeled as a Plant (open-loop power)
+    // Drive
+    private MecanumDrivebase drivebase;
+    private DriveSource stickDrive;
+
+    // Intake as a Plant
     private Plant intake;
 
-    // Task runner for intake macros
+    // Intake macros
     private final TaskRunner macroRunner = new TaskRunner();
-
-    // Loop timing
-    private final LoopClock clock = new LoopClock();
 
     @Override
     public void init() {
         // 1) Inputs
         gamepads = Gamepads.create(gamepad1, gamepad2);
-        driverKit = DriverKit.of(gamepads);
         bindings = new Bindings();
 
         // 2) Drive hardware via HAL adapters
         MotorOutput fl = FtcHardware.motor(hardwareMap, HW_FL, false);
-        MotorOutput fr = FtcHardware.motor(hardwareMap, HW_FR, true);   // typical inversion
+        MotorOutput fr = FtcHardware.motor(hardwareMap, HW_FR, true);   // typical right inversion
         MotorOutput bl = FtcHardware.motor(hardwareMap, HW_BL, false);
         MotorOutput br = FtcHardware.motor(hardwareMap, HW_BR, true);
 
-        drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
+        // 3) Drive behavior configuration (scaling + optional smoothing).
+        //
+        // Start from Phoenix defaults and optionally enable lateral rate limiting.
+        // Setting maxLateralRatePerSec > 0 makes strafing less “twitchy”
+        // without affecting axial or rotational response.
+        MecanumConfig driveCfg = MecanumConfig.defaults();
+        driveCfg.maxLateralRatePerSec = 4.0;  // try 0.0 to disable smoothing
 
-        // 3) Default mecanum mapping from DriverKit sticks (with slow mode)
-        stickDrive = StickDriveSource.teleOpMecanumWithSlowMode(
-                driverKit,
-                driverKit.p1().rightBumper(), // hold for slow mode
-                0.30
-        );
+        drivebase = new MecanumDrivebase(fl, fr, bl, br, driveCfg);
 
-        // 4) Intake plant: simple power plant from hardware map
+        // 4) Default mecanum mapping from P1 sticks with slow mode.
+        //
+        // StickDriveSource.teleOpMecanumStandard(...) uses:
+        //   - P1 left stick X for lateral,
+        //   - P1 left stick Y for axial,
+        //   - P1 right stick X for omega,
+        //   - StickConfig.defaults() for shaping,
+        //   - P1 right bumper as slow-mode at 30% speed.
+        stickDrive = StickDriveSource.teleOpMecanumStandard(gamepads);
+
+        // 5) Intake plant: simple power plant from hardware map
         intake = FtcPlants.power(hardwareMap, HW_INTAKE, false);
 
-        // 5) Wire button bindings for intake macros
+        // 6) Wire button bindings for intake macros
         wireBindings();
 
         telemetry.addLine("FW PlantTasks Intake Macro: init complete");
@@ -120,20 +131,35 @@ public final class TeleOpPlantTasksIntake extends OpMode {
     private void wireBindings() {
         // A → simple forward intake pulse
         bindings.onPress(
-                driverKit.p1().buttonA(),
-                () -> startIntakePulseForward()
+                gamepads.p1().buttonA(),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        startIntakePulseForward();
+                    }
+                }
         );
 
         // Y → forward then reverse macro (e.g., collect then bump/un-jam)
         bindings.onPress(
-                driverKit.p1().buttonY(),
-                () -> startIntakeForwardThenReverse()
+                gamepads.p1().buttonY(),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        startIntakeForwardThenReverse();
+                    }
+                }
         );
 
         // B → cancel macros and stop intake
         bindings.onPress(
-                driverKit.p1().buttonB(),
-                () -> cancelIntakeMacros()
+                gamepads.p1().buttonB(),
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        cancelIntakeMacros();
+                    }
+                }
         );
     }
 
@@ -162,7 +188,7 @@ public final class TeleOpPlantTasksIntake extends OpMode {
 
         // 5) Manual intake when no macro is active
         if (!macroRunner.hasActiveTask()) {
-            double trigger = driverKit.p1().rightTrigger().get();  // 0..1
+            double trigger = gamepads.p1().rightTrigger().get();  // 0..1
             intake.setTarget(trigger);
             intake.update(dtSec);
         }
@@ -172,18 +198,18 @@ public final class TeleOpPlantTasksIntake extends OpMode {
                 .addData("axial", driveCmd.axial)
                 .addData("lateral", driveCmd.lateral)
                 .addData("omega", driveCmd.omega);
+
         telemetry.addLine("Intake")
-                .addData("macroActive", macroRunner.hasActiveTask())
-                .addData("queued", macroRunner.queuedCount());
+                .addData("target", intake.getTarget())
+                .addData("hasActiveMacro", macroRunner.hasActiveTask());
+
         telemetry.update();
     }
 
     @Override
     public void stop() {
-        // Stop drive and intake safely
-        drivebase.stop();
         cancelIntakeMacros();
-        intake.setTarget(0.0);
+        drivebase.stop();
     }
 
     // ---------------------------------------------------------------------
@@ -193,7 +219,7 @@ public final class TeleOpPlantTasksIntake extends OpMode {
     /**
      * One-shot forward intake pulse.
      *
-     * <p>Semantics:
+     * <p>Semantics:</p>
      * <ul>
      *   <li>On start: set intake target to {@link #INTAKE_FWD_POWER}.</li>
      *   <li>For {@link #INTAKE_PULSE_FWD_SEC} seconds: keep updating the plant.</li>

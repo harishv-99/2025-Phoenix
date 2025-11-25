@@ -2,7 +2,7 @@ package edu.ftcphoenix.fw.robot;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 
-import edu.ftcphoenix.fw.input.DriverKit;
+import edu.ftcphoenix.fw.input.GamepadDevice;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.util.LoopClock;
@@ -10,47 +10,87 @@ import edu.ftcphoenix.fw.util.LoopClock;
 /**
  * Framework base class for Phoenix teleop OpModes.
  *
- * <p>Responsibilities:
+ * <h2>Responsibilities</h2>
+ *
+ * <p>This base class takes care of the repetitive wiring that almost every
+ * TeleOp needs:</p>
+ *
  * <ul>
- *   <li>Wire up {@link Gamepads}, {@link DriverKit}, {@link Bindings},
- *       and {@link LoopClock}.</li>
+ *   <li>Create and own a {@link Gamepads} wrapper for {@code gamepad1} and
+ *       {@code gamepad2}.</li>
+ *   <li>Create and own a {@link Bindings} instance for button edge-detection
+ *       and simple state machines.</li>
+ *   <li>Create and own a {@link LoopClock} to track loop {@code dtSec}.</li>
  *   <li>Ensure inputs and bindings are updated every loop.</li>
- *   <li>Expose simple helpers for subclasses:
- *       {@link #p1()}, {@link #p2()}, {@link #bind()}.</li>
- * </ul>
- *
- * <p>Subclassing pattern:
- * <ul>
- *   <li>Annotate your subclass with {@code @TeleOp(...)}.</li>
- *   <li>Override {@link #onInitRobot()} to:
- *       <ul>
- *         <li>Map hardware.</li>
- *         <li>Create drive sources / stages.</li>
- *         <li>Define bindings using {@link #bind()} and {@link #p1()} / {@link #p2()}.</li>
- *       </ul>
+ *   <li>Provide simple accessors:
+ *     <ul>
+ *       <li>{@link #p1()} and {@link #p2()} for the two controllers
+ *           ({@link GamepadDevice}).</li>
+ *       <li>{@link #bind()} for input bindings.</li>
+ *       <li>{@link #clock()} if you need the raw {@link LoopClock}.</li>
+ *     </ul>
  *   </li>
- *   <li>Override {@link #onLoopRobot(double)} to:
- *       <ul>
- *         <li>Update drive / stages / subsystems.</li>
- *         <li>Publish telemetry.</li>
- *       </ul>
+ *   <li>Call your robot-specific hooks:
+ *     <ul>
+ *       <li>{@link #onInitRobot()} once from {@link #init()}.</li>
+ *       <li>{@link #onStartRobot()} once from {@link #start()}.</li>
+ *       <li>{@link #onLoopRobot(double)} every loop after inputs are updated.</li>
+ *       <li>{@link #onStopRobot()} once from {@link #stop()}.</li>
+ *     </ul>
  *   </li>
  * </ul>
  *
- * <p>This class is reusable for all teleop OpModes and keeps robot-specific
- * code focused on intent instead of input plumbing.
+ * <p>This keeps your TeleOp classes focused on <em>what the robot should do</em>
+ * instead of input plumbing.</p>
+ *
+ * <h2>Typical usage</h2>
+ *
+ * <pre>{@code
+ * @TeleOp(name = "My TeleOp", group = "Examples")
+ * public final class MyTeleOp extends PhoenixTeleOpBase {
+ *
+ *     private MecanumDrivebase drive;
+ *
+ *     @Override
+ *     protected void onInitRobot() {
+ *         // 1) Map hardware
+ *         MecanumDrivebase.Config cfg = MecanumConfig.defaults();
+ *         drive = Drives.mecanum(hardwareMap, "FL", "FR", "BL", "BR")
+ *                      .config(cfg)
+ *                      .build();
+ *
+ *         // 2) Set up drive controls using player 1 sticks
+ *         DriveSource sticks = StickDriveSource.teleOpMecanumWithSlowMode(
+ *                 gamepads(),          // full pair, if needed
+ *                 p1().rightBumper(),  // hold for slow mode
+ *                 0.30                 // 30% speed
+ *         );
+ *
+ *         // Example: bind A to do something once on press
+ *         bind().onPress(p1().buttonA(), () -> telemetry.addLine("A pressed"));
+ *     }
+ *
+ *     @Override
+ *     protected void onLoopRobot(double dtSec) {
+ *         // Drivebase update, subsystems, telemetry, etc.
+ *     }
+ * }
+ * }</pre>
  */
 public abstract class PhoenixTeleOpBase extends OpMode {
 
     private Gamepads gamepads;
-    private DriverKit driverKit;
     private Bindings bindings;
     private LoopClock clock;
 
+    // --------------------------------------------------------------------
+    // OpMode lifecycle
+    // --------------------------------------------------------------------
+
+    @Override
     public final void init() {
         // Core input plumbing
         gamepads = Gamepads.create(gamepad1, gamepad2);
-        driverKit = DriverKit.of(gamepads);
         bindings = new Bindings();
         clock = new LoopClock();
 
@@ -61,24 +101,28 @@ public abstract class PhoenixTeleOpBase extends OpMode {
         telemetry.update();
     }
 
+    @Override
     public final void start() {
+        // Reset loop clock at the moment start() is called
         clock.reset(getRuntime());
         onStartRobot();
     }
 
+    @Override
     public final void loop() {
         // Update timing
         clock.update(getRuntime());
         double dtSec = clock.dtSec();
 
         // Update inputs + bindings
-        gamepads.update(dtSec);
+        gamepads.update(dtSec);   // currently a no-op, kept for future filters
         bindings.update(dtSec);
 
         // Delegate to subclass for robot behavior
         onLoopRobot(dtSec);
     }
 
+    @Override
     public final void stop() {
         onStopRobot();
     }
@@ -88,13 +132,13 @@ public abstract class PhoenixTeleOpBase extends OpMode {
     // --------------------------------------------------------------------
 
     /**
-     * Called once from {@link #init()} after FW wiring is done.
+     * Called once from {@link #init()} after framework wiring is done.
      *
-     * <p>Use this to:
+     * <p>Use this to:</p>
      * <ul>
      *   <li>Map hardware (motors, servos, sensors).</li>
-     *   <li>Construct stages/subsystems.</li>
-     *   <li>Set up {@link Bindings} using {@link #bind()} and {@link #p1()} / {@link #p2()}.</li>
+     *   <li>Construct drivebases and subsystems.</li>
+     *   <li>Define bindings using {@link #bind()} and {@link #p1()} / {@link #p2()}.</li>
      * </ul>
      */
     protected abstract void onInitRobot();
@@ -105,21 +149,29 @@ public abstract class PhoenixTeleOpBase extends OpMode {
      * <p>Optional; default implementation does nothing.</p>
      */
     protected void onStartRobot() {
-        // default no-op
+        // Default: no-op.
     }
 
     /**
      * Called every loop after inputs and bindings have been updated.
      *
-     * @param dtSec approximate time step since last loop, in seconds
+     * <p>Use this to:</p>
+     * <ul>
+     *   <li>Update drive / stages / subsystems.</li>
+     *   <li>Publish telemetry.</li>
+     * </ul>
+     *
+     * @param dtSec loop time step in seconds (from {@link LoopClock})
      */
     protected abstract void onLoopRobot(double dtSec);
 
     /**
-     * Called once from {@link #stop()}. Optional cleanup hook.
+     * Called once from {@link #stop()} before the OpMode ends.
+     *
+     * <p>Optional; default implementation does nothing.</p>
      */
     protected void onStopRobot() {
-        // default no-op
+        // Default: no-op.
     }
 
     // --------------------------------------------------------------------
@@ -127,21 +179,9 @@ public abstract class PhoenixTeleOpBase extends OpMode {
     // --------------------------------------------------------------------
 
     /**
-     * Player 1 view (primary driver).
-     */
-    protected DriverKit.Player p1() {
-        return driverKit.p1();
-    }
-
-    /**
-     * Player 2 view (co-driver).
-     */
-    protected DriverKit.Player p2() {
-        return driverKit.p2();
-    }
-
-    /**
-     * Binding manager: use this to configure onPress/whileHeld/toggle behaviors.
+     * Bindings instance for button edge detection and simple macro/state logic.
+     *
+     * @return the shared {@link Bindings} instance for this TeleOp
      */
     protected Bindings bind() {
         return bindings;
@@ -149,20 +189,33 @@ public abstract class PhoenixTeleOpBase extends OpMode {
 
     /**
      * Loop clock, in case you need access to the raw object.
+     *
+     * @return the {@link LoopClock} used by this base
      */
     protected LoopClock clock() {
         return clock;
     }
 
     /**
-     * Full DriverKit, if needed.
+     * Player 1 controller as a {@link GamepadDevice}.
+     *
+     * @return gamepad 1 wrapper
      */
-    protected DriverKit driverKit() {
-        return driverKit;
+    protected GamepadDevice p1() {
+        return gamepads.p1();
     }
 
     /**
-     * Full Gamepads, if needed.
+     * Player 2 controller as a {@link GamepadDevice}.
+     *
+     * @return gamepad 2 wrapper
+     */
+    protected GamepadDevice p2() {
+        return gamepads.p2();
+    }
+
+    /**
+     * Full {@link Gamepads} pair, if you need it.
      */
     protected Gamepads gamepads() {
         return gamepads;

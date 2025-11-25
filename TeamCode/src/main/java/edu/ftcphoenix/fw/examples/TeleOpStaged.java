@@ -7,11 +7,11 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
 import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
 import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.StickDriveSource;
 import edu.ftcphoenix.fw.hal.MotorOutput;
-import edu.ftcphoenix.fw.input.DriverKit;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.stage.buffer.BufferStage;
@@ -22,10 +22,10 @@ import edu.ftcphoenix.fw.util.Units;
 /**
  * Staged TeleOp example showing:
  * <ul>
- *   <li>Mecanum drive via {@link StickDriveSource}.</li>
+ *   <li>Mecanum drive via {@link StickDriveSource} with lateral rate limiting.</li>
  *   <li>Shooter modeled as a {@link SetpointStage} with velocity plant.</li>
  *   <li>Buffer/indexer modeled as a {@link BufferStage} with timed pulses.</li>
- *   <li>Gamepad bindings via {@link DriverKit} and {@link Bindings}.</li>
+ *   <li>Gamepad bindings via {@link Gamepads} and {@link Bindings}.</li>
  * </ul>
  *
  * <p>This is intended as a "happy path" example for the framework staging
@@ -73,11 +73,10 @@ public final class TeleOpStaged extends OpMode {
     private final LoopClock clock = new LoopClock();
 
     private Gamepads gamepads;
-    private DriverKit driverKit;
     private Bindings bindings;
 
     private MecanumDrivebase drivebase;
-    private StickDriveSource stickDrive;
+    private DriveSource stickDrive;
 
     private SetpointStage<ShooterGoal> shooterStage;
     private BufferStage bufferStage;
@@ -86,7 +85,6 @@ public final class TeleOpStaged extends OpMode {
     public void init() {
         // 1) Inputs
         gamepads = Gamepads.create(gamepad1, gamepad2);
-        driverKit = DriverKit.of(gamepads);
         bindings = new Bindings();
 
         // 2) Drivebase: use HAL adapters for drive motors
@@ -96,7 +94,8 @@ public final class TeleOpStaged extends OpMode {
         MotorOutput br = FtcHardware.motor(hardwareMap, HW_BR, false);
 
         drivebase = new MecanumDrivebase(fl, fr, bl, br, MecanumConfig.defaults());
-        stickDrive = StickDriveSource.teleOpMecanum(driverKit);
+        // Default mecanum mapping from P1 sticks (with lateral rate limiting).
+        stickDrive = StickDriveSource.teleOpMecanum(gamepads);
 
         // 3) Shooter: SetpointStage + velocity Plant
         shooterStage = SetpointStage.enumBuilder(ShooterGoal.class)
@@ -132,15 +131,15 @@ public final class TeleOpStaged extends OpMode {
         // Shooter goals:
         // A → SHOOT, B → STOP, X → IDLE (coast/hold speed)
         bindings.onPress(
-                driverKit.p1().buttonA(),
+                gamepads.p1().buttonA(),
                 () -> shooterStage.setGoal(ShooterGoal.SHOOT)
         );
         bindings.onPress(
-                driverKit.p1().buttonB(),
+                gamepads.p1().buttonB(),
                 () -> shooterStage.setGoal(ShooterGoal.STOP)
         );
         bindings.onPress(
-                driverKit.p1().buttonX(),
+                gamepads.p1().buttonX(),
                 () -> shooterStage.setGoal(ShooterGoal.IDLE)
         );
 
@@ -148,11 +147,11 @@ public final class TeleOpStaged extends OpMode {
         // Right bumper → queue SEND (fire toward shooter)
         // Left bumper → queue EJECT (reverse)
         bindings.onPress(
-                driverKit.p1().rightBumper(),
+                gamepads.p1().rightBumper(),
                 () -> bufferStage.handle(BufferStage.BufferCmd.SEND)
         );
         bindings.onPress(
-                driverKit.p1().leftBumper(),
+                gamepads.p1().leftBumper(),
                 () -> bufferStage.handle(BufferStage.BufferCmd.EJECT)
         );
     }
