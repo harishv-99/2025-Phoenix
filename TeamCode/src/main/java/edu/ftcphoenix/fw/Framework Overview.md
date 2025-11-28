@@ -354,8 +354,9 @@ A simple example for an intake:
 
 ```java
 import com.qualcomm.robotcore.hardware.DcMotorEx;
+
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
+import edu.ftcphoenix.fw.actuation.Plants;
 
 private static final String HW_INTAKE = "intake";
 
@@ -366,7 +367,7 @@ public PhoenixRobot(HardwareMap hw, DriverKit driverKit, Telemetry telemetry) {
     this.driverKit = driverKit;
 
     DcMotorEx intakeMotor = hw.get(DcMotorEx.class, HW_INTAKE);
-    this.intake = FtcPlants.powerOnly(intakeMotor);
+    this.intake = Plants.powerOnly(intakeMotor);
 }
 
 public void onTeleopLoop(LoopClock clock) {

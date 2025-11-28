@@ -1,7 +1,7 @@
 package edu.ftcphoenix.fw.drive;
 
 import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.hal.MotorOutput;
+import edu.ftcphoenix.fw.hal.PowerOutput;
 import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
@@ -18,7 +18,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * </pre>
  *
  * <p>Each wheel power is then clamped to [-1, +1] before being applied to
- * the underlying motors.</p>
+ * the underlying actuators via {@link PowerOutput}.</p>
  *
  * <p>
  * The {@link MecanumConfig} allows optional scaling of the three drive
@@ -26,41 +26,18 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * limiting of how quickly those commands may change over time.
  * </p>
  *
- * <h2>Usage</h2>
- *
- * <p>A typical wiring in a TeleOp might look like:</p>
- *
- * <pre>{@code
- * // 1) Hardware: create motor outputs (platform-specific wrapper).
- * MotorOutput fl = FtcHardware.motor(hw, "fl");
- * MotorOutput fr = FtcHardware.motor(hw, "fr");
- * MotorOutput bl = FtcHardware.motor(hw, "bl");
- * MotorOutput br = FtcHardware.motor(hw, "br");
- *
- * // 2) Optional: tune drive behavior via config.
- * MecanumConfig cfg = MecanumConfig.defaults();
- * cfg.maxLateralRatePerSec = 4.0; // smooth strafing (optional)
- *
- * // 3) Create the drivebase.
- * MecanumDrivebase drivebase = new MecanumDrivebase(fl, fr, bl, br, cfg);
- *
- * // 4) In your OpMode loop:
- * clock.update(getRuntime());
- * DriveSignal cmd = driveSource.get(clock);
- * drivebase.drive(cmd);
- * drivebase.update(clock); // feeds dtSec for smoothing (optional but recommended)
- * }</pre>
+ * <h2>Inversion policy</h2>
  *
  * <p>
- * The ordering between {@link #drive(DriveSignal)} and {@link #update(LoopClock)}
- * is not critical. This class stores the most recent {@code dtSec} provided by
- * {@link #update(LoopClock)} and uses it on subsequent calls to
- * {@link #drive(DriveSignal)} when rate limits are enabled in the config.
+ * All inversion is handled at the hardware level (e.g., using FTC SDK
+ * {@code setDirection(REVERSE)} when constructing {@link PowerOutput}s).
+ * This class assumes that positive power means "forward" for each wheel
+ * in whatever coordinate system the hardware already uses.
  * </p>
  */
 public final class MecanumDrivebase {
 
-    private final MotorOutput fl, fr, bl, br;
+    private final PowerOutput fl, fr, bl, br;
     private final MecanumConfig cfg;
 
     // Last commanded wheel powers (after clamping).
@@ -78,32 +55,41 @@ public final class MecanumDrivebase {
     private double lastDtSec = 0.0;
 
     /**
-     * Construct a mecanum drivebase from four motor outputs and an optional config.
+     * Construct a mecanum drivebase from four outputs and an optional config.
      *
-     * @param fl  front-left motor
-     * @param fr  front-right motor
-     * @param bl  back-left motor
-     * @param br  back-right motor
+     * @param fl  front-left wheel power output
+     * @param fr  front-right wheel power output
+     * @param bl  back-left wheel power output
+     * @param br  back-right wheel power output
      * @param cfg configuration (may be null to use {@link MecanumConfig#defaults()})
      */
-    public MecanumDrivebase(MotorOutput fl,
-                            MotorOutput fr,
-                            MotorOutput bl,
-                            MotorOutput br,
+    public MecanumDrivebase(PowerOutput fl,
+                            PowerOutput fr,
+                            PowerOutput bl,
+                            PowerOutput br,
                             MecanumConfig cfg) {
         if (fl == null || fr == null || bl == null || br == null) {
-            throw new IllegalArgumentException("All four motors (fl, fr, bl, br) are required");
+            throw new IllegalArgumentException("All four PowerOutput channels are required");
         }
         this.fl = fl;
         this.fr = fr;
         this.bl = bl;
         this.br = br;
-        // Defensive copy so later cfg mutations don't affect this drivebase.
-        this.cfg = ((cfg != null) ? cfg : MecanumConfig.defaults()).copy();
+        this.cfg = (cfg != null) ? cfg : MecanumConfig.defaults();
     }
 
     /**
-     * Apply a drive signal to the motors.
+     * Construct a mecanum drivebase with the default {@link MecanumConfig}.
+     */
+    public MecanumDrivebase(PowerOutput fl,
+                            PowerOutput fr,
+                            PowerOutput bl,
+                            PowerOutput br) {
+        this(fl, fr, bl, br, null);
+    }
+
+    /**
+     * Apply a drive signal to the wheels.
      *
      * <p>
      * Expected input range is [-1, +1] for each component, but values outside
@@ -118,7 +104,7 @@ public final class MecanumDrivebase {
      *   <li>Apply per-axis scaling from {@link MecanumConfig}.</li>
      *   <li>Optionally apply per-axis rate limiting (also from {@link MecanumConfig}).</li>
      *   <li>Mix the (possibly rate-limited) components into wheel powers.</li>
-     *   <li>Clamp each wheel power to [-1, +1] and send to the motors.</li>
+     *   <li>Clamp each wheel power to [-1, +1] and send to the actuators.</li>
      * </ol>
      *
      * @param s drive signal to apply; {@code null} is treated as "stop"
@@ -167,42 +153,33 @@ public final class MecanumDrivebase {
      * Internal helper to limit the rate of change of a command.
      *
      * <p>
-     * If {@code maxRatePerSec <= 0} or {@code dtSec <= 0}, the desired value
-     * is returned unchanged. Otherwise, the delta between {@code desired} and
-     * {@code last} is clamped to {@code +/- maxRatePerSec * dtSec}.
+     * If {@code maxRatePerSec} is &lt;= 0 or {@code dtSec} is &lt;= 0, this
+     * method returns {@code desired} unchanged.
      * </p>
-     *
-     * @param desired       desired new command value
-     * @param last          last commanded value
-     * @param maxRatePerSec maximum allowed change per second (<= 0 means "no limit")
-     * @param dtSec         time since last update (seconds)
-     * @return rate-limited command value
      */
     private static double limitRate(double desired,
-                                    double last,
+                                    double previous,
                                     double maxRatePerSec,
                                     double dtSec) {
         if (maxRatePerSec <= 0.0 || dtSec <= 0.0) {
             return desired;
         }
         double maxDelta = maxRatePerSec * dtSec;
-        double delta = desired - last;
+        double delta = desired - previous;
         if (delta > maxDelta) {
-            delta = maxDelta;
+            return previous + maxDelta;
         } else if (delta < -maxDelta) {
-            delta = -maxDelta;
+            return previous - maxDelta;
         }
-        return last + delta;
+        return desired;
     }
 
     /**
-     * Optional update hook; feeds the latest loop timing into this drivebase.
+     * Update loop timing information used for rate limiting.
      *
      * <p>
-     * This method stores the current {@code dtSec} from the provided
-     * {@link LoopClock}. When rate limits are enabled in {@link MecanumConfig},
-     * the most recent {@code dtSec} is used by subsequent calls to
-     * {@link #drive(DriveSignal)}.
+     * Call this once per loop before calling {@link #drive(DriveSignal)} if
+     * you want rate limiting to be based on the actual loop period.
      * </p>
      *
      * <p>
@@ -220,7 +197,8 @@ public final class MecanumDrivebase {
     }
 
     /**
-     * Immediately stop all four drive motors and reset last commanded powers.
+     * Immediately stop all four drive outputs and reset last command
+     * bookkeeping.
      */
     public void stop() {
         lastFlPower = 0.0;
@@ -239,7 +217,7 @@ public final class MecanumDrivebase {
     }
 
     // ------------------------------------------------------------------------
-    // Telemetry / debug helpers
+    // Debug / inspection helpers
     // ------------------------------------------------------------------------
 
     /**
@@ -254,66 +232,54 @@ public final class MecanumDrivebase {
      * <p>
      * This method is defensive: if {@code dbg} is {@code null}, it does
      * nothing. Framework classes consistently follow this pattern so callers
-     * may freely pass a {@code NullDebugSink} or {@code null}.
+     * may freely pass {@code null} when they do not care about debug output.
      * </p>
-     *
-     * @param dbg    debug sink to write to (may be {@code null})
-     * @param prefix key prefix for all entries (may be {@code null} or empty)
      */
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
             return;
         }
-        String p = (prefix == null || prefix.isEmpty()) ? "drive.mecanum" : prefix;
+        String p = (prefix != null && !prefix.isEmpty()) ? prefix + "." : "";
 
-        dbg.addLine(p + ": MecanumDrivebase");
+        dbg.addData(p + "lastFlPower", lastFlPower);
+        dbg.addData(p + "lastFrPower", lastFrPower);
+        dbg.addData(p + "lastBlPower", lastBlPower);
+        dbg.addData(p + "lastBrPower", lastBrPower);
 
-        // Last commanded powers.
-        dbg.addData(p + ".power.fl", lastFlPower);
-        dbg.addData(p + ".power.fr", lastFrPower);
-        dbg.addData(p + ".power.bl", lastBlPower);
-        dbg.addData(p + ".power.br", lastBrPower);
+        dbg.addData(p + "lastAxialCmd", lastAxialCmd);
+        dbg.addData(p + "lastLateralCmd", lastLateralCmd);
+        dbg.addData(p + "lastOmegaCmd", lastOmegaCmd);
 
-        // Last commanded high-level components.
-        dbg.addData(p + ".cmd.axial", lastAxialCmd);
-        dbg.addData(p + ".cmd.lateral", lastLateralCmd);
-        dbg.addData(p + ".cmd.omega", lastOmegaCmd);
-
-        // Config snapshot.
-        dbg.addData(p + ".cfg.maxAxial", cfg.maxAxial);
-        dbg.addData(p + ".cfg.maxLateral", cfg.maxLateral);
-        dbg.addData(p + ".cfg.maxOmega", cfg.maxOmega);
-        dbg.addData(p + ".cfg.maxAxialRatePerSec", cfg.maxAxialRatePerSec);
-        dbg.addData(p + ".cfg.maxLateralRatePerSec", cfg.maxLateralRatePerSec);
-        dbg.addData(p + ".cfg.maxOmegaRatePerSec", cfg.maxOmegaRatePerSec);
-
-        // Timing info.
-        dbg.addData(p + ".lastDtSec", lastDtSec);
+        dbg.addData(p + "lastDtSec", lastDtSec);
     }
 
+    // ------------------------------------------------------------------------
+    // Accessors
+    // ------------------------------------------------------------------------
+
     /**
-     * @return last commanded (clamped) power for front-left motor.
+     * @return last commanded (clamped) power for front-left wheel.
      */
     public double getLastFlPower() {
         return lastFlPower;
     }
 
     /**
-     * @return last commanded (clamped) power for front-right motor.
+     * @return last commanded (clamped) power for front-right wheel.
      */
     public double getLastFrPower() {
         return lastFrPower;
     }
 
     /**
-     * @return last commanded (clamped) power for back-left motor.
+     * @return last commanded (clamped) power for back-left wheel.
      */
     public double getLastBlPower() {
         return lastBlPower;
     }
 
     /**
-     * @return last commanded (clamped) power for back-right motor.
+     * @return last commanded (clamped) power for back-right wheel.
      */
     public double getLastBrPower() {
         return lastBrPower;

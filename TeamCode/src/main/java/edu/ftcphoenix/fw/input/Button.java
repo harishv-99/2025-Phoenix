@@ -1,232 +1,284 @@
 package edu.ftcphoenix.fw.input;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 /**
- * Simple digital input.
+ * Logical button with built-in edge detection and a simple global registry.
  *
- * <h2>What a Button represents</h2>
- * <p>
- * {@code Button} is the minimal abstraction for a boolean input that can change
- * each loop: a gamepad button, a synthesized condition, or the result of
- * combining other buttons.
- * </p>
+ * <p>This interface is designed for use in <b>polled</b> input code where the
+ * framework calls {@link #updateAllRegistered()} once per loop (for example,
+ * from {@code Gamepads.update(dtSec)}), and robot code then queries buttons
+ * using:</p>
  *
- * <p>
- * Edge detection (on-press, on-release, toggles) is <b>not</b> handled here;
- * see {@link edu.ftcphoenix.fw.input.binding.Bindings} for that higher-level
- * behavior. {@code Button} simply answers the question: "is it pressed
- * <em>right now</em>?"
- * </p>
+ * <pre>{@code
+ * // TeleOp loop example:
+ * pads.update(dtSec);  // internally calls Button.updateAllRegistered()
  *
- * <h2>Responsibilities</h2>
+ * if (pads.p1().a().onPress()) {
+ *     // Runs only on the FIRST loop where A goes up -> down.
+ * }
+ *
+ * if (pads.p1().a().onRelease()) {
+ *     // Runs only on the FIRST loop where A goes down -> up.
+ * }
+ *
+ * if (pads.p1().a().isHeld()) {
+ *     // Runs EVERY loop while A is down.
+ * }
+ * }</pre>
+ *
+ * <h2>Lifecycle / update model</h2>
+ *
  * <ul>
- *   <li>Expose {@link #isPressed()} as the single core operation.</li>
- *   <li>Provide factories for adapting a {@link BooleanSupplier} or {@link Axis}.</li>
- *   <li>Offer basic boolean combinators ({@link #and(Button)},
- *       {@link #or(Button)}, {@link #not()}).</li>
- *   <li>Provide a convenient bridge to {@link Axis} via {@link #asAxis()}.</li>
+ *   <li>Each {@link Button} tracks its previous and current value internally.</li>
+ *   <li>Buttons created via {@link #of(BooleanSupplier)} are automatically
+ *       <b>registered</b> in a global list when constructed.</li>
+ *   <li>The framework should call {@link #updateAllRegistered()} exactly once
+ *       per loop to advance the state of all registered buttons.</li>
+ *   <li>Robot code is expected to only call the query methods:
+ *     <ul>
+ *       <li>{@link #onPress()} – rising edge.</li>
+ *       <li>{@link #onRelease()} – falling edge.</li>
+ *       <li>{@link #isHeld()} – level.</li>
+ *     </ul>
+ *   </li>
  * </ul>
+ *
+ * <p>For gamepad-backed buttons, the typical wiring is:</p>
+ *
+ * <pre>{@code
+ * class GamepadDevice {
+ *     private final Gamepad gp;
+ *
+ *     public Button a() {
+ *         // raw supplier reads FTC Gamepad field
+ *         return Button.of(() -> gp.a);
+ *     }
+ * }
+ *
+ * class Gamepads {
+ *     public void update(double dtSec) {
+ *         Button.updateAllRegistered();
+ *     }
+ * }
+ * }</pre>
+ *
+ * <p><b>Axis/combination note:</b> When converting a {@link Button} to an
+ * axis (e.g., {@code Axis.fromButton(button)}), axis helpers should rely on
+ * {@link #isHeld()} (the level view) rather than {@link #onPress()} or
+ * {@link #onRelease()}.</p>
  */
 public interface Button {
 
     /**
-     * Whether the button is currently pressed.
+     * Advance this button's internal state by sampling the underlying raw value.
      *
-     * <p>
-     * This should be a cheap, side-effect free call that reflects the most
-     * recent input state (e.g., directly reading an FTC {@code Gamepad} field
-     * or a cached value updated once per loop).
-     * </p>
+     * <p>This should be called exactly once per loop <b>before</b> any calls to
+     * {@link #onPress()}, {@link #onRelease()}, or {@link #isHeld()} for that
+     * loop.</p>
      *
-     * @return {@code true} if pressed, {@code false} otherwise
+     * <p>Most robot code never calls this directly. Instead, the framework calls
+     * {@link #updateAllRegistered()} once per loop (for example, from
+     * {@code Gamepads.update(dtSec)}), which forwards to {@link #update()} on
+     * all registered buttons.</p>
      */
-    boolean isPressed();
-
-    // ------------------------------------------------------------------------
-    // Factories
-    // ------------------------------------------------------------------------
+    void update();
 
     /**
-     * Factory for a {@link Button} backed by a {@link BooleanSupplier}.
+     * Rising edge: returns {@code true} <b>only on the first loop</b> where the
+     * button transitions from "not held" to "held".
      *
-     * <p>
-     * This is the most generic way to adapt arbitrary boolean sources into the
-     * {@code Button} interface.
-     * </p>
+     * <p>Use this for "trigger once per press" behavior.</p>
      *
      * <pre>{@code
-     * Button shoot = Button.of(() -> gamepad1.right_bumper);
+     * if (button.onPress()) {
+     *     // This body runs once per press.
+     * }
      * }</pre>
-     *
-     * @param supplier source of the button state; must not be {@code null}
-     * @return a {@link Button} that delegates to {@link BooleanSupplier#getAsBoolean()}
      */
-    static Button of(final BooleanSupplier supplier) {
-        if (supplier == null) {
-            throw new IllegalArgumentException("BooleanSupplier is required");
-        }
-        return new Button() {
-            @Override
-            public boolean isPressed() {
-                return supplier.getAsBoolean();
-            }
-        };
+    boolean onPress();
+
+    /**
+     * Falling edge: returns {@code true} <b>only on the first loop</b> where
+     * the button transitions from "held" to "not held".
+     *
+     * <p>Use this for "trigger once when released" behavior.</p>
+     */
+    boolean onRelease();
+
+    /**
+     * Level: returns {@code true} on <b>every loop</b> while the button is
+     * currently held down.
+     *
+     * <p>This is the method you should use when you care about
+     * "is the button down right now?" semantics.</p>
+     */
+    boolean isHeld();
+
+    // ---------------------------------------------------------------------
+    // Registry operations
+    // ---------------------------------------------------------------------
+
+    /**
+     * Register a button with the global registry so that it will be included in
+     * {@link #updateAllRegistered()}.
+     *
+     * <p>Buttons created via {@link #of(BooleanSupplier)} are automatically
+     * registered. This method is mainly for advanced cases where you provide
+     * your own {@link Button} implementation but still want it to participate
+     * in global update handling.</p>
+     */
+    static void register(Button button) {
+        Registry.register(button);
     }
 
     /**
-     * Create a button from an {@link Axis} and a threshold.
+     * Advance the state of all registered buttons by sampling their underlying
+     * raw values.
      *
-     * <p>
-     * This is a convenience that delegates to {@link Axis#asButton(double)},
-     * so there is a single canonical implementation of the thresholding logic.
-     * </p>
+     * <p>Framework code should call this exactly once per loop. A typical place
+     * to do so is from {@code Gamepads.update(dtSec)}.</p>
+     */
+    static void updateAllRegistered() {
+        Registry.updateAll();
+    }
+
+    /**
+     * Clear all registered buttons.
      *
-     * <p>
-     * Semantics follow the sign-aware behavior of {@link Axis#asButton(double)}:
-     * </p>
+     * <p>This is primarily intended for framework lifecycle management (e.g.,
+     * when starting a new OpMode). User code normally does not need to call
+     * this directly.</p>
+     */
+    static void clearRegistered() {
+        Registry.clear();
+    }
+
+    // ---------------------------------------------------------------------
+    // Factory helpers
+    // ---------------------------------------------------------------------
+
+    /**
+     * Create a stateful {@link Button} from a raw boolean supplier and
+     * automatically register it with the global registry.
      *
+     * <p>The returned button:</p>
      * <ul>
-     *   <li>If {@code threshold >= 0}, the button is pressed when
-     *       {@code axis.get() >= threshold}.</li>
-     *   <li>If {@code threshold < 0}, the button is pressed when
-     *       {@code axis.get() <= threshold}.</li>
+     *   <li>Samples {@code raw.getAsBoolean()} in {@link #update()}.</li>
+     *   <li>Provides rising-edge semantics via {@link #onPress()}.</li>
+     *   <li>Provides falling-edge semantics via {@link #onRelease()}.</li>
+     *   <li>Provides level semantics via {@link #isHeld()}.</li>
      * </ul>
      *
-     * <p>Examples:</p>
+     * <p>Typical usage (inside gamepad wrappers):</p>
      *
      * <pre>{@code
-     * Axis trigger = player.rightTrigger(); // [0, 1]
-     * Button shoot = Button.fromAxis(trigger, 0.5); // "pressed" when >= 0.5
-     *
-     * Axis axial  = player.leftY(); // [-1, +1]
-     * Button fwd  = Button.fromAxis(axial,  +0.5); // axis >= +0.5
-     * Button back = Button.fromAxis(axial,  -0.5); // axis <= -0.5
+     * public Button a() {
+     *     return Button.of(() -> gp.a);
+     * }
      * }</pre>
-     *
-     * @param axis      axis to threshold; must not be {@code null}
-     * @param threshold cutoff value at or beyond which the button is "pressed";
-     *                  positive thresholds use {@code >=}, negative thresholds
-     *                  use {@code <=}
-     * @return a {@link Button} view of the axis
      */
-    static Button fromAxis(final Axis axis, final double threshold) {
-        if (axis == null) {
-            throw new IllegalArgumentException("Axis is required");
+    static Button of(BooleanSupplier raw) {
+        StatefulButton b = new StatefulButton(raw);
+        Registry.register(b);
+        return b;
+    }
+
+    /**
+     * Convenience: create a button that is always held or always released.
+     *
+     * <p>Edges never fire for constant buttons; {@link #onPress()} and
+     * {@link #onRelease()} always return {@code false}.</p>
+     */
+    static Button constant(boolean held) {
+        StatefulButton b = new StatefulButton(() -> held);
+        Registry.register(b);
+        return b;
+    }
+
+    // ---------------------------------------------------------------------
+    // Default implementation used by factories
+    // ---------------------------------------------------------------------
+
+    /**
+     * Default stateful {@link Button} implementation used by
+     * {@link #of(BooleanSupplier)} and {@link #constant(boolean)}.
+     *
+     * <p>This class is public so that advanced users can construct and
+     * optionally register custom instances, but most code should rely on
+     * the static factories and gamepad wrappers.</p>
+     */
+    final class StatefulButton implements Button {
+        private final BooleanSupplier raw;
+        private boolean prev;
+        private boolean curr;
+
+        /**
+         * @param raw supplier providing the raw "is down" value from hardware
+         *            or higher-level logic. Must be non-null.
+         */
+        public StatefulButton(BooleanSupplier raw) {
+            this.raw = Objects.requireNonNull(raw, "raw supplier is required");
+            this.prev = false;
+            this.curr = false;
         }
-        return axis.asButton(threshold);
-    }
 
-    // ------------------------------------------------------------------------
-    // Boolean combinators
-    // ------------------------------------------------------------------------
-
-    /**
-     * Logical AND of this button and another.
-     *
-     * <p>
-     * The returned button is considered pressed only when both inputs are
-     * pressed. This is useful for "safety" or "shift" combos, e.g.:
-     * </p>
-     *
-     * <pre>{@code
-     * Button shootWhileHeld = dk.p1().rightBumper()
-     *         .and(dk.p1().buttonX());
-     * }</pre>
-     *
-     * @param other other button; must not be {@code null}
-     * @return a new {@link Button} representing {@code this && other}
-     */
-    default Button and(final Button other) {
-        if (other == null) {
-            throw new IllegalArgumentException("other Button is required");
+        @Override
+        public void update() {
+            prev = curr;
+            curr = raw.getAsBoolean();
         }
-        final Button self = this;
-        return new Button() {
-            @Override
-            public boolean isPressed() {
-                return self.isPressed() && other.isPressed();
-            }
-        };
-    }
 
-    /**
-     * Logical OR of this button and another.
-     *
-     * <p>
-     * The returned button is considered pressed when either input is pressed.
-     * </p>
-     *
-     * <pre>{@code
-     * Button shootEither = dk.p1().buttonX()
-     *         .or(dk.p1().buttonY());
-     * }</pre>
-     *
-     * @param other other button; must not be {@code null}
-     * @return a new {@link Button} representing {@code this || other}
-     */
-    default Button or(final Button other) {
-        if (other == null) {
-            throw new IllegalArgumentException("other Button is required");
+        @Override
+        public boolean onPress() {
+            return curr && !prev;
         }
-        final Button self = this;
-        return new Button() {
-            @Override
-            public boolean isPressed() {
-                return self.isPressed() || other.isPressed();
-            }
-        };
+
+        @Override
+        public boolean onRelease() {
+            return !curr && prev;
+        }
+
+        @Override
+        public boolean isHeld() {
+            return curr;
+        }
     }
 
+    // ---------------------------------------------------------------------
+    // Internal registry implementation
+    // ---------------------------------------------------------------------
+
     /**
-     * Logical NOT of this button.
+     * Simple global registry for buttons created via {@link #of(BooleanSupplier)}
+     * or {@link #constant(boolean)} (and any others explicitly registered via
+     * {@link #register(Button)}).
      *
-     * <p>
-     * The returned button is considered pressed when this one is not pressed.
-     * This is occasionally useful when combined with {@link #and(Button)} or
-     * {@link #or(Button)}.
-     * </p>
-     *
-     * @return a new {@link Button} representing {@code !this}
+     * <p>This is intentionally minimal and package-private; all interaction
+     * should go through the static methods on {@link Button}.</p>
      */
-    default Button not() {
-        final Button self = this;
-        return new Button() {
-            @Override
-            public boolean isPressed() {
-                return !self.isPressed();
+    final class Registry {
+        private static final List<Button> BUTTONS = new ArrayList<>();
+
+        private Registry() {
+            // no instances
+        }
+
+        static void register(Button button) {
+            BUTTONS.add(Objects.requireNonNull(button, "button"));
+        }
+
+        static void updateAll() {
+            for (Button b : BUTTONS) {
+                b.update();
             }
-        };
-    }
+        }
 
-    // ------------------------------------------------------------------------
-    // Bridge to Axis
-    // ------------------------------------------------------------------------
-
-    /**
-     * View this button as an {@link Axis} that is 1.0 when pressed and 0.0 otherwise.
-     *
-     * <p>
-     * This is useful when feeding digital inputs into code that expects an
-     * {@code Axis}, such as rate limiters or drive shaping:
-     * </p>
-     *
-     * <pre>{@code
-     * Axis forward = dk.p1().dpadUp().asAxis();   // 1.0 when up is held
-     * Axis back    = dk.p1().dpadDown().asAxis(); // 1.0 when down is held
-     *
-     * Axis axial = Axis.signedFromPositivePair(forward, back);
-     * }</pre>
-     *
-     * <p>
-     * This default implementation delegates to
-     * {@link Axis#fromButton(Button)}, so behavior stays consistent across the
-     * framework.
-     * </p>
-     *
-     * @return an {@link Axis} that is 1.0 when this button is pressed, 0.0 otherwise
-     */
-    default Axis asAxis() {
-        return Axis.fromButton(this);
+        static void clear() {
+            BUTTONS.clear();
+        }
     }
 }

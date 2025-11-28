@@ -49,10 +49,6 @@ public final class DriveSubsystem implements Subsystem {
         // → FL, FR, BR inverted; BL not inverted.
         this.drivebase = Drives.mecanum(
                 hw,
-                HW_FL,
-                HW_FR,
-                HW_BL,
-                HW_BR,
                 /* invertFrontLeft  */ true,
                 /* invertFrontRight */ true,
                 /* invertBackLeft   */ false,

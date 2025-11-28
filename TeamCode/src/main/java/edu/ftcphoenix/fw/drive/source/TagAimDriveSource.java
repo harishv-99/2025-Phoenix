@@ -105,7 +105,7 @@ public final class TagAimDriveSource implements DriveSource {
         DriveSignal base = baseDrive.get(clock);
         lastBaseSignal = base;
 
-        if (!aimButton.isPressed()) {
+        if (!aimButton.isHeld()) {
             // No aiming: pass through base drive signal.
             lastAimActive = false;
             lastBearingSample = null;
@@ -161,7 +161,7 @@ public final class TagAimDriveSource implements DriveSource {
         // Identity of sub-components.
         dbg.addData(p + ".baseDrive.class", baseDrive.getClass().getSimpleName());
         dbg.addData(p + ".controller.class", controller.getClass().getSimpleName());
-        dbg.addData(p + ".aimButton.pressed", aimButton.isPressed());
+        dbg.addData(p + ".aimButton.pressed", aimButton.isHeld());
 
         // Aiming state.
         dbg.addData(p + ".aim.active", lastAimActive);

@@ -8,7 +8,7 @@ import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
- * Helper methods for creating common {@link Task} patterns that drive a {@link Plant}.
+ * Helper methods for creating common {@link Task} patterns that command a {@link Plant}.
  *
  * <p>The goal is to make robot code read like:</p>
  *
@@ -16,8 +16,8 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * // Intake at full power for 0.7 seconds, then stop.
  * Task intakePulse = PlantTasks.holdForSeconds(intakePlant, +1.0, 0.7);
  *
- * // Arm: move to target angle and wait until atSetpoint() (no timeout).
- * Task moveArm = PlantTasks.goToSetpointAndWait(armPlant, Math.toRadians(45.0));
+ * // Arm: set a target angle and wait until atSetpoint() (no timeout).
+ * Task moveArm = PlantTasks.setTargetAndWaitForSetpoint(armPlant, Math.toRadians(45.0));
  * }</pre>
  *
  * <p>All helpers here are <b>non-blocking</b> and are intended to be used with
@@ -26,10 +26,10 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <h2>Design principles</h2>
  * <ul>
- *   <li>Keep Plant timing and sequencing in {@link Task}s, not inside
- *       {@link Plant} itself (plants stay generic).</li>
- *   <li>Expose beginner-friendly building blocks for common patterns:
- *       “hold for time” and “go to setpoint and wait.”</li>
+ *   <li>Keep <b>Plant update timing</b> in your main robot loop or mechanism
+ *       (<code>plant.update(dtSec)</code> is <b>not</b> called from these tasks).</li>
+ *   <li>Use tasks only for <b>targets and waiting</b>: “hold for time” and
+ *       “set target and wait for setpoint (with optional timeout).”</li>
  *   <li>Keep this class domain-specific to actuation; it lives in
  *       {@code fw.actuation} and simply reuses the generic task primitives.</li>
  * </ul>
@@ -55,9 +55,10 @@ public final class PlantTasks {
      *       <li>Calls {@link Plant#setTarget(double)} with {@code target}.</li>
      *     </ul>
      *   </li>
-     *   <li>On each update while running:
+     *   <li>While the task is running:
      *     <ul>
-     *       <li>Calls {@link Plant#update(double)} with {@code clock.dtSec()}.</li>
+     *       <li><b>Does not</b> call {@link Plant#update(double)}; your robot
+     *           code is responsible for updating the plant each loop.</li>
      *     </ul>
      *   </li>
      *   <li>When {@code durationSec} elapses:
@@ -76,6 +77,10 @@ public final class PlantTasks {
      *       automatically afterward).</li>
      * </ul>
      *
+     * <p><b>Note:</b> Your main loop or mechanism should still call
+     * {@link Plant#update(double)} each iteration; this task only changes targets
+     * and waits for time to elapse.</p>
+     *
      * @param plant       the plant to command
      * @param target      target value to hold during the timed interval
      * @param durationSec duration in seconds; must be {@code >= 0}
@@ -92,24 +97,22 @@ public final class PlantTasks {
                 durationSec,
                 // onStart: command initial target
                 () -> plant.setTarget(target),
-                // onUpdate: advance plant with dt
-                new java.util.function.Consumer<LoopClock>() {
-                    @Override
-                    public void accept(LoopClock clock) {
-                        plant.update(clock.dtSec());
-                    }
-                },
+                // onUpdate: no-op; plant.update(dt) is handled elsewhere
+                null,
                 // onFinish: command follow-up target
                 () -> plant.setTarget(afterTarget)
         );
     }
 
     /**
-     * Convenience overload of {@link #holdForSeconds(Plant, double, double, double)}
-     * that sets the plant back to 0 at the end.
+     * Convenience overload: hold a plant at a given target for a fixed amount
+     * of time, then automatically set the target back to 0.0.
      *
-     * <p>This is the most common pattern for power and velocity plants where
-     * “off” is represented by a target of {@code 0.0}.</p>
+     * <p>Equivalent to:</p>
+     *
+     * <pre>{@code
+     * PlantTasks.holdForSeconds(plant, target, durationSec, 0.0);
+     * }</pre>
      *
      * @param plant       the plant to command
      * @param target      target value to hold during the timed interval
@@ -117,21 +120,22 @@ public final class PlantTasks {
      * @return a {@link Task} that performs the timed hold and then sets target
      * back to 0.0
      */
-    public static Task holdForSeconds(Plant plant,
-                                      double target,
-                                      double durationSec) {
+    public static Task holdForSeconds(final Plant plant,
+                                      final double target,
+                                      final double durationSec) {
         return holdForSeconds(plant, target, durationSec, 0.0);
     }
 
     // ------------------------------------------------------------------------
-    // Setpoint + wait patterns
+    // Set target + wait-for-setpoint patterns
     // ------------------------------------------------------------------------
 
     /**
      * Create a {@link Task} that:
      * <ol>
      *   <li>Sets the plant target once at start.</li>
-     *   <li>Keeps calling {@link Plant#update(double)} each loop.</li>
+     *   <li>Relies on your main loop / mechanism to call
+     *       {@link Plant#update(double)} each iteration.</li>
      *   <li>Finishes when {@link Plant#atSetpoint()} returns {@code true}.</li>
      * </ol>
      *
@@ -142,40 +146,52 @@ public final class PlantTasks {
      *
      * @param plant  plant to command
      * @param target target setpoint (e.g., angle radians, velocity, power)
-     * @return a {@link Task} that moves toward the setpoint and finishes when
+     * @return a {@link Task} that sets the target and finishes when
      * {@code plant.atSetpoint()} is true
      */
-    public static Task goToSetpointAndWait(final Plant plant,
-                                           final double target) {
-        return goToSetpointAndWait(plant, target, 0.0, null);
+    public static Task setTargetAndWaitForSetpoint(final Plant plant,
+                                                   final double target) {
+        return setTargetAndWaitForSetpoint(plant, target, 0.0, null);
     }
 
     /**
      * Create a {@link Task} that:
      * <ol>
      *   <li>Sets the plant target once at start.</li>
-     *   <li>Keeps calling {@link Plant#update(double)} each loop.</li>
-     *   <li>Finishes when {@link Plant#atSetpoint()} returns {@code true}.</li>
-     *   <li>Optionally times out after {@code timeoutSec} seconds and runs
-     *       {@code onTimeout} exactly once.</li>
+     *   <li>Relies on your main loop / mechanism to call
+     *       {@link Plant#update(double)} each iteration.</li>
+     *   <li>Finishes when {@link Plant#atSetpoint()} returns {@code true},</li>
+     *   <li>and optionally enforces a timeout.</li>
      * </ol>
      *
      * <p>Semantics:</p>
      * <ul>
-     *   <li>If {@code timeoutSec <= 0}, there is no timeout; the task finishes
-     *       only when {@code atSetpoint()} returns true.</li>
-     *   <li>If {@code timeoutSec > 0}:
+     *   <li>On start:
      *     <ul>
-     *       <li>The task finishes when {@code atSetpoint()} is true, <b>or</b>
-     *           when the timeout elapses, whichever comes first.</li>
-     *       <li>If the timeout elapses first and {@code onTimeout} is not null,
-     *           {@code onTimeout.run()} is called exactly once.</li>
+     *       <li>Calls {@link Plant#setTarget(double)} with {@code target}.</li>
+     *       <li>Resets internal elapsed-time tracking.</li>
+     *     </ul>
+     *   </li>
+     *   <li>On each update while running:
+     *     <ul>
+     *       <li>Accumulates elapsed time using {@link LoopClock#dtSec()}.</li>
+     *       <li><b>Does not</b> call {@link Plant#update(double)}; your robot
+     *           code is responsible for updating the plant each loop.</li>
+     *       <li>Checks {@link Plant#atSetpoint()}; if true, the task finishes.</li>
+     *       <li>If {@code timeoutSec > 0}:
+     *         <ul>
+     *           <li>The task finishes when {@code atSetpoint()} is true, <b>or</b>
+     *               when the timeout elapses, whichever comes first.</li>
+     *           <li>If the timeout elapses first and {@code onTimeout} is not null,
+     *               {@code onTimeout.run()} is called exactly once.</li>
+     *         </ul>
+     *       </li>
      *     </ul>
      *   </li>
      * </ul>
      *
-     * <p>This pattern is useful for autonomous scripts such as “move arm to
-     * angle, but don’t wait forever if something goes wrong.”</p>
+     * <p>This pattern is useful for autonomous scripts such as “set arm angle,
+     * but don’t wait forever if something goes wrong.”</p>
      *
      * @param plant      plant to command
      * @param target     target setpoint
@@ -184,10 +200,10 @@ public final class PlantTasks {
      *                   before {@code plant.atSetpoint()} is true (may be null)
      * @return a {@link Task} implementing the described behavior
      */
-    public static Task goToSetpointAndWait(final Plant plant,
-                                           final double target,
-                                           final double timeoutSec,
-                                           final Runnable onTimeout) {
+    public static Task setTargetAndWaitForSetpoint(final Plant plant,
+                                                   final double target,
+                                                   final double timeoutSec,
+                                                   final Runnable onTimeout) {
         Objects.requireNonNull(plant, "plant is required");
 
         return new Task() {
@@ -201,10 +217,15 @@ public final class PlantTasks {
                     return;
                 }
                 started = true;
-                finished = false;
                 elapsedSec = 0.0;
+                finished = false;
 
                 plant.setTarget(target);
+
+                // Edge case: zero-timeout and already at setpoint
+                if (timeoutSec <= 0.0 && plant.atSetpoint()) {
+                    finished = true;
+                }
             }
 
             @Override
@@ -214,7 +235,6 @@ public final class PlantTasks {
                 }
 
                 double dtSec = clock.dtSec();
-                plant.update(dtSec);
                 elapsedSec += dtSec;
 
                 // 1) Check if we've reached the setpoint.
@@ -240,7 +260,7 @@ public final class PlantTasks {
     }
 
     // ------------------------------------------------------------------------
-    // Simple helpers
+    // Instant target set
     // ------------------------------------------------------------------------
 
     /**

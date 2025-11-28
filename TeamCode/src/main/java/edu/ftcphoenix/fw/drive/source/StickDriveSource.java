@@ -284,7 +284,7 @@ public final class StickDriveSource implements DriveSource {
         double om = shape(rawOm, cfg.deadband, cfg.rotateExpo, cfg.rotateScale);
 
         double modeScale = 1.0;
-        if (slowButton != null && slowButton.isPressed()) {
+        if (slowButton != null && slowButton.isHeld()) {
             modeScale = slowScale;
         }
 
@@ -394,7 +394,7 @@ public final class StickDriveSource implements DriveSource {
         dbg.addData(p + ".slow.configured", slowButton != null);
         if (slowButton != null) {
             dbg.addData(p + ".slow.scale", slowScale);
-            dbg.addData(p + ".slow.pressed", slowButton.isPressed());
+            dbg.addData(p + ".slow.pressed", slowButton.isHeld());
         }
     }
 

@@ -7,171 +7,267 @@ import java.util.function.Consumer;
 import edu.ftcphoenix.fw.input.Button;
 
 /**
- * Simple binding manager that turns raw {@link Button} states into higher-level
+ * Simple binding manager that turns {@link Button} states into higher-level
  * behaviors for teleop:
  *
  * <ul>
  *   <li>{@link #onPress(Button, Runnable)} – fire once on rising edge.</li>
  *   <li>{@link #whileHeld(Button, Runnable, Runnable)} – run once per loop while
  *       pressed, and a separate action when released.</li>
- *   <li>{@link #toggle(Button, Consumer)} – flip a boolean on rising edge and
- *       notify a consumer.</li>
+ *   <li>{@link #toggle(Button, Consumer)} – flip a boolean on each press and
+ *       deliver the new value to a consumer.</li>
  * </ul>
  *
- * <p>Usage pattern:
- * <pre>
+ * <p>
+ * With the new stateful {@link Button} API, {@code Bindings} no longer needs to
+ * compute edges itself. Instead, it delegates to:
+ * </p>
+ *
+ * <ul>
+ *   <li>{@link Button#onPress()} – rising edge.</li>
+ *   <li>{@link Button#onRelease()} – falling edge.</li>
+ *   <li>{@link Button#isHeld()} – level.</li>
+ * </ul>
+ *
+ * <p>
+ * Typical usage:
+ * </p>
+ *
+ * <pre>{@code
+ * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
  * Bindings bindings = new Bindings();
  *
- * bindings.onPress(dk.p1().buttonA(), new Runnable() {
- *     public void run() { doSomethingOnce(); }
- * });
+ * bindings.onPress(pads.p1().a(), () -> shooter.fireOne());
+ * bindings.whileHeld(pads.p1().rb(),
+ *                    () -> intake.setTarget(+1.0),
+ *                    () -> intake.setTarget(0.0));
  *
- * bindings.whileHeld(dk.p1().rightBumper(),
- *     new Runnable() { public void run() { runWhilePressed(); } },
- *     new Runnable() { public void run() { stopWhenReleased(); } }
- * );
+ * @Override
+ * public void loop() {
+ *     double dtSec = clock.dtSec();
  *
- * bindings.toggle(dk.p1().buttonX(), new Consumer<Boolean>() {
- *     public void accept(Boolean on) { setShooterOn(on != null && on.booleanValue()); }
- * });
+ *     pads.update(dtSec);      // updates all registered Buttons
+ *     bindings.update(dtSec);  // polls buttons and runs actions
  *
- * // In loop():
- * bindings.update(dtSec);
- * </pre>
- *
- * <p>This class is deliberately tiny and SDK-agnostic. It does not know about
- * gamepads directly, only the {@link Button} abstraction provided by the FW.
+ *     // ... mechanism updates ...
+ * }
+ * }</pre>
  */
 public final class Bindings {
 
-    private static final class OnPressBinding {
-        Button button;
-        Runnable action;
-        boolean lastPressed;
+    // ---------------------------------------------------------------------
+    // Binding record types
+    // ---------------------------------------------------------------------
+
+    private static final class PressBinding {
+        final Button button;
+        final Runnable action;
+
+        PressBinding(Button button, Runnable action) {
+            this.button = button;
+            this.action = action;
+        }
     }
 
     private static final class WhileHeldBinding {
-        Button button;
-        Runnable whilePressed;
-        Runnable onRelease;
-        boolean lastPressed;
+        final Button button;
+        final Runnable whileHeld;
+        final Runnable onRelease; // may be null
+
+        WhileHeldBinding(Button button, Runnable whileHeld, Runnable onRelease) {
+            this.button = button;
+            this.whileHeld = whileHeld;
+            this.onRelease = onRelease;
+        }
     }
 
     private static final class ToggleBinding {
-        Button button;
-        Consumer<Boolean> consumer;
-        boolean lastPressed;
+        final Button button;
+        final Consumer<Boolean> consumer;
         boolean toggled;
+
+        ToggleBinding(Button button, Consumer<Boolean> consumer) {
+            this.button = button;
+            this.consumer = consumer;
+            this.toggled = false;
+        }
     }
 
-    private final List<OnPressBinding> onPressBindings = new ArrayList<OnPressBinding>();
-    private final List<WhileHeldBinding> whileHeldBindings = new ArrayList<WhileHeldBinding>();
-    private final List<ToggleBinding> toggleBindings = new ArrayList<ToggleBinding>();
+    // ---------------------------------------------------------------------
+    // Binding storage
+    // ---------------------------------------------------------------------
+
+    private final List<PressBinding> pressBindings = new ArrayList<>();
+    private final List<WhileHeldBinding> whileHeldBindings = new ArrayList<>();
+    private final List<ToggleBinding> toggleBindings = new ArrayList<>();
 
     /**
-     * Bind a button to an action that fires once on the rising edge
-     * (when the button transitions from not pressed to pressed).
+     * Create an empty {@link Bindings} set.
+     */
+    public Bindings() {
+        // nothing else
+    }
+
+    // ---------------------------------------------------------------------
+    // Public API
+    // ---------------------------------------------------------------------
+
+    /**
+     * Register an action to run once whenever the given button is pressed
+     * (rising edge).
+     *
+     * <p>
+     * This uses {@link Button#onPress()} internally, so it fires exactly once
+     * per press, regardless of how long the button is held.
+     * </p>
+     *
+     * @param button button to monitor (non-null)
+     * @param action action to run once per press (non-null)
      */
     public void onPress(Button button, Runnable action) {
-        if (button == null || action == null) {
-            throw new IllegalArgumentException("button and action are required");
+        if (button == null) {
+            throw new IllegalArgumentException("button is required");
         }
-        OnPressBinding b = new OnPressBinding();
-        b.button = button;
-        b.action = action;
-        b.lastPressed = button.isPressed(); // start from current state
-        onPressBindings.add(b);
+        if (action == null) {
+            throw new IllegalArgumentException("action is required");
+        }
+        pressBindings.add(new PressBinding(button, action));
     }
 
     /**
-     * Bind a button to an action that runs every loop while the button is pressed,
-     * and another action that runs once when the button is released.
+     * Register an action to run once per loop while the given button is held.
      *
-     * <p>Semantics:
-     * <ul>
-     *   <li>If the button is pressed, {@code whilePressed.run()} is called on
-     *       every {@link #update(double)}.</li>
-     *   <li>When the button transitions from pressed → not pressed, the
-     *       {@code onRelease.run()} action is fired once.</li>
-     * </ul>
+     * <p>
+     * This is a convenience overload that has no explicit "on release" action.
+     * It is equivalent to calling:
+     * </p>
+     *
+     * <pre>{@code
+     * whileHeld(button, whileHeld, null);
+     * }</pre>
+     *
+     * @param button    button to monitor (non-null)
+     * @param whileHeld action to run every loop while the button is held (non-null)
      */
-    public void whileHeld(Button button, Runnable whilePressed, Runnable onRelease) {
-        if (button == null || whilePressed == null || onRelease == null) {
-            throw new IllegalArgumentException("button, whilePressed, and onRelease are required");
-        }
-        WhileHeldBinding b = new WhileHeldBinding();
-        b.button = button;
-        b.whilePressed = whilePressed;
-        b.onRelease = onRelease;
-        b.lastPressed = button.isPressed(); // start from current state
-        whileHeldBindings.add(b);
+    public void whileHeld(Button button, Runnable whileHeld) {
+        whileHeld(button, whileHeld, null);
     }
 
     /**
-     * Bind a button to a boolean toggle. Each rising edge of the button flips
-     * the internal boolean state and notifies the consumer.
+     * Register actions to run while a button is held, and once when it is
+     * released.
      *
-     * <p>Semantics:
+     * <p>
+     * On each loop:
+     * </p>
+     *
      * <ul>
-     *   <li>The internal state starts at {@code false}.</li>
-     *   <li>On each rising edge (not pressed → pressed), the state toggles
-     *       and {@code consumer.accept(state)} is called.</li>
-     *   <li>There is no automatic call at init; if you need an initial state
-     *       applied to hardware, set it yourself in your OpMode init.</li>
+     *   <li>If {@link Button#isHeld()} is true, {@code whileHeld} is executed.</li>
+     *   <li>If {@link Button#onRelease()} is true and {@code onRelease} is non-null,
+     *       {@code onRelease} is executed once.</li>
      * </ul>
+     *
+     * @param button    button to monitor (non-null)
+     * @param whileHeld action to run every loop while the button is held (non-null)
+     * @param onRelease action to run once when the button is released
+     *                  (may be {@code null} if not needed)
+     */
+    public void whileHeld(Button button, Runnable whileHeld, Runnable onRelease) {
+        if (button == null) {
+            throw new IllegalArgumentException("button is required");
+        }
+        if (whileHeld == null) {
+            throw new IllegalArgumentException("whileHeld action is required");
+        }
+        whileHeldBindings.add(new WhileHeldBinding(button, whileHeld, onRelease));
+    }
+
+    /**
+     * Register a toggle binding: flip a boolean each time the button is pressed
+     * (rising edge) and deliver the new value to the consumer.
+     *
+     * <p>
+     * Internally this uses {@link Button#onPress()} for the rising edge and
+     * maintains a single boolean toggle state per binding.
+     * </p>
+     *
+     * @param button   button to monitor (non-null)
+     * @param consumer consumer that receives the updated toggle state
+     *                 ({@code true} / {@code false}) each time the button is
+     *                 pressed (non-null)
      */
     public void toggle(Button button, Consumer<Boolean> consumer) {
-        if (button == null || consumer == null) {
-            throw new IllegalArgumentException("button and consumer are required");
+        if (button == null) {
+            throw new IllegalArgumentException("button is required");
         }
-        ToggleBinding b = new ToggleBinding();
-        b.button = button;
-        b.consumer = consumer;
-        b.lastPressed = button.isPressed();
-        b.toggled = false;
-        toggleBindings.add(b);
+        if (consumer == null) {
+            throw new IllegalArgumentException("consumer is required");
+        }
+        toggleBindings.add(new ToggleBinding(button, consumer));
     }
 
     /**
-     * Process all bindings for this loop.
+     * Remove all registered bindings.
      *
-     * <p>{@code dtSec} is provided for symmetry with other FW components, but
-     * is not currently used. It is kept to allow future time-based bindings
-     * without changing the signature.
+     * <p>
+     * This does <b>not</b> unregister any {@link Button} instances from the
+     * global button registry; it only clears the actions associated with
+     * this {@link Bindings} instance.
+     * </p>
+     */
+    public void clear() {
+        pressBindings.clear();
+        whileHeldBindings.clear();
+        toggleBindings.clear();
+    }
+
+    /**
+     * Poll all registered bindings and trigger their actions as appropriate.
+     *
+     * <p>
+     * This method should be called once per loop <b>after</b> the framework
+     * has updated button state (for example, after {@code Gamepads.update(dtSec)}
+     * has been called, which internally calls
+     * {@link Button#updateAllRegistered()}).
+     * </p>
+     *
+     * <p>
+     * The {@code dtSec} parameter is currently unused but is included here in
+     * case we later add time-based behaviors (e.g., long-press detection)
+     * directly within {@code Bindings}.
+     * </p>
+     *
+     * @param dtSec time since last loop in seconds (currently unused)
      */
     public void update(double dtSec) {
-        // onPress: detect rising edge
-        for (int i = 0; i < onPressBindings.size(); i++) {
-            OnPressBinding b = onPressBindings.get(i);
-            boolean pressed = b.button.isPressed();
-            if (pressed && !b.lastPressed) {
+        // one-shot press bindings
+        for (int i = 0; i < pressBindings.size(); i++) {
+            PressBinding b = pressBindings.get(i);
+            if (b.button.onPress()) {
                 b.action.run();
             }
-            b.lastPressed = pressed;
         }
 
-        // whileHeld: run while pressed, fire onRelease on falling edge
+        // while-held bindings
         for (int i = 0; i < whileHeldBindings.size(); i++) {
             WhileHeldBinding b = whileHeldBindings.get(i);
-            boolean pressed = b.button.isPressed();
-            if (pressed) {
-                b.whilePressed.run();
-            } else if (b.lastPressed) {
-                // Just released
+
+            if (b.button.isHeld()) {
+                b.whileHeld.run();
+            }
+
+            if (b.onRelease != null && b.button.onRelease()) {
                 b.onRelease.run();
             }
-            b.lastPressed = pressed;
         }
 
-        // toggle: flip state on rising edge and notify consumer
+        // toggle bindings
         for (int i = 0; i < toggleBindings.size(); i++) {
             ToggleBinding b = toggleBindings.get(i);
-            boolean pressed = b.button.isPressed();
-            if (pressed && !b.lastPressed) {
+            if (b.button.onPress()) {
                 b.toggled = !b.toggled;
                 b.consumer.accept(Boolean.valueOf(b.toggled));
             }
-            b.lastPressed = pressed;
         }
     }
 }

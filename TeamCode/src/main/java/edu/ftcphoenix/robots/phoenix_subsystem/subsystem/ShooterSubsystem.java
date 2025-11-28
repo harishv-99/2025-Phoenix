@@ -2,10 +2,13 @@ package edu.ftcphoenix.robots.phoenix_subsystem.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
-import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
+import edu.ftcphoenix.fw.actuation.Plants;
 import edu.ftcphoenix.fw.hal.MotorOutput;
+import edu.ftcphoenix.fw.hal.PositionOutput;
+import edu.ftcphoenix.fw.hal.PowerOutput;
 import edu.ftcphoenix.fw.hal.ServoOutput;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.robot.Subsystem;
@@ -56,9 +59,8 @@ public final class ShooterSubsystem implements Subsystem {
     private final Gamepads gamepads;
     private final VisionSubsystem vision;
 
-    private final ServoOutput pusher;
-    private final MotorOutput feederLeft;
-    private final MotorOutput feederRight;
+    private final Plant pusher;
+    private final Plant feeder;
 
     // Shooter uses velocity plant (rad/s) for two motors.
     private final Plant shooterPlant;
@@ -74,18 +76,24 @@ public final class ShooterSubsystem implements Subsystem {
         this.vision = vision;
 
         // Pusher positional servo
-        this.pusher = FtcHardware.servo(hw, HW_PUSHER, false);
+        this.pusher = Actuators.plant(hw)
+                .servo(HW_PUSHER, false)
+                .position()
+                .build();
 
         // Feeder CR servos as motors
-        this.feederLeft = FtcHardware.crServoMotor(hw, HW_FEED_LEFT, false);
-        this.feederRight = FtcHardware.crServoMotor(hw, HW_FEED_RIGHT, false);
+        this.feeder = Actuators.plant(hw)
+                .crServoPair(HW_FEED_LEFT, false,
+                    HW_FEED_RIGHT, false)
+                .power()
+                .build();
 
         // Shooter dual-velocity plant (rad/s target).
-        this.shooterPlant = FtcPlants.velocityPair(
-                hw,
-                HW_SHOOT_LEFT, false,
-                HW_SHOOT_RIGHT, true,     // flip if wiring requires
-                SHOOTER_TICKS_PER_REV);
+        this.shooterPlant = Actuators.plant(hw)
+                .motorPair(HW_SHOOT_LEFT, false,
+                        HW_SHOOT_RIGHT, true)
+                .power()
+                .build();
 
         // Interpolation table for distance → velocity.
         this.rangeToVelocity =
@@ -98,7 +106,7 @@ public final class ShooterSubsystem implements Subsystem {
 
     @Override
     public void onTeleopInit() {
-        pusher.setPosition(PUSHER_RETRACT);
+        pusher.setTarget(PUSHER_RETRACT);
         setFeederPower(0.0);
         shooterTargetRadPerSec = 0.0;
         shooterEnabled = false;
@@ -129,10 +137,10 @@ public final class ShooterSubsystem implements Subsystem {
 
     private void updatePusher() {
         // P2 A: extend; P2 B: retract.
-        if (gamepads.p2().buttonA().isPressed()) {
-            pusher.setPosition(PUSHER_EXTEND);
-        } else if (gamepads.p2().buttonB().isPressed()) {
-            pusher.setPosition(PUSHER_RETRACT);
+        if (gamepads.p2().a().isHeld()) {
+            pusher.setTarget(PUSHER_EXTEND);
+        } else if (gamepads.p2().b().isHeld()) {
+            pusher.setTarget(PUSHER_RETRACT);
         }
     }
 
@@ -152,7 +160,7 @@ public final class ShooterSubsystem implements Subsystem {
 
     private void updateShooter() {
         // P2 Y: while held, aim for distance-based shooter velocity.
-        if (gamepads.p2().buttonY().isPressed()) {
+        if (gamepads.p2().y().isHeld()) {
             shooterEnabled = true;
             shooterTargetRadPerSec = computeTargetVelocityFromRange();
         } else {
@@ -177,8 +185,7 @@ public final class ShooterSubsystem implements Subsystem {
     }
 
     private void setFeederPower(double power) {
-        feederLeft.setPower(power);
-        feederRight.setPower(power);
+        feeder.setTarget(power);
     }
 
     private void addTelemetry() {
@@ -188,8 +195,7 @@ public final class ShooterSubsystem implements Subsystem {
     public void debugDump(DebugSink dbg, String prefix) {
         dbg.addData(prefix + ".enabled", shooterEnabled);
         dbg.addData(prefix + ".targetRadPerSec", "%.1f", shooterTargetRadPerSec);
-        dbg.addData(prefix + ".pusher.lastPos", pusher.getLastPosition());
-        dbg.addData(prefix + ".feeder.powerL", feederLeft.getLastPower());
-        dbg.addData(prefix + ".feeder.powerR", feederRight.getLastPower());
+        dbg.addData(prefix + ".pusher.targetPos", pusher.getTarget());
+        dbg.addData(prefix + ".feeder.targetPower", feeder.getTarget());
     }
 }

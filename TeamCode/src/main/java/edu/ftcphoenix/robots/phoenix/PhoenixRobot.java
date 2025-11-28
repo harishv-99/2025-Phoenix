@@ -7,7 +7,8 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 import java.util.Set;
 
-import edu.ftcphoenix.fw.adapters.ftc.FtcPlants;
+import edu.ftcphoenix.fw.actuation.Actuators;
+import edu.ftcphoenix.fw.actuation.Plants;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
@@ -232,10 +233,6 @@ public final class PhoenixRobot {
         // TODO(team): ensure motor names match your Robot Configuration.
         drivebase = Drives.mecanum(
                 hardwareMap,
-                "fl",
-                "fr",
-                "bl",
-                "br",
                 driveCfg
         );
 
@@ -263,22 +260,24 @@ public final class PhoenixRobot {
         // TODO(team): ensure these hardware names & inversions match your config.
 
         // Transfer/indexer: another power plant
-        transfer = FtcPlants.power(hardwareMap, "transfer", false);
+        transfer = Actuators.plant(hardwareMap)
+                .crServoPair("transferLeft", false,
+                        "transferRight", false)
+                .power()
+                .build();
 
         // Shooter: paired velocity plant (two motors as one mechanism)
-        shooter = FtcPlants.velocityPair(
-                hardwareMap,
-                "shooterL", false,
-                "shooterR", true,
-                /* ticksPerRev */ 28.0   // TODO(team): set motor ticksPerRev
-        );
+        shooter = Actuators.plant(hardwareMap)
+                .motorPair("shooterLeft", false,
+            "shooterRight", true)
+                .velocity(28.0)
+                .build();
 
         // Pusher: positional servo (0..1)
-        pusher = FtcPlants.servoPosition(
-                hardwareMap,
-                "pusher",
-                false
-        );
+        pusher = Actuators.plant(hardwareMap)
+                .servo("pusher", false)
+                .position()
+                .build();
 
         // TODO(team): You can add more plants here (e.g., arm, turret) as needed.
     }
@@ -290,7 +289,7 @@ public final class PhoenixRobot {
         // Example: shooter simple on/off modes.
         // A = SHOOT, B = STOP
         bindings.onPress(
-                gamepads.p1().buttonA(),
+                gamepads.p1().a(),
                 new Runnable() {
                     @Override
                     public void run() {
@@ -300,7 +299,7 @@ public final class PhoenixRobot {
                 }
         );
         bindings.onPress(
-                gamepads.p1().buttonB(),
+                gamepads.p1().b(),
                 new Runnable() {
                     @Override
                     public void run() {
@@ -312,7 +311,7 @@ public final class PhoenixRobot {
 
         // Example: intake macro on X (e.g., timed pulse in via macroRunner)
         bindings.onPress(
-                gamepads.p1().buttonX(),
+                gamepads.p1().x(),
                 new Runnable() {
                     @Override
                     public void run() {
@@ -323,7 +322,7 @@ public final class PhoenixRobot {
 
         // Example: fire one ring on Y (pusher + transfer + shooter ready)
         bindings.onPress(
-                gamepads.p1().buttonY(),
+                gamepads.p1().y(),
                 new Runnable() {
                     @Override
                     public void run() {

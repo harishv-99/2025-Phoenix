@@ -2,199 +2,279 @@ package edu.ftcphoenix.fw.input;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.util.MathUtil;
+import java.util.Objects;
 
 /**
- * Thin wrapper around FTC {@link Gamepad} that:
+ * Thin, student-friendly wrapper around FTC {@link Gamepad}.
+ *
+ * <p>Goals:</p>
  * <ul>
- *   <li>Captures stick center bias and corrects it (auto-calibrates on construction).</li>
- *   <li>Normalizes stick Y so that “up is +”, matching common robot math conventions.</li>
- *   <li>Exposes a consistent, explicit API for axes and buttons:
- *       leftX/leftY/rightX/rightY/leftTrigger/rightTrigger,
- *       leftBumper/rightBumper, leftStickButton/rightStickButton,
- *       dpadUp/Down/Left/Right, buttonA/B/X/Y.</li>
+ *   <li>Expose sticks and triggers as {@link Axis} objects.</li>
+ *   <li>Expose buttons as stateful {@link Button} objects with
+ *       {@link Button#onPress()}, {@link Button#onRelease()}, and
+ *       {@link Button#isHeld()} semantics.</li>
+ *   <li>Hide raw FTC field names (e.g., {@code left_stick_x}) behind clearer
+ *       method names.</li>
  * </ul>
  *
- * <h2>Calibration model</h2>
- * On construction (and whenever {@link #recalibrate()} is called) we sample the current stick
- * positions as the center offsets (lx0, ly0, rx0, ry0). Reads are then corrected using:
- * <pre>
- *   if (raw >= offset)  v = (raw - offset) / (1 - offset);
- *   else                v = (raw - offset) / (1 + offset);
- * </pre>
- * This recenters to 0 and preserves full travel to ±1 even with a biased center.
- * After normalization, Y axes are negated so “stick up” becomes +1 (FTC raw Y is typically -1).
+ * <p>Typical usage (via {@link Gamepads}):</p>
  *
- * <h2>Responsibilities</h2>
- * Provide bias-corrected, consistently named axes & buttons for one gamepad. Offer on-demand re-zero.
- *
- * <h2>Non-responsibilities</h2>
- * No edge detection/debounce (use input.binding.Bindings). No response shaping (use drive sources).
- *
- * <h2>Usage</h2>
  * <pre>{@code
  * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
- * Axis strafe  = pads.p1().leftX();
- * Axis forward = pads.p1().leftY();      // up is + after normalization
- * Axis turn    = pads.p1().rightX();
- * Button fire  = pads.p1().buttonX();
- * // Optional re-zero mid-match: pads.p1().recalibrate();
+ *
+ * void loop(double dtSec) {
+ *     pads.update(dtSec); // updates all registered Buttons
+ *
+ *     // Sticks as axes:
+ *     double driveX = pads.p1().leftX().get();
+ *     double driveY = pads.p1().leftY().get();
+ *
+ *     // Buttons with edge + level semantics:
+ *     if (pads.p1().a().onPress()) {
+ *         // Fire once when A is pressed.
+ *     }
+ *
+ *     if (pads.p1().rightBumper().isHeld()) {
+ *         // Runs every loop while RB is held.
+ *     }
+ * }
  * }</pre>
  */
 public final class GamepadDevice {
 
     private final Gamepad gp;
 
-    // Stick center offsets
-    private double lx0, ly0, rx0, ry0;
+    // Sticks/triggers as axes.
+    private final Axis leftX;
+    private final Axis leftY;
+    private final Axis rightX;
+    private final Axis rightY;
+    private final Axis leftTrigger;
+    private final Axis rightTrigger;
 
+    // Buttons, as stateful Buttons (registered automatically via Button.of).
+    private final Button a;
+    private final Button b;
+    private final Button x;
+    private final Button y;
+    private final Button lb;
+    private final Button rb;
+    private final Button dpadUp;
+    private final Button dpadDown;
+    private final Button dpadLeft;
+    private final Button dpadRight;
+    private final Button start;
+    private final Button back;
+    private final Button leftStickButton;
+    private final Button rightStickButton;
+
+    /**
+     * Wrap an FTC {@link Gamepad}.
+     *
+     * <p>All {@link Button} instances created here are registered with the
+     * global {@link Button} registry via {@link Button#of(java.util.function.BooleanSupplier)}.
+     * Their {@link Button#update()} method will be called automatically when
+     * the framework calls {@link Button#updateAllRegistered()} (typically from
+     * {@code Gamepads.update(dtSec)}).</p>
+     */
     public GamepadDevice(Gamepad gp) {
-        this.gp = gp;
-        recalibrate();
+        this.gp = Objects.requireNonNull(gp, "gamepad is required");
+
+        // Axes: direct views of stick/trigger values.
+        this.leftX        = Axis.of(() -> gp.left_stick_x);
+        this.leftY        = Axis.of(() -> gp.left_stick_y);
+        this.rightX       = Axis.of(() -> gp.right_stick_x);
+        this.rightY       = Axis.of(() -> gp.right_stick_y);
+        this.leftTrigger  = Axis.of(() -> gp.left_trigger);
+        this.rightTrigger = Axis.of(() -> gp.right_trigger);
+
+        // Buttons: stateful, registered via Button.of(...).
+        this.a  = Button.of(() -> gp.a);
+        this.b  = Button.of(() -> gp.b);
+        this.x  = Button.of(() -> gp.x);
+        this.y  = Button.of(() -> gp.y);
+        this.lb = Button.of(() -> gp.left_bumper);
+        this.rb = Button.of(() -> gp.right_bumper);
+
+        this.dpadUp    = Button.of(() -> gp.dpad_up);
+        this.dpadDown  = Button.of(() -> gp.dpad_down);
+        this.dpadLeft  = Button.of(() -> gp.dpad_left);
+        this.dpadRight = Button.of(() -> gp.dpad_right);
+
+        this.start = Button.of(() -> gp.start);
+        this.back  = Button.of(() -> gp.back);
+
+        this.leftStickButton  = Button.of(() -> gp.left_stick_button);
+        this.rightStickButton = Button.of(() -> gp.right_stick_button);
     }
+
+    // ---------------------------------------------------------------------
+    // Axes
+    // ---------------------------------------------------------------------
 
     /**
-     * Sample the current stick positions as the new centers.
+     * Left stick X axis.
      *
-     * <p>Call this when sticks are physically centered to correct for bias.</p>
+     * <p>Matches {@link Gamepad#left_stick_x}:
+     * <ul>
+     *   <li>-1.0 = full left</li>
+     *   <li>+1.0 = full right</li>
+     * </ul>
+     * </p>
      */
-    public void recalibrate() {
-        lx0 = gp.left_stick_x;
-        ly0 = gp.left_stick_y;
-        rx0 = gp.right_stick_x;
-        ry0 = gp.right_stick_y;
-    }
-
-    // ---------------- Axes ----------------
-
     public Axis leftX() {
-        return Axis.of(() -> normalizeAxis(gp.left_stick_x, lx0));
+        return leftX;
     }
-
-    public Axis leftY() {
-        // FTC Y+ is down, so we invert.
-        return Axis.of(() -> -normalizeAxis(gp.left_stick_y, ly0));
-    }
-
-    public Axis rightX() {
-        return Axis.of(() -> normalizeAxis(gp.right_stick_x, rx0));
-    }
-
-    public Axis rightY() {
-        // FTC Y+ is down, so we invert.
-        return Axis.of(() -> -normalizeAxis(gp.right_stick_y, ry0));
-    }
-
-    public Axis leftTrigger() {
-        return Axis.of(() -> MathUtil.clamp01(gp.left_trigger));
-    }
-
-    public Axis rightTrigger() {
-        return Axis.of(() -> MathUtil.clamp01(gp.right_trigger));
-    }
-
-    // Short aliases
-    public Axis lx() { return leftX(); }
-    public Axis ly() { return leftY(); }
-    public Axis rx() { return rightX(); }
-    public Axis ry() { return rightY(); }
-    public Axis lt() { return leftTrigger(); }
-    public Axis rt() { return rightTrigger(); }
-
-    // ---------------- Buttons ----------------
-
-    public Button leftBumper() {
-        return Button.of(() -> gp.left_bumper);
-    }
-
-    public Button rightBumper() {
-        return Button.of(() -> gp.right_bumper);
-    }
-
-    public Button leftStickButton() {
-        return Button.of(() -> gp.left_stick_button);
-    }
-
-    public Button rightStickButton() {
-        return Button.of(() -> gp.right_stick_button);
-    }
-
-    public Button dpadUp() {
-        return Button.of(() -> gp.dpad_up);
-    }
-
-    public Button dpadDown() {
-        return Button.of(() -> gp.dpad_down);
-    }
-
-    public Button dpadLeft() {
-        return Button.of(() -> gp.dpad_left);
-    }
-
-    public Button dpadRight() {
-        return Button.of(() -> gp.dpad_right);
-    }
-
-    public Button buttonA() {
-        return Button.of(() -> gp.a);
-    }
-
-    public Button buttonB() {
-        return Button.of(() -> gp.b);
-    }
-
-    public Button buttonX() {
-        return Button.of(() -> gp.x);
-    }
-
-    public Button buttonY() {
-        return Button.of(() -> gp.y);
-    }
-
-    public Button start() {
-        return Button.of(() -> gp.start);
-    }
-
-    public Button back() {
-        return Button.of(() -> gp.back);
-    }
-
-    // Short aliases for buttons
-    public Button a() { return buttonA(); }
-    public Button b() { return buttonB(); }
-    public Button x() { return buttonX(); }
-    public Button y() { return buttonY(); }
-
-    // ---------------- Debug / Telemetry ----------------
 
     /**
-     * Emit calibration info to telemetry.
+     * Left stick Y axis.
      *
-     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
-     * @param prefix base key prefix, e.g. "gp1" or "gamepad1"
+     * <p>Matches {@link Gamepad#left_stick_y}:
+     * <ul>
+     *   <li>-1.0 = full up</li>
+     *   <li>+1.0 = full down</li>
+     * </ul>
+     * </p>
      */
-    public void debugDump(DebugSink dbg, String prefix) {
-        if (dbg == null) {
-            return;
-        }
-        String p = (prefix == null || prefix.isEmpty()) ? "gamepad" : prefix;
-        dbg.addData(p + ".lx0", lx0)
-                .addData(p + ".ly0", ly0)
-                .addData(p + ".rx0", rx0)
-                .addData(p + ".ry0", ry0);
+    public Axis leftY() {
+        return leftY;
     }
 
-
-    // ---------------- Helpers ----------------
+    /**
+     * Right stick X axis.
+     */
+    public Axis rightX() {
+        return rightX;
+    }
 
     /**
-     * Apply piecewise normalization around offset and clamp to [-1..+1].
+     * Right stick Y axis.
      */
-    private static double normalizeAxis(double raw, double offset) {
-        double v = (raw >= offset)
-                ? (raw - offset) / (1.0 - offset)
-                : (raw - offset) / (1.0 + offset);
-        return MathUtil.clamp(v, -1.0, 1.0);
+    public Axis rightY() {
+        return rightY;
+    }
+
+    /**
+     * Left trigger axis in [0, 1].
+     */
+    public Axis leftTrigger() {
+        return leftTrigger;
+    }
+
+    /**
+     * Right trigger axis in [0, 1].
+     */
+    public Axis rightTrigger() {
+        return rightTrigger;
+    }
+
+    // ---------------------------------------------------------------------
+    // Buttons (canonical names)
+    // ---------------------------------------------------------------------
+
+    /** Button A. */
+    public Button a() {
+        return a;
+    }
+
+    /** Button B. */
+    public Button b() {
+        return b;
+    }
+
+    /** Button X. */
+    public Button x() {
+        return x;
+    }
+
+    /** Button Y. */
+    public Button y() {
+        return y;
+    }
+
+    /** Left bumper (short name). */
+    public Button lb() {
+        return lb;
+    }
+
+    /** Right bumper (short name). */
+    public Button rb() {
+        return rb;
+    }
+
+    /** D-pad up. */
+    public Button dpadUp() {
+        return dpadUp;
+    }
+
+    /** D-pad down. */
+    public Button dpadDown() {
+        return dpadDown;
+    }
+
+    /** D-pad left. */
+    public Button dpadLeft() {
+        return dpadLeft;
+    }
+
+    /** D-pad right. */
+    public Button dpadRight() {
+        return dpadRight;
+    }
+
+    /** Start button. */
+    public Button start() {
+        return start;
+    }
+
+    /** Back / options button. */
+    public Button back() {
+        return back;
+    }
+
+    /** Left stick button (L3). */
+    public Button leftStickButton() {
+        return leftStickButton;
+    }
+
+    /** Right stick button (R3). */
+    public Button rightStickButton() {
+        return rightStickButton;
+    }
+
+    // ---------------------------------------------------------------------
+    // Aliases (to keep older / more descriptive names working)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Alias for {@link #lb()}.
+     *
+     * <p>Provided to support code that prefers {@code leftBumper()} naming.</p>
+     */
+    public Button leftBumper() {
+        return lb;
+    }
+
+    /**
+     * Alias for {@link #rb()}.
+     *
+     * <p>Provided to support code that prefers {@code rightBumper()} naming.</p>
+     */
+    public Button rightBumper() {
+        return rb;
+    }
+
+    // ---------------------------------------------------------------------
+    // Raw access (advanced)
+    // ---------------------------------------------------------------------
+
+    /**
+     * @return the underlying FTC {@link Gamepad}.
+     *
+     * <p>Most code should not need this; it is provided for advanced cases
+     * where you need a field that does not yet have a wrapper.</p>
+     */
+    public Gamepad raw() {
+        return gp;
     }
 }

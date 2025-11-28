@@ -5,21 +5,42 @@ import edu.ftcphoenix.fw.debug.DebugSink;
 /**
  * A generic setpoint-driven mechanism.
  *
- * <p>Implementations typically wrap one or more HAL outputs
- * (e.g., {@code MotorOutput}, {@code ServoOutput}) and any internal
- * control logic (PID, feedforward, vendor velocity control, etc.).</p>
+ * <p>A {@code Plant} is the low-level "sink" that accepts a scalar target
+ * and drives one or more hardware outputs (motors, servos, etc.) toward
+ * that target using whatever control logic it chooses (open-loop, PID,
+ * vendor velocity control, feedforward, etc.).</p>
  *
- * <p>Examples:</p>
+ * <h2>Semantic categories</h2>
+ *
+ * <p>Each concrete plant should document which of these categories it uses:</p>
+ *
  * <ul>
- *   <li>Open-loop power plant for an intake motor.</li>
- *   <li>Velocity plant for a shooter flywheel (rad/s).</li>
- *   <li>Angle plant for an arm (radians).</li>
- *   <li>Paired plants driving left/right motors as one mechanism.</li>
+ *   <li><b>Power plants</b> – target is a normalized power command:
+ *     <ul>
+ *       <li>Typical range: [-1.0, +1.0].</li>
+ *       <li>Examples: intake motor power, buffer/feeder power.</li>
+ *     </ul>
+ *   </li>
+ *
+ *   <li><b>Velocity plants</b> – target is angular velocity:
+ *     <ul>
+ *       <li>Units: rad/s at the motor shaft (unless otherwise documented).</li>
+ *       <li>Examples: shooter flywheel velocity, conveyor belt speed.</li>
+ *     </ul>
+ *   </li>
+ *
+ *   <li><b>Position plants</b> – target is angle or position:
+ *     <ul>
+ *       <li>Units: radians at the motor shaft, or [0, 1] for normalized servo
+ *           positions, depending on the implementation.</li>
+ *       <li>Examples: arm angle, slide extension, servo pusher position.</li>
+ *     </ul>
+ *   </li>
  * </ul>
  *
- * <p>Units and semantics of the {@code target} are mechanism-defined.
- * For example, a power plant might interpret targets in [-1, +1],
- * while a velocity plant uses rad/s.</p>
+ * <p>Higher-level code should treat {@code target} as "some scalar command in
+ * this plant's native units" and avoid mixing plants with incompatible
+ * semantics.</p>
  */
 public interface Plant {
 
@@ -39,7 +60,8 @@ public interface Plant {
      *
      * <p>Implementations are encouraged (but not required) to store the
      * last target passed to {@link #setTarget(double)} and return it here
-     * so that callsites (telemetry, debugDump, decorators) can inspect it.</p>
+     * so that callsites (telemetry, {@link #debugDump(DebugSink, String)},
+     * decorators) can inspect it.</p>
      *
      * <p>Plants that do not track a target may simply return {@code 0.0}
      * or any convenient value; callers should treat this as best-effort
@@ -61,9 +83,32 @@ public interface Plant {
      *   <li>Do nothing for stateless plants.</li>
      * </ul>
      *
+     * <p><b>Callers are responsible</b> for invoking this once per control
+     * loop. Helper classes (tasks, controllers, mechanisms) should <b>not</b>
+     * assume exclusive ownership of update timing – it is common for
+     * multiple decorators/controllers to share a plant as long as only
+     * one of them is responsible for calling {@code update(dtSec)}.</p>
+     *
      * @param dtSec time since last update in seconds
      */
     void update(double dtSec);
+
+    /**
+     * Optional lifecycle hook to clear any internal state associated with
+     * this plant.
+     *
+     * <p>Examples:</p>
+     * <ul>
+     *   <li>Resetting integrators in a PID controller.</li>
+     *   <li>Zeroing internal timers or filters.</li>
+     *   <li>Reinitializing vendor control modes if needed.</li>
+     * </ul>
+     *
+     * <p>Default implementation does nothing.</p>
+     */
+    default void reset() {
+        // Default: no internal state to clear.
+    }
 
     /**
      * @return {@code true} if this plant considers itself "at" its current
