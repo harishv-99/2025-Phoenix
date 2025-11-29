@@ -4,12 +4,16 @@ This document explains the **design principles** behind the Phoenix FTC framewor
 
 It is aimed at:
 
-* Mentors and advanced students who want to understand "why" the framework looks the way it does.
+* Mentors and advanced students who want to understand *why* the framework looks the way it does.
 * Contributors who are adding new features or refactoring existing parts.
 
-If you are just trying to get a robot running, start with the **Beginner’s Guide**, then **Tasks &
-Macros Quickstart**, then the **Shooter Case Study**. Come back here when you want to reason about
-architecture decisions.
+If you are just trying to get a robot running, start with:
+
+* **Beginner’s Guide**
+* **Tasks & Macros Quickstart**
+* **Shooter Case Study & Examples Walkthrough**
+
+Come back here when you want to reason about architecture decisions.
 
 ---
 
@@ -36,8 +40,8 @@ Phoenix is designed to:
 
 4. **Be testable and debuggable**
 
-    * Move FTC SDK specifics behind adapters.
-    * Let most logic be plain Java that can be unit‑tested.
+    * Keep most logic as plain Java, with minimal direct FTC dependencies.
+    * Allow unit testing of key pieces (interpolating tables, TagAim controller, etc.).
     * Provide clear debug/telemetry hooks.
 
 5. **Support incremental learning**
@@ -50,9 +54,11 @@ Phoenix is designed to:
 Phoenix is *not* trying to:
 
 * Replace the FTC SDK or change how OpModes work.
-* Be a full command‑based framework with every possible feature.
-* Hide all complexity. Some concepts (plants, tasks, TagAim) are explicit so they remain
-  understandable.
+* Be a giant, batteries‑included command‑based framework.
+* Hide all complexity behind magic annotations or reflection.
+
+Instead, it offers a **thin, explicit** set of tools that you wire together in your
+own `PhoenixRobot` class.
 
 ---
 
@@ -60,341 +66,427 @@ Phoenix is *not* trying to:
 
 A core principle is **separation of concerns**:
 
-* **Hardware access** lives in **adapters** and the HAL.
-* **Actuation** lives in **plants**.
-* **Sequencing and behavior over time** lives in **tasks**.
-* **Input mapping** lives in **Gamepads + Bindings**.
-* **High‑level robot behavior** lives in a **robot class** you own.
+* **Time** → `LoopClock`
+* **Input** → `Gamepads`, `GamepadDevice`, `Button`, `Bindings`
+* **Drive** → `DriveSource`, `DriveSignal`, `MecanumDrivebase`, `Drives`
+* **Mechanisms** → `Plant`, `Actuators`, controller wrappers
+* **Behavior over time** → `Task`, `TaskRunner`, `SequenceTask`, `ParallelAllTask`
+* **Sensors & vision** → `AprilTagSensor`, `AprilTagObservation`, `TagAim`, `BearingSource`
+* **Robot assembly** → your season‑specific robot class (e.g. `PhoenixRobot`)
 
-### 2.1 Adapters and HAL
+Each layer has a small, clear responsibility.
 
-Adapters (`FtcHardware`, `FtcVision`, `FtcTelemetryDebugSink`) and the HAL (`PowerOutput`,
-`ServoOutput`, etc.) form the boundary to the FTC SDK.
+### 2.1 Time: LoopClock
 
-They exist so that:
+`LoopClock` is the single source of truth for timing:
 
-* The rest of the framework does **not** depend directly on `DcMotor`, `Servo`, or `Telemetry`.
-* Most robot logic can be written in terms of abstract outputs/inputs.
+* Wraps `OpMode.getRuntime()`.
+* Computes `dtSec` each loop.
+* Is passed to drivebases, tasks, and sometimes sensors.
 
-When writing framework code:
+Pattern:
 
-* New hardware types should be added as HAL abstractions.
-* FTC‑specific setup should go in adapters.
+```java
+clock.reset(getRuntime());   // in start() or end of init()
 
-### 2.2 Plants
+// each loop()
+clock.update(getRuntime());
+
+double dt = clock.dtSec();
+```
+
+This keeps everything in the robot synchronized to the same notion of time.
+
+### 2.2 Input: Gamepads & Bindings
+
+The input layer separates **raw controllers** from **what they do**.
+
+* `Gamepads` owns the FTC `gamepad1` and `gamepad2`.
+
+    * `Gamepads.create(gamepad1, gamepad2)` in `init()`.
+    * `pads.update(dt)` in `loop()`.
+* `GamepadDevice` exposes buttons and axes for P1, P2.
+* `Bindings` maps button events to actions.
+
+    * `onPress(Button, Runnable)`
+    * `whileHeld(Button, Runnable)`
+    * `toggle(Button, Consumer<Boolean>)`
+    * `update(dt)` in `loop()`.
+
+**Principle:** there should be **one place** where you define
+"which button does what" – typically a `configureBindings()` method on your robot.
+
+### 2.3 Drive: DriveSource & drivebases
+
+Drive is decomposed into:
+
+* `DriveSignal` – an axial / lateral / omega command.
+* `DriveSource` – "where drive signals come from" (sticks, TagAim, auto trajectories).
+* `MecanumDrivebase` – drivebase wrapper around 4 motors.
+* `Drives` – helpers for constructing drivebases.
+
+Pattern:
+
+```java
+MecanumDrivebase drivebase = Drives.mecanum(hardwareMap);
+DriveSource driveSource = GamepadDriveSource.teleOpMecanumStandard(pads);
+
+// each loop()
+DriveSignal cmd = driveSource.get(clock).clamped();
+drivebase.drive(cmd);
+drivebase.update(clock);
+```
+
+Other drive sources (e.g. TagAim, autonomous path following) wrap or replace the
+base `DriveSource`.
+
+### 2.4 Mechanisms: plants and Actuators
 
 A **plant** is anything that:
 
-* Has a **target** (desired state), and
-* Can be **updated each loop** to move toward that target.
+* Has a **target** (double), and
+* Moves toward that target when you call `update(dt)`.
 
 Examples:
 
 * Shooter wheel: target velocity.
-* Arm: target angle.
 * Intake: target power.
 * Pusher: target position.
+* Arm: target angle.
 
-Reasons to use plants:
+Plants are typically constructed via `Actuators.plant(hardwareMap)`:
 
-* Centralize control logic (PID, feedforward, rate limiting) in one place.
-* Keep robot code talking about *intent* (targets) instead of raw power levels.
-* Make it easy to wrap behavior with safety and rate‑limiting layers.
+```java
+Plant shooter = Actuators.plant(hardwareMap)
+        .motorPair("shooterLeftMotor", false,
+                   "shooterRightMotor", true)
+        .velocity(100.0)   // tolerance in native units
+        .build();
 
-### 2.3 Tasks
+Plant intake = Actuators.plant(hardwareMap)
+        .motor("intakeMotor", false)
+        .power()
+        .build();
+```
 
-A **task** represents a behavior that unfolds over time:
+**Principle:** robot code should mostly talk about **targets**, not raw power.
+Control logic (PID, rate limits, safety interlocks) should be encapsulated inside
+plants or small wrappers.
 
-* Autonomous sequences (drive, drop, shoot, park).
-* TeleOp macros (shooting sequences, climb sequences).
+### 2.5 Behavior over time: Tasks & TaskRunner
 
-Tasks:
+Multi‑step behaviors that unfold over time (shooting, placing a preload, an auto
+routine) are expressed as **Tasks**:
 
-* Are **non‑blocking**.
-* Are **composable** via `SequenceTask` and `ParallelAllTask`.
-* Typically manipulate plants (and possibly drivebases) to express behavior.
+```java
+public interface Task {
+    void start(LoopClock clock);
+    void update(LoopClock clock);
+    boolean isFinished();
+}
+```
 
-A `TaskRunner` owns the currently running task and advances it each loop.
+A `TaskRunner` manages a **queue** of tasks and advances them each loop:
 
-### 2.4 Input mapping
+```java
+TaskRunner runner = new TaskRunner();
 
-`Gamepads` and `Bindings` separate **input wiring** from **behavior logic**:
+runner.enqueue(task);      // add to queue
+runner.update(clock);      // advance current task
+runner.clear();            // cancel current + queued
+```
 
-* `Gamepads` read the raw FTC `gamepad1`/`gamepad2` state.
-* `Bindings` define how buttons/axes trigger actions:
+Small building blocks (`InstantTask`, `RunForSecondsTask`, `WaitUntilTask`,
+`SequenceTask`, `ParallelAllTask`, `PlantTasks`) let you express complex macros
+without ever calling `sleep()`.
 
-    * change a plant target,
-    * start a task,
-    * toggle modes.
+### 2.6 Robot assembly: your PhoenixRobot class
 
-This makes it easy to change driver controls without touching the core robot logic.
+Your season robot class (often called `PhoenixRobot`) is the **composition root**:
 
-### 2.5 Robot class
+* Owns `Gamepads`, `Bindings`, `TaskRunner`, drive, and mechanism plants.
+* Wires hardware via `Actuators` and `Drives`.
+* Exposes methods like `updateTeleOp(LoopClock)` and `updateAuto(LoopClock)`.
+* Provides helper methods that construct tasks (`shootOneDisc(...)`,
+  `buildCenterAuto()`, etc.).
 
-The season‑specific robot class (e.g., `PhoenixRobot`) is the **owner** of:
-
-* Plants, drivebase, sensors, tasks.
-* The configuration of bindings.
-* High‑level helper methods like `shootThreeDiscs()`, `buildSimpleAuto()`, etc.
-
-OpModes are intentionally kept thin so that:
-
-* The same robot code can be reused across multiple TeleOps/Autos.
-* The OpMode lifecycle (init / start / loop / stop) is clear and simple.
+OpModes are intentionally thin: they create the robot, manage `LoopClock`, and
+call into the robot each loop.
 
 ---
 
 ## 3. Plants vs. tasks vs. sensors
 
-### 3.1 Plants: what should be a plant?
+Understanding what should be a plant, what should be a task, and what should be
+"just a sensor" is core to using Phoenix well.
 
-A good candidate for a plant is something that:
+### 3.1 What should be a plant?
 
-* Has a meaningful *target* state (angle, velocity, position, power).
-* Might require closed‑loop control.
-* Might benefit from rate limiting or safety interlocks.
+Good plant candidates:
 
-Examples of **good** plant candidates:
-
-* Shooter wheel velocity.
-* Arm angle.
-* Lift height.
-* Claw position.
-
-Examples of things that usually **do not** need their own plant:
-
-* Simple one‑off LEDs or a rumble effect.
-* Low‑level sensor reads (IMU, encoders, distance sensor) – those are inputs.
-
-### 3.2 Tasks: what should be a task?
-
-Use tasks for behaviors that are:
-
-* Naturally described as **steps** over **time**.
-* Multi‑phase and not instantaneous.
+* Have a meaningful *target* (angle, velocity, position, power).
+* May require closed‑loop control or rate limiting.
+* Typically drive hardware outputs.
 
 Examples:
 
-* Spin up shooter, feed discs, stop shooter.
-* Move an arm to position, wait, then open a claw.
-* Drive to a location while running intake.
+* Shooter wheel (velocity).
+* Intake (power).
+* Arm (position / angle).
+* Lift (position).
+* Pusher / claw (position).
 
-Tasks should not be used for:
+Things that usually **don’t** need a dedicated plant:
 
-* Per‑loop logic that always runs (that belongs in the robot’s `update…` methods).
-* One‑shot variable changes (those can be done directly in bindings or with `InstantTask`).
+* Simple one‑shot outputs (LED blink, gamepad rumble) – those can be small helpers.
+* Raw sensor readings (IMU, distance sensors) – those feed into controllers.
+
+### 3.2 What should be a Task?
+
+Use a `Task` when behavior is naturally described as **steps over time**:
+
+* Spin up shooter, feed disc, spin down.
+* Move arm to position, wait, open claw.
+* Drive to location while running intake.
+* Entire autonomous routines.
+
+Tasks should **not** be used for:
+
+* Per‑loop logic that always runs (that belongs directly in `updateTeleOp/Auto`).
+* Simple one‑shot variable changes (bindings + `Plant.setTarget(...)` is enough).
 
 ### 3.3 Sensors and TagAim
 
-Sensors are deliberately kept simple:
+Phoenix treats sensors as **inputs**, not subsystems:
 
-* Fetch values (distance, heading, tag pose).
-* Provide them in convenient forms (e.g., `AprilTagObservation`, `BearingSource`).
+* AprilTag detection is exposed via `AprilTagSensor` and `AprilTagObservation`.
+* "Bearing to target" is exposed via `BearingSource`.
 
 `TagAim` is a small controller that:
 
-* Looks at sensor information (bearing to tag).
-* Produces an angular correction (omega) to feed into `DriveSignal`.
+* Takes a base `DriveSource` and an `AprilTagSensor`.
+* Controls omega when the driver holds an aim button.
 
-It is not a full subsystem; it is a reusable building block that composes with a base `DriveSource`.
+This keeps TagAim as **just another drive source**, not a giant subsystem.
 
 ---
 
-## 4. Input and bindings philosophy
+## 4. Input & bindings philosophy
 
-The input layer is designed to make driver controls:
+The bindings layer expresses "what driver input means" in a single, explicit place.
 
-* Explicit.
-* Discoverable.
-* Easy to rebind.
+### 4.1 Single source of truth
 
-### 4.1 Single source of truth for controls
+All gamepad → behavior logic should live in one method per robot:
 
-All "which button does what" logic should live in **one place** per robot:
+```java
+private void configureBindings() {
+    GamepadDevice p1 = pads.p1();
 
-* Usually in a method like `configureBindings()` inside your robot class.
+    bindings.whileHeld(p1.a(), () -> intake.setTarget(+1.0));
+    bindings.onRelease(p1.a(), () -> intake.setTarget(0.0));
 
-Avoid scattering button logic across many files and random `if (gamepad1.a)` checks.
+    bindings.onPress(p1.y(), () -> {
+        tasks.clear();
+        tasks.enqueue(shootThreeDiscs());
+    });
+}
+```
+
+This avoids scattering `if (gamepad1.a)` checks around multiple files.
 
 ### 4.2 Level of abstraction
 
-Bindings should usually trigger:
+Bindings should typically call **robot‑level methods** or **enqueue tasks**, not
+fiddle with low‑level details:
 
-* A high‑level helper method on the robot (e.g., `startShootMacro()`).
-* Or directly start a `Task`.
+* ✅ `bindings.onPress(p1.y(), () -> tasks.enqueue(robot.shootThreeDiscs()));`
+* 🚫 `if (gamepad1.y && !prevY) { shooterTarget = 2800; /* plus lots more */ }`
 
-This keeps TeleOp logic at the right level:
+This keeps TeleOp logic easy to read and change.
 
-```java
-bindings.onPress(p1.y(), ()->taskRunner.
+### 4.3 Continuous vs. event‑based
 
-start(robot.shootThreeDiscs()));
-```
+Phoenix bindings support both:
 
-rather than:
+* **Event‑based** (`onPress`, `onRelease`, `toggle`) – great for starting macros
+  or toggling modes.
+* **Continuous** (`whileHeld`) – good for simple plant power control.
 
-```java
-if(gamepad1.y &&!prevY){
-shooterTarget =2800;
-        // and a bunch more logic here...
-        }
-```
-
-### 4.3 Continuous vs. event‑based bindings
-
-* Use **event‑based** bindings (`onPress`, `onRelease`) for starting/stopping tasks and toggling
-  modes.
-* Use **while‑held** bindings for simple direct control of plants (e.g., intake power).
-
-`Bindings.update()` is called once per loop to evaluate these patterns.
+`Bindings.update(dt)` handles button state transitions every loop.
 
 ---
 
-## 5. Debugging and telemetry
+## 5. Tasks & TaskRunner design
 
-Debugging and observability are first‑class concerns.
+Tasks are designed to be simple and explicit:
 
-### 5.1 DebugSink
+* No hidden threads or background schedulers.
+* No blocking calls; everything is driven from the main `loop()`.
 
-`DebugSink` is an abstraction over debug output.
+### 5.1 Queue semantics
 
-* `FtcTelemetryDebugSink` sends information to FTC Telemetry.
-* `NullDebugSink` can be used when you don’t need output (or in tests).
+`TaskRunner` maintains a **FIFO queue**:
 
-Classes are encouraged to:
+* `enqueue(task)` appends to the queue.
+* `update(clock)`:
 
-* Accept a `DebugSink` in their constructor.
-* Implement a `debugDump(DebugSink dbg)` method when it makes sense.
+    * Starts the next task when the current one finishes.
+    * Calls `start(clock)` *once* for each task.
+    * Calls `update(clock)` once per loop until `isFinished()`.
 
-### 5.2 Patterns for debugDump()
+This makes it possible to choose between:
 
-Guidelines for `debugDump()`:
+* **"Latest wins"** – call `clear()` before `enqueue(...)`.
+* **Queueing** – just keep calling `enqueue(...)` as events arrive.
 
-* Do **not** flood telemetry every loop with giant walls of text.
-* Prefer concise key‑value lines (e.g., speeds, setpoints, state enums).
-* Tolerate `dbg` being `null` (defensively) even though we normally provide a non‑null sink.
+### 5.2 Non‑blocking pattern
+
+To keep tasks non‑blocking:
+
+* Use `LoopClock` time instead of `sleep()`.
+* Use `RunForSecondsTask` and `WaitUntilTask` instead of manual timers.
+* Keep per‑loop `update(clock)` work small.
 
 Example pattern:
 
 ```java
-public void debugDump(DebugSink dbg) {
-    if (dbg == null) return;
+public final class WaitForShooterTask implements Task {
+    private final Plant shooter;
+    private final double target;
 
-    dbg.add("Shooter", "vel=%.0f target=%.0f atSetpoint=%b",
-            currentVelocity, targetVelocity, atSetpoint());
+    public WaitForShooterTask(Plant shooter, double target) {
+        this.shooter = shooter;
+        this.target = target;
+    }
+
+    @Override
+    public void start(LoopClock clock) {
+        shooter.setTarget(target);
+    }
+
+    @Override
+    public void update(LoopClock clock) {
+        // nothing extra to do; plant.update(dt) happens in robot code
+    }
+
+    @Override
+    public boolean isFinished() {
+        return shooter.atSetpoint();
+    }
 }
 ```
 
-Robot code can decide when and how often to call `debugDump()`.
+In practice you’ll rarely write this by hand – `PlantTasks` provides helpers for
+common patterns – but the underlying idea stays simple.
 
 ---
 
-## 6. Design patterns and anti‑patterns
+## 6. Debugging and telemetry
 
-### 6.1 Recommended patterns
+Phoenix treats observability as a first‑class concern.
+
+### 6.1 DebugSink
+
+`DebugSink` is a light abstraction over "where debug info goes":
+
+* In FTC OpModes, you often wrap telemetry in a `DebugSink`.
+* In tests, you can use `NullDebugSink` or a custom implementation.
+
+Many classes provide a `debugDump(DebugSink dbg)` or similar method where they
+log their current state.
+
+Guidelines:
+
+* Avoid huge walls of telemetry every loop.
+* Prefer concise key‑value lines (e.g., `vel=`, `target=`, `atSetpoint=`).
+* Be defensive if `dbg` is null (even though most robot code will pass a real sink).
+
+### 6.2 Where to put debug calls
+
+The robot class is usually the best place to trigger debug dumps:
+
+* It knows when readings are useful (every loop, or only in certain modes).
+* It can coordinate debug output across drive + mechanisms + tasks.
+
+---
+
+## 7. Design patterns and anti‑patterns
+
+### 7.1 Recommended patterns
 
 1. **Robot as composition root**
 
-    * All plants, tasks, drivebases, and bindings are created and wired in the robot class.
+    * A single season robot class wires plants, drive, tasks, bindings.
 
 2. **Thin OpModes**
 
-    * OpModes mostly forward calls to the robot and manage OpMode lifecycle.
+    * OpModes create `Gamepads`, `PhoenixRobot`, and `LoopClock`.
+    * `loop()` just updates time, inputs, robot, and telemetry.
 
-3. **Task‑based multi‑step behavior**
+3. **Tasks for multi‑step behavior**
 
-    * Use tasks instead of long `if` chains and timers scattered across the codebase.
+    * Use `TaskRunner`, `PlantTasks`, `SequenceTask` / `ParallelAllTask` for macros.
 
 4. **Single responsibility**
 
     * Each class has a small, clear job.
-    * Avoid "kitchen sink" classes that know about everything.
+    * Avoid "god" classes that know about everything.
 
-5. **Data flows through clear interfaces**
+5. **Explicit data flow via interfaces**
 
-    * Use `DriveSignal`, `Plant`, `Task` interfaces at module boundaries.
+    * Use `DriveSignal`, `Plant`, `Task`, and `AprilTagObservation` at module boundaries.
 
-### 6.2 Anti‑patterns to avoid
+### 7.2 Anti‑patterns to avoid
 
 1. **Blocking code (`sleep()`) in control paths**
 
     * Freezes TeleOp and destroys loop timing.
-    * Use `RunForSecondsTask` and `WaitUntilTask`.
+    * Use Tasks and `LoopClock` instead.
 
 2. **Scattered hardware access**
 
-    * Direct `hardwareMap.get()` calls in many files.
-    * Use `FtcHardware` and plants instead.
+    * `hardwareMap.get()` sprinkled across many files.
+    * Prefer `Actuators.plant(...)` and central wiring in your robot class.
 
 3. **Scattered gamepad checks**
 
-    * `if (gamepad1.a)` sprinkled everywhere.
-    * Use `Gamepads` + `Bindings` so control mappings are centralized.
+    * `if (gamepad1.a)` logic everywhere.
+    * Prefer `Gamepads` + `Bindings` so controls are centralized.
 
 4. **Giant OpModes**
 
-    * All logic inside one TeleOp class.
-    * Prefer a robot class that OpModes call into.
+    * All robot logic inside a single TeleOp class.
+    * Prefer a robot class plus thin OpModes.
 
 5. **Tight coupling between unrelated subsystems**
 
-    * e.g., arm code directly changing drive behavior via static globals.
-    * Prefer explicit communication via tasks, shared state on the robot, or well‑defined helpers.
+    * E.g., arm code reaching into drivebase via globals.
+    * Prefer explicit interaction via shared state on the robot or Tasks.
 
 ---
 
-## 7. Evolution from older patterns
+## 8. Legacy patterns and evolution
 
-Earlier versions of Phoenix used base classes and subsystem constructs such as:
+Earlier versions of Phoenix emphasized:
 
-* `PhoenixTeleOpBase`
-* `PhoenixAutoBase`
-* `Subsystem`
+* Base classes: `PhoenixTeleOpBase`, `PhoenixAutoBase`.
+* Subsystem classes derived from a `Subsystem` base.
 
 These patterns:
 
-* Encouraged OpModes to extend framework classes.
-* Split robot logic into multiple subsystem classes.
+* Hid some important behavior in base classes (harder for students to follow).
+* Encouraged splitting robot logic across many small classes.
 
 The current design prefers:
 
-* A **single robot class** that composes plants, drive, sensors, and tasks.
-* Plain FTC OpModes that create and use that robot class.
+* **Composition over inheritance** – a single robot class that owns everything.
+* Plain FTC OpModes instead of framework base classes.
 
-The older base classes are still present for **backward compatibility**, but new examples and docs
-use the newer pattern.
+Legacy base classes remain for backward compatibility and teams who still
+use them, but new code and docs focus on the composition‑based approach.
 
-Details on migration and legacy support live in **Notes.md**.
-
----
-
-## 8. Adding new features to the framework
-
-When extending the framework, follow these guidelines:
-
-1. **Fit into the existing layers**
-
-    * New hardware → HAL + adapter.
-    * New controller building block → plant wrapper or helper.
-    * New multi‑step behavior → task or task helper.
-
-2. **Keep interfaces small and focused**
-
-    * Prefer a few methods with clear semantics over many convenience methods.
-
-3. **Avoid hidden global state**
-
-    * Pass dependencies explicitly via constructors.
-    * Minimize singletons.
-
-4. **Preserve non‑blocking behavior**
-
-    * Don’t introduce blocking calls in framework code.
-
-5. **Document intent**
-
-    * Add Javadoc explaining why a class exists and how it’s meant to be used.
-    * Where relevant, reference the higher‑level docs (this file, Beginner’s Guide, etc.).
+See **Notes & Migration Guide** for more on moving older code to the new style.
 
 ---
 
@@ -402,10 +494,12 @@ When extending the framework, follow these guidelines:
 
 Phoenix is built around a few key ideas:
 
-* **Plants** model mechanisms with targets and updates.
-* **Tasks** describe behaviors over time.
-* **Bindings** connect driver input to robot behaviors.
+* **Plants** model mechanisms with targets and per‑loop updates.
+* **Tasks** describe behaviors over time; `TaskRunner` orchestrates them.
+* **Bindings** connect driver input to plant targets and task queues.
 * A **robot class** composes everything; OpModes stay thin.
+* Tools like **TagAim**, **AprilTagSensor**, and **InterpolatingTable1D** layer on
+  advanced features without changing these fundamentals.
 
 As long as new code respects these principles:
 
@@ -413,4 +507,5 @@ As long as new code respects these principles:
 * Complex behaviors remain non‑blocking and composable.
 * The framework can grow without becoming fragile or confusing.
 
-Use this document as a reference when making structural decisions or extending the framework.
+Use this document as a reference when making structural decisions or extending
+Phoenix with new capabilities.

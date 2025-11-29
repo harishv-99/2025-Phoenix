@@ -1,10 +1,8 @@
 # Phoenix Notes, Legacy, and Migration Guide
 
-This document collects **advanced notes**, **legacy details**, and **migration tips** for the
-Phoenix framework.
+This document collects **advanced notes**, **legacy details**, and **migration tips** for the Phoenix framework.
 
-It is mainly for mentors and framework maintainers. New students should not need anything here to
-write robot code.
+It is mainly for mentors and framework maintainers. New students should not need anything here to write robot code.
 
 ---
 
@@ -16,8 +14,7 @@ Over time, Phoenix has evolved:
 * There were experiments with concepts like `Stage`, `MacroSlot`, and more opinionated schedulers.
 * The input layer changed from `DriverKit` to a simpler `Gamepads` + `Bindings` design.
 
-Current docs and examples use a **PhoenixRobot + thin OpMode + Tasks + Plants** pattern. This
-document:
+Current docs and examples use a **PhoenixRobot + thin OpMode + Tasks + Plants** pattern. This document:
 
 * Explains what the older pieces were trying to do.
 * Clarifies which parts are kept only for **backward compatibility**.
@@ -66,14 +63,11 @@ Over time, several issues became clear:
 
 * New code should use:
 
-    * A **single season robot class** (e.g., `PhoenixRobot`) that composes plants, drive, sensors,
-      bindings, and tasks.
+    * A **single season robot class** (e.g., `PhoenixRobot`) that composes plants, drive, sensors, bindings, and tasks.
     * Plain FTC OpModes (`OpMode` / `LinearOpMode`) that construct and delegate to the robot class.
-* `PhoenixTeleOpBase`, `PhoenixAutoBase`, and `Subsystem` remain for **backward compatibility** and
-  for old examples that haven’t been migrated.
+* `PhoenixTeleOpBase`, `PhoenixAutoBase`, and `Subsystem` remain for **backward compatibility** and for old examples that haven’t been migrated.
 
-If you are maintaining old code, it is fine to keep it working as is. For new students and new
-robots, prefer the newer pattern documented in **Beginner’s Guide** and **Framework Overview**.
+If you are maintaining old code, it is fine to keep it working as is. For new students and new robots, prefer the newer pattern documented in **Beginner’s Guide** and **Framework Overview**.
 
 ---
 
@@ -91,8 +85,7 @@ In practice, this overlapped heavily with what **Tasks** already provide:
 * Multi‑step behavior over time.
 * Clear lifecycle (`start` / `update` / `isFinished`).
 
-The extra abstraction layer made it harder to understand where logic lived, especially for
-beginners.
+The extra abstraction layer made it harder to understand where logic lived, especially for beginners.
 
 ### 3.2 MacroSlot and safe idle
 
@@ -104,10 +97,8 @@ The idea behind `MacroSlot` (and similar constructs) was roughly:
 These concerns are now better expressed as:
 
 * A plain `TaskRunner` that owns the currently running Task.
-* Normal robot logic that defines what "idle" means for plants (e.g., zero power) when no task is
-  active.
-* Interlock / safety behavior implemented directly in **plant wrappers** (e.g., `InterlockPlant`) or
-  in the robot logic.
+* Normal robot logic that defines what "idle" means for plants (e.g., zero power) when no task is active.
+* Interlock / safety behavior implemented directly in **plant wrappers** (e.g., `InterlockPlant`) or in the robot logic.
 
 ### 3.3 Current status
 
@@ -152,8 +143,7 @@ This is simpler and more explicit:
 * Replace calls that used `DriverKit.Player` with `Gamepads.player1()`, `Gamepads.player2()`, etc.
 * Where `DriverKit` offered convenience wrappers, consider whether they are still needed:
 
-    * If yes, recreate them as small helper methods in your **robot class**, not in a global driver
-      utility.
+    * If yes, recreate them as small helper methods in your **robot class**, not in a global driver utility.
     * If no, delete them.
 
 ---
@@ -183,8 +173,7 @@ This section gives concrete suggestions for moving older code to the newer patte
 2. **Inline simple subsystems** directly into PhoenixRobot:
 
     * If a subsystem class is thin, fold its fields and methods in.
-3. For more complex subsystems, you may keep them as plain helper classes (no base `Subsystem`),
-   owned by PhoenixRobot.
+3. For more complex subsystems, you may keep them as plain helper classes (no base `Subsystem`), owned by PhoenixRobot.
 4. Change TeleOp/Auto to:
 
     * Extend `OpMode` / `LinearOpMode`.
@@ -198,8 +187,7 @@ This section gives concrete suggestions for moving older code to the newer patte
 
     * `init()` → construct `FtcHardware`, `DebugSink`, and `PhoenixRobot`.
     * `loop()` → update clock, inputs, bindings, then call `updateTeleOp(dt)`.
-3. Remove inheritance from `PhoenixTeleOpBase` / `PhoenixAutoBase` once you’ve replicated the needed
-   behavior.
+3. Remove inheritance from `PhoenixTeleOpBase` / `PhoenixAutoBase` once you’ve replicated the needed behavior.
 
 In many cases, this simplifies the file rather than making it longer.
 
@@ -228,8 +216,7 @@ In many cases, this simplifies the file rather than making it longer.
 
 ### 6.1 Multiple TaskRunners
 
-The recommended starting point is **one TaskRunner per robot**. In rare cases it may be useful to
-have more than one, e.g.:
+The recommended starting point is **one TaskRunner per robot**. In rare cases it may be useful to have more than one, e.g.:
 
 * A separate TaskRunner dedicated to a long‑running climb sequence.
 * Another TaskRunner for smaller, interruptible macros.
@@ -246,8 +233,7 @@ The framework does not enforce a single global notion of "safe idle".
 Instead:
 
 * Each robot is expected to define what "idle" means for its plants and drivebase.
-* Safety features (e.g., not running shooter and intake in conflicting directions) are best
-  expressed as:
+* Safety features (e.g., not running shooter and intake in conflicting directions) are best expressed as:
 
     * interlocks in plant wrappers, or
     * explicit logic in the robot’s `update…` methods.
@@ -258,26 +244,23 @@ This keeps policy in robot code rather than baking it into the framework.
 
 If you maintain both legacy and new examples:
 
-* Consider grouping legacy examples under a separate package (e.g., `examples.legacy`) or clearly
-  marking them with comments.
+* Consider grouping legacy examples under a separate package (e.g., `examples.legacy`) or clearly marking them with comments.
 * Update docs to always point new students to the modern examples first.
 
 ---
 
 ## 7. Summary
 
-* Phoenix has evolved from base‑class/subsystem patterns to a **composition‑based robot class** with
-  **thin OpModes**.
-* Older constructs like `PhoenixTeleOpBase`, `PhoenixAutoBase`, `Subsystem`, `Stage`, `MacroSlot`,
-  and `DriverKit` remain primarily for backward compatibility.
+* Phoenix has evolved from base‑class/subsystem patterns to a **composition‑based robot class** with **thin OpModes**.
+* Older constructs like `PhoenixTeleOpBase`, `PhoenixAutoBase`, `Subsystem`, `Stage`, `MacroSlot`, and `DriverKit` remain primarily for backward compatibility.
 * New code should favor:
 
     * `PhoenixRobot` (or similar) as the central composition point.
     * `Gamepads` + `Bindings` for input.
     * `Plant` + `Task` + `TaskRunner` for actuation and behavior.
 
-Use this document when you’re touching older files, need to understand historical context, or are
-planning larger refactors.
+Use this document when you’re touching older files, need to understand historical context, or are planning larger refactors.
+
 
 ## Principles for evaluating output:
 

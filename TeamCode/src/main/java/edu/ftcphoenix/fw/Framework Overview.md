@@ -1,262 +1,478 @@
-# Phoenix FTC Framework – Overview
+# Phoenix FTC Framework Overview
 
-This document is the **map** of the Phoenix FTC framework. It explains what the framework is trying to do, how the pieces fit together, and where to look next depending on who you are (new student, drive coach, or framework maintainer).
+This document is a **map of the Phoenix framework**, how the pieces fit together,
+and where your robot code should live.
 
----
+It focuses on:
 
-## 1. What Phoenix is trying to do
+* The **main runtime pattern** (LoopClock, Gamepads, Bindings, Plants, Tasks, Drive).
+* The **package layout** of `edu.ftcphoenix.fw.*`.
+* How to connect these pieces in your own project.
+* Where legacy base classes (e.g., `PhoenixTeleOpBase`) fit in today.
 
-Phoenix is a small framework that sits **on top of the FTC SDK** and aims to:
+If you are just starting, read this together with:
 
-* Let **students focus on robot behavior**, not boilerplate.
-* Encourage **non-blocking, composable logic** (no `sleep()` in the middle of important code).
-* Separate concerns:
-
-    * Hardware access and FTC specifics live in **adapters**.
-    * Control and sequencing live in **plants** and **tasks**.
-    * High‑level robot behavior lives in a **robot class** you own.
-* Make code easy to **debug, refactor, and test**.
-
-You can think of the framework as providing:
-
-* **“Nice building blocks”**: Plants, Tasks, Drive helpers, Input helpers.
-* **“Adapters”**: small wrappers that hide FTC SDK details.
-* **“Patterns”**: recommended ways to structure your TeleOp and Auto code.
+* **Beginner’s Guide** – how to write a season robot class + thin OpModes.
+* **Tasks & Macros Quickstart** – non‑blocking behaviors.
+* **Shooter Case Study & Examples Walkthrough** – full TeleOp examples.
+* **Framework Principles** – design philosophy.
 
 ---
 
-## 2. How to read these docs
+## 1. Big picture
 
-If you are:
+Phoenix is designed around a small set of **orthogonal building blocks**:
 
-* **A new student** – start with **Beginner’s Guide**.
-* **Writing multi-step behaviors** (autos, macros, complex buttons) – read **Tasks & Macros Quickstart**.
-* **Connecting the docs to real code** – walk through **Shooter Case Study & Examples Walkthrough**.
-* **A mentor / framework contributor** – read **Framework Principles** and **Notes**.
+* **Time** – `LoopClock`
+* **Input** – `Gamepads`, `GamepadDevice`, `Button`, `Axis`, `Bindings`
+* **Drive** – `DriveSource`, `DriveSignal`, `MecanumDrivebase`, `Drives`
+* **Mechanisms** – `Plant`, `Actuators`, `Plants`, controller wrappers
+* **Tasks** – `Task`, `TaskRunner`, `InstantTask`, `RunForSecondsTask`, etc.
+* **Vision & sensors** – `AprilTagSensor`, `AprilTagObservation`, `TagAim`, `BearingSource`
+* **Utilities** – `InterpolatingTable1D`, `MathUtil`, `Units`
 
-This overview stays high‑level and points you at the right place for details.
+Your **robot code** lives in your own package (e.g., `edu.ftcphoenix.robots.*`) and
+is responsible for:
 
----
+* Creating/wiring these building blocks.
+* Choosing how to expose behavior via gamepad bindings and tasks.
 
-## 3. Big pieces at a glance
-
-The framework lives under the `edu.ftcphoenix.fw` package. The major areas are:
-
-### 3.1 Actuation – plants and controllers (`fw.actuation`)
-
-This is where you model things that **move** on the robot.
-
-* `Plant` – interface for something that has a **desired target** and can be **updated each loop**.
-* `Plants` – helpers and utilities for working with plants.
-* `Actuators` – helpers for wiring FTC motors/servos into plants.
-* `RateLimitedPlant` – wraps a plant to limit how fast its target changes.
-* `InterlockPlant` – wraps one or more plants to enforce safety rules.
-* `controller.*` – small control helpers for shaping plant behavior.
-* `PlantTasks` – ready‑made `Task` factories that drive plants (e.g., “go to this setpoint and wait”, “hold this power for N seconds then stop”).
-
-**Key idea:** Robot code should mostly talk to **plants** instead of direct motor power.
+Phoenix itself is mostly stateless helpers + small abstractions.
 
 ---
 
-### 3.2 Tasks – non‑blocking behaviors (`fw.task`)
+## 2. The main runtime pattern
 
-Tasks represent **do this behavior over time** in a non‑blocking way.
-
-* `Task` – interface with `start`, `update`, and `isFinished`.
-* `TaskRunner` – owns the currently running task and advances it each loop.
-* Building blocks:
-
-    * `InstantTask`
-    * `RunForSecondsTask`
-    * `WaitUntilTask`
-    * `SequenceTask` – run tasks in order.
-    * `ParallelAllTask` – run multiple tasks together until all finish.
-
-Tasks are used for **TeleOp macros** (e.g., “shoot 3 discs”) and **Autonomous routines** (“drive here, then shoot, then park”).
-
----
-
-### 3.3 Drive – moving the robot (`fw.drive`)
-
-Helpers for building drivebases and hooking them to driver input or autonomous logic.
-
-* `DriveSignal` – the low-level representation of what the drivebase should do.
-* `Drives` – static helpers for different drivebase types.
-* `MecanumConfig` / `MecanumDrivebase` – mecanum drive helpers.
-* `DriveSource` – interface for “things that can produce a drive signal” (driver input, TagAim, autonomous path, etc.).
-* `DriveTasks` – tasks that command drive motion (e.g., drive for a duration).
-* `drive.source.*`:
-
-    * `GamepadDriveSource` – drive from sticks/buttons with support for slow‑mode, etc.
-    * `TagAimDriveSource` – wraps another drive source and adds TagAim rotation on top.
-
-**Key idea:** The drivebase doesn’t care *where* the command comes from – TeleOp, TagAim, or Auto – as long as it gets a `DriveSignal` each loop.
-
----
-
-### 3.4 Sensing & TagAim (`fw.sensing`)
-
-This is where vision and other sensors live.
-
-* `AprilTagSensor` & `AprilTagObservation` – access and represent AprilTag detections.
-* `Tags` – utilities related to tag IDs and tag geometry.
-* `BearingSource` – an abstraction for “give me the direction to something”.
-* `TagAim` & `TagAimController` – logic for turning the robot to face a target (often an AprilTag).
-
-TagAim is used heavily in the examples to allow the driver to **hold a button and auto‑face the scoring AprilTag**, while still driving normally otherwise.
-
----
-
-### 3.5 Input – gamepads & bindings (`fw.input`)
-
-A small input layer that makes controller code more explicit and testable.
-
-* `Gamepads` – global gamepad manager; updated once per loop.
-* `GamepadDevice` – one logical gamepad (P1, P2, etc.).
-* `Axis` – analog inputs (sticks, triggers).
-* `Button` – digital inputs (A/B/X/Y, bumpers, d‑pad, etc.).
-* `binding/Bindings` – map buttons and axes to actions (e.g., start a task, change a target).
-
-**Key idea:** Keep all “when I press this button, do that behavior” logic in a predictable, centralized place.
-
----
-
-### 3.6 Adapters – FTC SDK integration (`fw.adapters.ftc`)
-
-These classes are the thin layer between the Phoenix framework and the FTC SDK.
-
-* `FtcHardware` – wraps the `HardwareMap` and creates outputs/inputs used by plants and sensors.
-* `FtcTelemetryDebugSink` – sends debug information to Telemetry.
-* `FtcVision` – sets up and provides access to vision (including AprilTag) on FTC hardware.
-
-Your TeleOp/Auto OpModes usually create these adapters once and pass them into your robot class.
-
----
-
-### 3.7 HAL – hardware abstraction (`fw.hal`)
-
-Very simple abstractions over FTC hardware capabilities.
-
-* `PowerOutput`, `VelocityOutput`, `PositionOutput`, `ServoOutput`, `MotorOutput`.
-
-These are used by `Actuators` and plants so that higher‑level code doesn’t depend directly on the FTC SDK motor and servo types.
-
----
-
-### 3.8 Utilities, debug, and core math
-
-* `fw.util`
-
-    * `LoopClock` – tracks cycle time (`dt`) and loop rate.
-    * `InterpolatingTable1D` – lookup table with interpolation (used for distance→shooter speed curves).
-    * `MathUtil`, `Units` – small helpers for math and unit conversions.
-* `fw.debug`
-
-    * `DebugSink` – interface for sending debug output.
-    * `NullDebugSink` – no‑op implementation.
-* `fw.core`
-
-    * `Pid`, `PidController` – basic PID tools used where needed.
-
----
-
-## 4. Where your robot code lives
-
-The Phoenix framework **does not** own your OpModes or game‑specific robot class. A typical season will have:
-
-* A **season robot class** (often something like `PhoenixRobot` or `SeasonRobot`) that:
-
-    * Holds references to plants, drivebase, sensors, and tasks.
-    * Wires them together once during initialization.
-    * Exposes high‑level methods like `updateTeleOp(dt)` and `updateAuto(dt)`.
-    * Provides helper methods to create tasks/macros (e.g., `shootThreeDiscs()`).
-* **Thin TeleOp and Auto OpModes** that:
-
-    * Construct `FtcHardware`, `FtcVision`, and a debug sink.
-    * Construct your season robot class.
-    * In `loop()`:
-
-        * Update `LoopClock`.
-        * Update `Gamepads` and `Bindings`.
-        * Call `robot.updateTeleOp(dt)` or `taskRunner.update(...)` as appropriate.
-        * Flush debug/telemetry.
-
-The **Shooter TeleOp examples (01–06)** in `fw.examples` show this pattern in concrete code.
-
----
-
-## 5. Typical TeleOp dataflow
-
-A TeleOp loop using Phoenix typically looks like this (pseudocode):
+All Phoenix‑style OpModes end up looking very similar. The key loop looks like this:
 
 ```java
-public void loop() {
-    // 1. Update timing.
-    clock.update();
-    double dt = clock.getDtSeconds();
+public class MyTeleOp extends OpMode {
+    private final LoopClock clock = new LoopClock();
 
-    // 2. Read input.
-    Gamepads.update(gamepad1, gamepad2);
-    bindings.update();   // buttons → actions/tasks
+    private Gamepads pads;
+    private Bindings bindings;
 
-    // 3. Robot logic.
-    robot.updateTeleOp(dt);  // sets desired targets for plants, etc.
+    private PhoenixRobot robot;      // your season robot class
 
-    // 4. Advance tasks (macros, auton fragments).
-    taskRunner.update(dt);
+    @Override
+    public void init() {
+        pads = Gamepads.create(gamepad1, gamepad2);
+        robot = new PhoenixRobot(hardwareMap, pads);
+        bindings = robot.bindings();
 
-    // 5. Telemetry / debug.
-    dbg.flush();
+        clock.reset(getRuntime());
+    }
+
+    @Override
+    public void loop() {
+        // 1) Time
+        clock.update(getRuntime());
+        double dt = clock.dtSec();
+
+        // 2) Inputs
+        pads.update(dt);
+        bindings.update(dt);
+
+        // 3) Robot logic (drive + plants + tasks)
+        robot.updateTeleOp(clock);
+
+        // 4) Telemetry
+        telemetry.update();
+    }
 }
 ```
 
-Inside `robot.updateTeleOp(dt)` you typically:
+On the **robot side**, you have a `PhoenixRobot` that composes everything:
 
-* Read drive input via a `GamepadDriveSource`.
-* Optionally wrap it with `TagAimDriveSource` when an aim button is held.
-* Convert the resulting `DriveSignal` to motor outputs via `MecanumDrivebase`.
-* Update plants based on current targets.
+```java
+public final class PhoenixRobot {
+    private final HardwareMap hw;
+    private final Gamepads pads;
+
+    // Drive
+    private final MecanumDrivebase drivebase;
+    private final DriveSource driveSource;
+
+    // Mechanisms
+    private final Plant shooter;
+    private final Plant intake;
+    private final Plant pusher;
+
+    // Input & tasks
+    private final Bindings bindings = new Bindings();
+    private final TaskRunner tasks = new TaskRunner();
+
+    public PhoenixRobot(HardwareMap hw, Gamepads pads) {
+        this.hw = hw;
+        this.pads = pads;
+
+        this.drivebase = Drives.mecanum(hw);
+        this.driveSource = GamepadDriveSource.teleOpMecanumStandard(pads);
+
+        this.shooter = buildShooter(hw);
+        this.intake = buildIntake(hw);
+        this.pusher = buildPusher(hw);
+
+        configureBindings();
+    }
+
+    public void updateTeleOp(LoopClock clock) {
+        double dt = clock.dtSec();
+
+        // Drive
+        DriveSignal signal = driveSource.get(clock).clamped();
+        drivebase.drive(signal);
+        drivebase.update(clock);
+
+        // Mechanisms
+        shooter.update(dt);
+        intake.update(dt);
+        pusher.update(dt);
+
+        // Macros
+        tasks.update(clock);
+    }
+
+    public Bindings bindings() { return bindings; }
+    public TaskRunner taskRunner() { return tasks; }
+
+    // buildShooter/intake/pusher + configureBindings() use Actuators, PlantTasks, etc.
+}
+```
+
+Everything else in the framework is there to make this pattern easy and
+readable.
 
 ---
 
-## 6. Typical Autonomous dataflow
+## 3. Package tour
 
-An Autonomous OpMode is usually built around **one main `Task`**:
+This section gives a **high‑level map** of `edu.ftcphoenix.fw.*` and what
+lives where.
 
-1. Build a `Task` (often a `SequenceTask` of drive + mechanism tasks):
+### 3.1 `fw.util` – utilities
 
-    * drive to a distance or for a duration,
-    * spin up shooter,
-    * feed rings,
-    * park.
-2. Hand that task to a `TaskRunner`.
-3. In `loop()`, just call `taskRunner.update(dt)` and push telemetry.
+* **`LoopClock`** – minimal loop timing helper built around `OpMode.getRuntime()`.
 
-The same plant/task concepts used in TeleOp are reused in Auto, which keeps the code consistent.
+    * `reset(double nowSec)` – usually called in `start()` or `init()`.
+    * `update(double nowSec)` – once per loop.
+    * `dtSec()` – delta time since last update.
+* **`InterpolatingTable1D`** – sorted (x, y) lookup with linear interpolation.
+
+    * Typical use: distance → shooter velocity.
+* **`MathUtil`**, **`Units`** – misc math + unit conversions.
+
+These classes have no FTC dependencies and are safe to use anywhere.
 
 ---
 
-## 7. Legacy base classes (kept for compatibility)
+### 3.2 `fw.input` – gamepads, buttons, bindings
 
-The framework still contains some older base classes under `fw.robot`:
+Key classes:
+
+* `Gamepads` – wraps FTC `gamepad1` and `gamepad2`.
+
+    * `static Gamepads create(Gamepad gp1, Gamepad gp2)`.
+    * `void update(double dtSec)` – updates axes and button edge states.
+    * `GamepadDevice p1()` / `p2()` – access to individual player wrappers.
+* `GamepadDevice` – exposes:
+
+    * `Axis` getters (sticks, triggers) and
+    * `Button` getters (A/B/X/Y, bumpers, d‑pad, etc.).
+* `Button` – an edge‑aware button abstraction with helpers like `onPress`.
+* `Axis` – analog input wrapper (sticks, triggers).
+* `binding/Bindings` – maps button events to actions.
+
+    * `onPress(Button, Runnable)`
+    * `whileHeld(Button, Runnable)` / `whileHeld(Button, Runnable, Runnable)`
+    * `toggle(Button, Consumer<Boolean>)`
+    * `update(double dtSec)` – run all binding logic once per loop.
+
+The typical pattern:
+
+```java
+pads = Gamepads.create(gamepad1, gamepad2);
+bindings = new Bindings();
+
+// In configureBindings():
+GamepadDevice p1 = pads.p1();
+bindings.whileHeld(p1.a(), () -> intake.setTarget(+1.0));
+bindings.onRelease(p1.a(), () -> intake.setTarget(0.0));
+
+// In loop():
+clock.update(getRuntime());
+double dt = clock.dtSec();
+
+pads.update(dt);
+bindings.update(dt);
+```
+
+All "which button does what" code should live in one place, typically a
+`configureBindings()` method on your robot class.
+
+---
+
+### 3.3 `fw.drive` – DriveSource, DriveSignal, Drives, mecanum
+
+This package provides abstractions for drivetrain commands and helpers for
+mecanum drive.
+
+* **`DriveSignal`** – 3‑DOF command: axial, lateral, omega.
+
+    * Immutable value type with helpers like `clamped()`.
+* **`DriveSource`** – interface:
+
+  ```java
+  public interface DriveSource {
+      DriveSignal get(LoopClock clock);
+  }
+  ```
+
+  Implementations include:
+
+    * `GamepadDriveSource` – turn gamepad sticks into a `DriveSignal`.
+    * `TagAimDriveSource` – wrap another `DriveSource` with tag‑based auto‑aim.
+* **`Drives`** – factory helpers for building drivebases.
+
+    * `MecanumDrivebase Drives.mecanum(HardwareMap hw)` – beginner entrypoint.
+    * Overloads that accept explicit `MecanumConfig` if you need custom geometry
+      or motor wiring.
+* **`MecanumDrivebase`** – low‑level mecanum drivebase helper.
+
+    * Typical pattern: `drive(DriveSignal)` + `update(LoopClock)` each loop.
+
+See the Shooter case study docs and examples (`TeleOp_01...`) for concrete
+usage.
+
+---
+
+### 3.4 `fw.actuation` – plants, controllers, Actuators
+
+This package is about **mechanisms**, abstracted as **plants**:
+
+* **`Plant`** – interface for anything that:
+
+    * has a target (double), and
+    * is updated each loop to move toward that target.
+
+* **`Actuators`** – fluent builder for constructing plants on top of hardware.
+
+  ```java
+  Plant shooter = Actuators.plant(hardwareMap)
+          .motorPair("shooterLeftMotor", false,
+                     "shooterRightMotor", true)
+          .velocity(100.0)   // tolerance in native units
+          .build();
+
+  Plant intake = Actuators.plant(hardwareMap)
+          .motor("intakeMotor", false)
+          .power()
+          .build();
+
+  Plant pusher = Actuators.plant(hardwareMap)
+          .servo("pusherServo", false)
+          .position()
+          .build();
+  ```
+
+* **Controller wrappers** (`actuation.controller.*`) – small building blocks for
+  shaping control (buffering, goal logic, etc.).
+
+* **`InterlockPlant`** – wrapper that enforces safety conditions before
+  forwarding targets to an inner plant.
+
+Under the hood, these use the HAL outputs in `fw.hal.*` (see below) and
+possibly PID via `fw.core.PidController`.
+
+---
+
+### 3.5 `fw.hal` – hardware abstraction layer
+
+These classes abstract over FTC hardware types:
+
+* `PowerOutput` – something that accepts a power (e.g., `DcMotor` in power mode).
+* `VelocityOutput` – velocity‑controlled outputs.
+* `PositionOutput` – positional (e.g., servo, motor with encoder).
+* `ServoOutput`, `MotorOutput` – convenience wrappers.
+
+They are intentionally small – robot code usually works with `Plant` and
+`Actuators.plant(...)` instead of raw outputs.
+
+---
+
+### 3.6 `fw.task` – Tasks, TaskRunner, compositions
+
+Key classes:
+
+* **`Task`** – non‑blocking behavior over time:
+
+  ```java
+  public interface Task {
+      void start(LoopClock clock);
+      void update(LoopClock clock);
+      boolean isFinished();
+  }
+  ```
+
+* **`TaskRunner`** – sequential scheduler:
+
+    * `enqueue(Task)` – queue a task.
+    * `update(LoopClock)` – advance current task.
+    * `clear()` – stop current + drop queued tasks.
+    * `isIdle()` / `hasActiveTask()` / `queuedCount()` – introspection.
+
+* **Building blocks**:
+
+    * `InstantTask` – run a `Runnable` once, then finish.
+    * `RunForSecondsTask` – time‑boxed behavior.
+    * `WaitUntilTask` – wait for a condition.
+    * `SequenceTask` – run tasks one after another.
+    * `ParallelAllTask` – run tasks in parallel until all are finished.
+
+The **Tasks & Macros Quickstart** shows how to use these together with
+`PlantTasks` (which lives in `fw.actuation`) to build TeleOp macros and
+autonomous routines.
+
+---
+
+### 3.7 `fw.sensing` – AprilTags, TagAim, bearings
+
+This package covers higher‑level sensing utilities:
+
+* `AprilTagSensor` – abstraction over FTC AprilTag pipelines.
+
+    * Exposes `AprilTagObservation` snapshots.
+    * Adapter implementation for FTC lives under `adapters.ftc`.
+* `AprilTagObservation` – value type for tag distance, bearing, age, ID, etc.
+* `BearingSource` – generic interface for “something that provides a bearing”.
+* `TagAim` – helpers to build drive sources that auto‑aim at tags.
+
+    * `DriveSource TagAim.teleOpAim(DriveSource base, Button aimButton,
+                                 AprilTagSensor sensor, Set<Integer> ids)`.
+* `TagAimController` – underlying P‑controller that turns bearing into omega.
+
+See Example 05/06 TeleOps and the Shooter case study for usage patterns.
+
+---
+
+### 3.8 `fw.adapters` – FTC-specific wiring
+
+Currently this is mostly:
+
+* `adapters.ftc` – helpers for:
+
+    * AprilTag sensors via VisionPortal.
+    * (In some versions) telemetry debug sinks and hardware utilities.
+
+Robot code in your project is free to use these, but the **core framework
+packages** do not depend directly on FTC SDK classes.
+
+---
+
+### 3.9 `fw.debug` – DebugSink
+
+* `DebugSink` – generic debugging/telemetry sink.
+
+    * `addData(key, value)` style API.
+* `NullDebugSink` – no‑op implementation.
+
+In FTC OpModes you will typically wrap telemetry in a debug sink and pass it
+into subsystems that want to expose debug info.
+
+Many classes implement a `debugDump(DebugSink dbg)` or similar method.
+
+---
+
+### 3.10 `fw.examples` – reference TeleOps
+
+This package contains the **mecanum + shooter** examples documented in the
+Shooter case study doc:
+
+* `TeleOp_01_MecanumBasic`
+* `TeleOp_02_ShooterBasic`
+* `TeleOp_03_ShooterMacro`
+* `TeleOp_04_ShooterInterpolated`
+* `TeleOp_05_ShooterTagAimVision`
+* `TeleOp_06_ShooterTagAimMacroVision`
+
+These are intended to be read as a progression and as reference patterns when
+wiring your own robot.
+
+---
+
+### 3.11 `fw.robot` – legacy base classes
+
+This package contains older base classes that many teams used historically:
 
 * `PhoenixTeleOpBase`
 * `PhoenixAutoBase`
 * `Subsystem`
 
-These were part of a previous structure where robot code was split into subsystems and OpModes extended framework base classes.
+They are still present for:
 
-They are **kept for backward compatibility only**. New examples and docs use the **PhoenixRobot + thin OpMode** pattern described above instead. For migration notes and more background on this shift, see **Notes.md**.
+* Backward compatibility with older robots.
+* Advanced teams who prefer an inheritance‑based style.
+
+However, the **recommended pattern** for new code is:
+
+* Plain FTC `OpMode`/`LinearOpMode`.
+* A season robot class that composes `DriveSource`, `MecanumDrivebase`,
+  plants, tasks, and bindings.
+
+See the **Beginner’s Guide**, **Framework Principles**, and **Notes** docs
+for details on why and how this shift was made.
 
 ---
 
-## 8. Where to go next
+## 4. How it all fits together in your project
 
-Depending on what you’re trying to do, here’s the suggested next step:
+Putting the pieces together for a typical TeleOp:
 
-* **Just getting started?** Read **Beginner’s Guide** and skim TeleOp Example 01.
-* **Want macros or autonomous sequences?** Read **Tasks & Macros Quickstart**.
-* **Want to understand the shooter + TagAim examples?** Read **Shooter Case Study & Examples Walkthrough**.
-* **Curious about deeper design decisions or legacy pieces?** Read **Framework Principles** and **Notes**.
+1. **Create a season robot class** (e.g., `edu.ftcphoenix.robots.season2025.PhoenixRobot`).
 
-Use this overview as a reference map whenever you’re unsure where a particular concept or class “belongs” in the Phoenix world.
+    * Fields for drivebase, drive source, plants, task runner, bindings.
+    * Constructor wires hardware via `Actuators.plant(...)` and `Drives.mecanum(...)`.
+    * Exposes `updateTeleOp(LoopClock)` and `updateAuto(LoopClock)`.
+
+2. **Create thin OpModes**.
+
+    * `@TeleOp` and `@Autonomous` classes that:
+
+        * create `Gamepads` and `PhoenixRobot` in `init()`,
+        * reset `LoopClock` in `start()` (or at end of `init()`),
+        * call `pads.update(dt)`, `bindings.update(dt)`, and `robot.update...(clock)` in `loop()`.
+
+3. **Centralize input mappings**.
+
+    * Implement `configureBindings()` on your robot class.
+    * Use `Bindings` methods (`onPress`, `whileHeld`, `toggle`) to express driver intent.
+
+4. **Use Tasks for multi‑step behaviors**.
+
+    * Add a `TaskRunner` field on the robot.
+    * Use `PlantTasks` and `SequenceTask`/`ParallelAllTask` to build macros.
+    * Bind buttons to `taskRunner.enqueue(...)` calls.
+
+5. **Layer on advanced features as needed**.
+
+    * Interpolated shooter speeds via `InterpolatingTable1D`.
+    * TagAim + AprilTags via `TagAim.teleOpAim(...)`.
+
+---
+
+## 5. Summary
+
+Phoenix is intentionally small. Most of the complexity lives in **your robot
+class** and the decisions you make there.
+
+* `LoopClock` gives you consistent timing.
+* `Gamepads` + `Bindings` make driver input explicit.
+* `DriveSource` + `MecanumDrivebase` handle drive.
+* `Actuators` + `Plant` model mechanisms.
+* `Task` + `TaskRunner` + `PlantTasks` give you non‑blocking behavior over time.
+* `TagAim`, `AprilTagSensor`, and `InterpolatingTable1D` let you add vision‑based
+  aiming and distance‑based shooter control without rewriting your drive or
+  mechanism code.
+
+The other docs dive deeper into each topic; this overview is the map to help
+you find where everything lives.

@@ -1,51 +1,40 @@
 # Tasks & Macros Quickstart
 
-This document explains how to use **Tasks** in the Phoenix framework to build non‑blocking
-behaviors:
+This guide explains how to use **Tasks** in the Phoenix framework to build non‑blocking behaviors:
 
 * TeleOp **macros** (e.g., shooting sequences).
 * **Autonomous routines** built out of reusable pieces.
 
-The goal is that your robot code reads like:
+We assume you already have a `PhoenixRobot` wired as in the Beginner’s Guide:
 
-```java
-// TeleOp: when Y is pressed, run a shooting macro.
-bindings.onPress(p1.y(), ()->taskRunner.
+* `LoopClock` for timing.
+* `Gamepads` and `Bindings` for input.
+* Drive and mechanisms modeled as `DriveSource` / `MecanumDrivebase` and `Plant`s.
 
-start(robot.shootThreeDiscs()));
-
-// Auto: build a sequence once, then run it each loop.
-Task autoRoutine = robot.buildCenterSpikeAuto();
-```
+Everything here is **non‑blocking** – there is no `sleep()` and no `while` loops that stall TeleOp.
 
 ---
 
 ## 1. Why Tasks?
 
-In FTC it’s very tempting to write code like:
+In FTC it’s tempting to write blocking code like:
 
 ```java
 // DON'T DO THIS
-shooter.setPower(1.0);
-
+shooterMotor.setPower(1.0);
 sleep(1000);
-transfer.
-
-setPower(1.0);
-
+transferMotor.setPower(1.0);
 sleep(300);
-transfer.
-
-setPower(0.0);
+transferMotor.setPower(0.0);
 ```
 
-This looks simple, but it **blocks** the robot:
+This freezes the OpMode:
 
-* Your robot can’t respond to driver input while it’s sleeping.
-* The loop rate becomes unpredictable.
-* Telemetry updates and safeguards (like watchdogs) are delayed.
+* Driver input is ignored while `sleep()` runs.
+* Loop timing becomes unpredictable.
+* Telemetry and safety checks are delayed.
 
-Phoenix Tasks solve this by making all multi‑step behaviors **non‑blocking** and **composable**:
+Phoenix Tasks solve this by making multi‑step behaviors **non‑blocking** and **composable**:
 
 * A `Task` represents *“do this behavior over time”*.
 * A `TaskRunner` advances the task a little bit each loop.
@@ -55,99 +44,138 @@ Phoenix Tasks solve this by making all multi‑step behaviors **non‑blocking**
 
 ## 2. Core concepts
 
-All task classes live under `edu.ftcphoenix.fw.task`, with helpers under
-`edu.ftcphoenix.fw.actuation.PlantTasks` and (optionally) drive helpers.
+Phoenix uses a small set of types for time‑based behavior:
 
-### 2.1 Task
+* `Task` – interface for non‑blocking behaviors.
+* `TaskRunner` – runs queued tasks in order.
+* `LoopClock` – timing helper (stores `dtSec`, current time, etc.).
+* Building‑block task classes:
 
-The core interface is `Task`:
+    * `InstantTask`
+    * `RunForSecondsTask`
+    * `WaitUntilTask`
+    * `SequenceTask`
+    * `ParallelAllTask`
+* `PlantTasks` – helpers for building tasks that command plants.
 
-* `start()` – called once when the task begins.
-* `update(double dt)` – called every loop with the timestep in seconds.
-* `isFinished()` – returns true once the task is done.
-
-Tasks should be **non‑blocking**:
-
-* `start()` and `update(...)` must return quickly.
-* Use internal state (enums, timers) to keep track of progress.
-
-### 2.2 TaskRunner
-
-`TaskRunner` owns a single active task and is responsible for advancing it.
-
-Typical usage:
+### 2.1 `Task`
 
 ```java
-// Create once, probably in your robot or OpMode.
-TaskRunner taskRunner = new TaskRunner();
-
-// Start a new task (replaces any currently running task).
-taskRunner.
-
-start(robot.shootThreeDiscs());
-
-// In your loop(), every cycle:
-        clock.
-
-update();
-
-double dt = clock.getDtSeconds();
-taskRunner.
-
-update(dt);
+public interface Task {
+    void start(LoopClock clock);
+    void update(LoopClock clock);
+    boolean isFinished();
+}
 ```
 
-When `taskRunner.update(dt)` is called:
+Rules:
 
-* If there is no active task, nothing happens.
-* If there is an active task:
+* `start(...)` and `update(...)` must **return quickly** (no blocking).
+* Use internal state (fields, enums, timers) to track progress.
+* `isFinished()` tells the runner when the task is done.
 
-    * `start()` is called the first time.
-    * `update(dt)` is called every loop.
-    * Once `isFinished()` returns true, the task is cleared.
+### 2.2 `TaskRunner`
 
-### 2.3 Building blocks
+`TaskRunner` manages a **queue** of tasks and runs them one at a time.
 
-Phoenix provides several ready‑made task types:
+Key methods:
 
-* `InstantTask` – does something instantly and finishes immediately.
-  Use for "fire‑and‑forget" actions or to glue other tasks together.
+```java
+TaskRunner runner = new TaskRunner();
 
-* `RunForSecondsTask` – runs a piece of logic for a fixed time.
+runner.enqueue(task);      // add to the end of the queue
+runner.update(clock);      // advance current task
+runner.clear();            // drop current + queued tasks
+boolean idle = runner.isIdle();
+```
 
-* `WaitUntilTask` – waits until a condition becomes true.
+Semantics of `update(clock)`:
 
-* `SequenceTask` – runs a list of tasks **in order**.
+1. If there is no current task or the current task is finished, it:
 
-* `ParallelAllTask` – runs a list of tasks **at the same time**, and finishes when **all** are done.
+    * pulls the next task from the queue,
+    * calls its `start(clock)`.
+2. If that task finished immediately in `start(...)`, it keeps pulling the next one.
+3. If there is a task that is not finished, it calls `update(clock)` on it **once**.
 
-On top of these, `PlantTasks` give you convenient factories for tasks that drive plants.
+You can enqueue multiple tasks in a row; they will run sequentially.
 
-### 2.4 PlantTasks – driving mechanisms from tasks
+> **Note:** There is no explicit `cancel()` on `Task`. If you call `clear()`, the runner simply stops
+> calling `update()` on the abandoned task. Tasks should tolerate this.
 
-`PlantTasks` (in `fw.actuation`) contains helpers like:
+### 2.3 `LoopClock`
 
-* `holdForSeconds(plant, target, durationSeconds)` – set a plant’s target, hold it for some time,
-  then usually restore or stop.
-* `goToSetpointAndWait(plant, target)` – command a plant to a setpoint and wait until it reports
-  `atSetpoint()`.
+`LoopClock` is a tiny helper that works with `OpMode.getRuntime()`:
 
-You can use these directly in your own higher‑level tasks.
+```java
+LoopClock clock = new LoopClock();
+
+// In init():
+clock.reset(getRuntime());
+
+// In loop():
+clock.update(getRuntime());
+double dt = clock.dtSec();
+```
+
+Use the same `LoopClock` instance for:
+
+* drive and plants,
+* tasks (`TaskRunner.update(clock)`),
+* gamepads / bindings (passing `dt` through if desired).
 
 ---
 
-## 3. Simple example: timed intake pulse
+## 3. Tasks and macros in TeleOp
 
-Let’s start with a very simple macro: **run intake for 0.7s, then stop**.
+We’ll start with simple TeleOp patterns and then build up to more complex macros.
 
-Assume you already have:
+### 3.1 Adding a TaskRunner to your robot
 
-* `Plant intakePlant;` – a power plant for your intake motor.
-* A `TaskRunner` instance called `taskRunner`.
+In your `PhoenixRobot` class:
 
-### 3.1 Define the macro on your robot
+```java
+public final class PhoenixRobot {
+    // ... other fields ...
 
-In your robot class:
+    private final TaskRunner taskRunner = new TaskRunner();
+
+    public TaskRunner taskRunner() {
+        return taskRunner;
+    }
+
+    public void updateTeleOp(LoopClock clock) {
+        double dt = clock.dtSec();
+
+        // Drive + plant updates...
+        DriveSignal signal = driveSource.get(clock);
+        drivebase.apply(signal);
+
+        shooterPlant.update(dt);
+        intakePlant.update(dt);
+        pusherPlant.update(dt);
+
+        // Advance any running tasks/macros.
+        taskRunner.update(clock);
+    }
+}
+```
+
+> In your TeleOp OpMode, you’ve already got a `LoopClock`, `Gamepads`, and `Bindings` wired as in the
+> Beginner’s Guide – we’ll just add bindings that enqueue tasks.
+
+---
+
+## 4. Simple example: timed intake pulse
+
+Goal: **run intake at full power for 0.7 seconds, then stop**, when the driver presses A.
+
+Assumptions:
+
+* `intakePlant` is a `Plant` for your intake motor.
+* `PhoenixRobot` has a `TaskRunner` (as above).
+
+### 4.1 Define a helper Task on your robot
 
 ```java
 public Task intakePulse() {
@@ -156,278 +184,275 @@ public Task intakePulse() {
 }
 ```
 
-### 3.2 Bind a button to the macro
+`holdForSeconds` is a helper that internally builds a `RunForSecondsTask` and handles the
+“start at this target, then stop” pattern.
 
-In your TeleOp setup code (where you configure `Bindings`):
+### 4.2 Bind a button to enqueue the Task
 
-```java
-bindings.onPress(p1.a(), ()->taskRunner.
-
-start(robot.intakePulse()));
-```
-
-Now, whenever the driver presses **A**, the intake will run for ~0.7 seconds then stop, without
-blocking the rest of TeleOp.
-
-### 3.3 Update the TaskRunner each loop
-
-In your OpMode’s `loop()` (or equivalent):
+In `PhoenixRobot.configureBindings()`:
 
 ```java
-clock.update();
+private void configureBindings() {
+    GamepadDevice p1 = pads.p1();
 
-double dt = clock.getDtSeconds();
+    // Other bindings...
 
-Gamepads.
+    bindings.onPress(p1.a(), () -> {
+        // Optional: cancel any existing macros for "intake channel".
+        // taskRunner.clear();
 
-update(gamepad1, gamepad2);
-bindings.
-
-update();
-
-robot.
-
-updateTeleOp(dt);
-
-taskRunner.
-
-update(dt);
+        taskRunner.enqueue(intakePulse());
+    });
+}
 ```
 
-The macro runs “in the background” while the driver can still steer the robot.
+Now, when the driver **taps A**:
+
+* The intake macro is enqueued.
+* `updateTeleOp(clock)` calls `taskRunner.update(clock)` each loop.
+* Intake runs for ~0.7 seconds, then stops, without blocking TeleOp.
 
 ---
 
-## 4. Shooter macro: single‑disc example
+## 5. Shooter macro: single‑disc example
 
 Now let’s build a slightly more interesting macro: **shoot one disc**.
 
-We’ll assume you already have plants for:
+Assume you have plants:
 
-* `shooterPlant` – controls shooter wheel velocity.
-* `transferPlant` – controls the transfer motor.
+* `shooterPlant` – velocity plant for shooter wheel.
+* `transferPlant` – power plant for transfer motor.
 
-We’ll also assume `shooterPlant` has some notion of `atSetpoint()` (e.g., within a tolerance of the
-target velocity).
+We want the macro to:
 
-### 4.1 Robot helper: build the task
+1. Command shooter to target velocity and wait until `atSetpoint()`.
+2. Run transfer forward to feed a disc.
+3. Stop transfer (and optionally slow/stop shooter).
 
-In your robot class:
+### 5.1 Helper Tasks: spin‑up and feed
+
+In `PhoenixRobot` (or a helper class), you can compose from `PlantTasks`:
 
 ```java
-public Task shootOneDisc(double targetVelocity, double feedDurationSeconds) {
-    return new SequenceTask(
-            // 1. Go to shooter speed and wait until at setpoint.
-            PlantTasks.goToSetpointAndWait(shooterPlant, targetVelocity),
+public Task spinUpShooter(double targetVel) {
+    // Set shooter target and wait until atSetpoint().
+    return PlantTasks.setTargetAndWaitForSetpoint(shooterPlant, targetVel);
+}
 
-            // 2. Run transfer forward to feed one disc.
-            PlantTasks.holdForSeconds(transferPlant, +1.0, feedDurationSeconds),
-
-            // 3. Stop transfer.
-            PlantTasks.holdForSeconds(transferPlant, 0.0, 0.0)
-    );
+public Task feedOneDisc(double feedPower, double feedDurationSec) {
+    // Run transfer at feedPower for feedDurationSec, then stop.
+    return PlantTasks.holdForSeconds(transferPlant, feedPower, feedDurationSec);
 }
 ```
 
-You can adjust this pattern to your mechanism (pushers, multiple feeds, etc.).
+Now you can build a single macro from these.
 
-### 4.2 Binding a button to shoot
+### 5.2 Compose with `SequenceTask`
 
-In TeleOp setup:
+```java
+public Task shootOneDisc(double targetVel, double feedPower, double feedDurationSec) {
+    List<Task> steps = new ArrayList<>();
+
+    // 1. Spin up.
+    steps.add(spinUpShooter(targetVel));
+
+    // 2. Feed one disc.
+    steps.add(feedOneDisc(feedPower, feedDurationSec));
+
+    // 3. Optionally stop transfer explicitly (PlantTasks.holdForSeconds with duration 0).
+    steps.add(PlantTasks.holdForSeconds(transferPlant, 0.0, 0.0));
+
+    return new SequenceTask(steps);
+}
+```
+
+### 5.3 Bind a button to enqueue the shooting macro
 
 ```java
 private static final double SHOOTER_VELOCITY = 3000.0; // example units
-private static final double FEED_TIME = 0.3;           // seconds
+private static final double FEED_POWER = 1.0;
+private static final double FEED_TIME = 0.3;          // seconds
 
-bindings.
+private void configureBindings() {
+    GamepadDevice p1 = pads.p1();
 
-onPress(p1.y(), ()->{
-Task shootTask = robot.shootOneDisc(SHOOTER_VELOCITY, FEED_TIME);
-    taskRunner.
+    // ...other bindings...
 
-start(shootTask);
-});
-```
+    bindings.onPress(p1.y(), () -> {
+        // If you want "latest press wins" semantics, clear existing tasks first.
+        taskRunner.clear();
 
-Now pressing **Y** triggers a non‑blocking shooting sequence.
-
-### 4.3 While the macro runs
-
-* The driver can still move the robot (drive input is independent of the task).
-* The macro might still be running when the driver presses other buttons.
-* If you call `taskRunner.start(...)` again while a task is running, the new task **replaces** the
-  old one.
-
-If you need multiple overlapping behaviors, you can:
-
-* Use `ParallelAllTask` inside a single composite task, or
-* Own multiple `TaskRunner` instances (for truly independent subsystems) — but start with one until
-  you have a clear reason.
-
----
-
-## 5. Multi‑disc and composite tasks
-
-Once you have a single‑disc macro, building more complex macros is just composition.
-
-### 5.1 Shoot three discs in sequence
-
-In your robot class:
-
-```java
-public Task shootThreeDiscs(double targetVelocity, double feedDurationSeconds) {
-    return new SequenceTask(
-            // Optionally: spin up once.
-            PlantTasks.goToSetpointAndWait(shooterPlant, targetVelocity),
-
-            // Disc 1.
-            PlantTasks.holdForSeconds(transferPlant, +1.0, feedDurationSeconds),
-            PlantTasks.holdForSeconds(transferPlant, 0.0, 0.1),
-
-            // Disc 2.
-            PlantTasks.holdForSeconds(transferPlant, +1.0, feedDurationSeconds),
-            PlantTasks.holdForSeconds(transferPlant, 0.0, 0.1),
-
-            // Disc 3.
-            PlantTasks.holdForSeconds(transferPlant, +1.0, feedDurationSeconds),
-            PlantTasks.holdForSeconds(transferPlant, 0.0, 0.1)
-
-            // Optionally add: slow down shooter or stop here.
-    );
+        Task shootTask = shootOneDisc(SHOOTER_VELOCITY, FEED_POWER, FEED_TIME);
+        taskRunner.enqueue(shootTask);
+    });
 }
 ```
 
-Then map it to a button exactly like the single‑disc version.
+Pressing **Y** enqueues the macro. While it runs:
 
-### 5.2 Adding parallel behavior
+* The driver can still steer (drive code is independent).
+* Other bindings can still fire and adjust plants unrelated to the macro.
 
-You might want to do two things at once, such as:
-
-* Drive forward while running an intake, or
-* Hold shooter speed while feeding discs (if they share a time window).
-
-You can use `ParallelAllTask` for this:
-
-```java
-Task driveAndIntake = new ParallelAllTask(
-        driveForwardForSeconds(1.0),
-        PlantTasks.holdForSeconds(intakePlant, +1.0, 1.0)
-);
-```
-
-This assumes you have a `driveForwardForSeconds(...)` task that controls your drivebase. The Phoenix
-framework includes helpers like `RunForSecondsTask` and drive‑related building blocks that make
-writing such tasks straightforward.
+If you **don’t** clear the runner before enqueuing, each Y press will queue another
+single‑disc shot after the previous one finishes.
 
 ---
 
-## 6. Tasks in Autonomous
+## 6. Multi‑disc and composite Tasks
 
-Tasks are not just for TeleOp macros. A very clean way to write Autonomous is:
+Once you have single‑disc helpers, building more complex macros is just composition.
 
-1. Build a **single Task** that describes your whole routine.
-2. Hand it to a `TaskRunner`.
-3. On each `loop()`, just `update(dt)` the runner.
-
-### 6.1 Example Auto structure
-
-In your Auto OpMode:
+### 6.1 Shoot three discs in sequence
 
 ```java
-public class AutoCenterSpike extends LinearOpMode { /* or OpMode-style */
+public Task shootThreeDiscs(double targetVel,
+                            double feedPower,
+                            double feedDurationSec,
+                            double pauseBetweenSec) {
+    List<Task> steps = new ArrayList<>();
+
+    // Spin up once and wait.
+    steps.add(spinUpShooter(targetVel));
+
+    for (int i = 0; i < 3; i++) {
+        // Feed disc i.
+        steps.add(feedOneDisc(feedPower, feedDurationSec));
+
+        // Small pause with transfer stopped between feeds.
+        if (i < 2) {
+            steps.add(PlantTasks.holdForSeconds(transferPlant, 0.0, pauseBetweenSec));
+        }
+    }
+
+    // Optionally stop shooter at the end.
+    steps.add(PlantTasks.setTargetInstant(shooterPlant, 0.0));
+
+    return new SequenceTask(steps);
+}
+```
+
+Bind to a button similarly:
+
+```java
+bindings.onPress(p1.rightBumper(), () -> {
+    taskRunner.clear();
+    taskRunner.enqueue(shootThreeDiscs(
+            SHOOTER_VELOCITY,
+            FEED_POWER,
+            FEED_TIME,
+            0.1
+    ));
+});
+```
+
+### 6.2 Doing things in parallel
+
+Sometimes you want two behaviors at once, e.g. **drive forward while intaking**.
+
+If you build a `Task` for the drive part, you can combine with `ParallelAllTask`:
+
+```java
+public Task driveForwardForSeconds(double axialPower, double durationSec) {
+    return new RunForSecondsTask(
+            durationSec,
+            // onStart
+            () -> driveSignalOverride = new DriveSignal(axialPower, 0.0, 0.0),
+            // onUpdate (no-op; plants + drive update elsewhere)
+            null,
+            // onFinish
+            () -> driveSignalOverride = null
+    );
+}
+
+public Task driveAndIntake(double axialPower,
+                           double durationSec,
+                           double intakePower) {
+    List<Task> tasks = new ArrayList<>();
+    tasks.add(driveForwardForSeconds(axialPower, durationSec));
+    tasks.add(PlantTasks.holdForSeconds(intakePlant, intakePower, durationSec));
+    return new ParallelAllTask(tasks);
+}
+```
+
+In `updateTeleOp(clock)`, your drive code might check `driveSignalOverride` first and
+fall back to `driveSource.get(clock)` when it is `null`.
+
+> Parallel behavior is an advanced pattern. For many robots, just using `SequenceTask` and
+> separate drive tasks is enough.
+
+---
+
+## 7. Tasks in Autonomous
+
+Tasks are not just for TeleOp. A clean way to write Autonomous is:
+
+1. Build a **single Task** that describes your whole routine.
+2. Enqueue it on a `TaskRunner`.
+3. Call `taskRunner.update(clock)` each loop.
+
+### 7.1 Auto OpMode structure
+
+```java
+@Autonomous(name = "Phoenix Auto Center")
+public class PhoenixAutoCenter extends OpMode {
     private final LoopClock clock = new LoopClock();
-    private final TaskRunner taskRunner = new TaskRunner();
+
     private PhoenixRobot robot;
+    private Gamepads pads;
+    private TaskRunner taskRunner;
 
     @Override
-    public void runOpMode() {
-        FtcHardware hw = new FtcHardware(hardwareMap);
-        DebugSink dbg = new FtcTelemetryDebugSink(telemetry);
-        robot = new PhoenixRobot(hw, dbg);
+    public void init() {
+        pads = Gamepads.create(gamepad1, gamepad2);
 
-        Task autoTask = robot.buildCenterSpikeAuto();
-        taskRunner.start(autoTask);
+        robot = new PhoenixRobot(hardwareMap, pads);
+        taskRunner = robot.taskRunner();
 
-        waitForStart();
-        clock.reset();
+        // Build the autonomous routine once.
+        Task autoTask = robot.buildCenterAuto();
+        taskRunner.clear();
+        taskRunner.enqueue(autoTask);
 
-        while (opModeIsActive() && !taskRunner.isIdle()) {
-            clock.update();
-            double dt = clock.getDtSeconds();
+        clock.reset(getRuntime());
+    }
 
-            robot.updateAuto(dt);
-            taskRunner.update(dt);
+    @Override
+    public void loop() {
+        clock.update(getRuntime());
 
-            telemetry.update();
-        }
+        // Auto-specific robot logic (drive + plants).
+        robot.updateAuto(clock);
+
+        // Advance the auto Task.
+        taskRunner.update(clock);
+
+        telemetry.update();
     }
 }
 ```
 
-The important part is that **Autonomous code looks just like a big TeleOp macro**.
+### 7.2 Building the auto Task on your robot
 
-### 6.2 Building the Auto task on your robot
-
-On your robot class, you might have something like:
+In `PhoenixRobot`:
 
 ```java
-public Task buildCenterSpikeAuto() {
-    return new SequenceTask(
-            driveForwardDistance(0.8),      // drive to spike
-            placePreload(),                 // arm + pusher sequence
-            driveToShootingPosition(),      // another drive task
-            shootThreeDiscs(autoVelocity(), 0.3),
-            parkInSafeZone()
-    );
+public Task buildCenterAuto() {
+    List<Task> steps = new ArrayList<>();
+
+    steps.add(driveForwardForSeconds(0.5, 1.2));      // drive to spike
+    steps.add(placePreloadTask());                    // arm + pusher sequence
+    steps.add(driveToShootingPositionTask());         // more drive
+    steps.add(shootThreeDiscs(autoVelocity(), 1.0, 0.3, 0.1));
+    steps.add(parkInSafeZoneTask());
+
+    return new SequenceTask(steps);
 }
 ```
 
-Each of those helpers (`driveForwardDistance`, `placePreload`, etc.) is itself a `Task` that may use
-`PlantTasks` and drive tasks.
+Each helper (`placePreloadTask`, `parkInSafeZoneTask`, etc.) is itself a `Task` that uses
+plants and, optionally, small drive tasks.
 
-This keeps Autonomous routines **declarative** and easy to tweak.
-
----
-
-## 7. Binding Tasks to Inputs with `Bindings`
-
-In TeleOp, you rarely call `taskRunner.start(...)` directly from the OpMode. Instead, you:
-
-1. Configure **Bindings** at initialization.
-2. Call `bindings.update()` once per loop.
-
-### 7.1 Example binding configuration
-
-```java
-public void configureBindings(Bindings bindings, TaskRunner taskRunner) {
-    GamepadDevice p1 = Gamepads.player1();
-
-    // Intake pulse on A.
-    bindings.onPress(p1.a(), () -> taskRunner.start(intakePulse()));
-
-    // Shoot three discs on Y.
-    bindings.onPress(p1.y(), () -> taskRunner.start(
-            shootThreeDiscs(getTeleOpShooterVelocity(), 0.3)
-    ));
-}
-```
-
-In your OpMode:
-
-```java
-public void loop() {
-    clock.update();
-    double dt = clock.getDtSeconds();
-
-    Gamepads.update(gamepad1, gamepad2);
-    bindings.update();
-
-    robot.updateTeleOp(dt);
-    taskRunner.update(dt);
-}
-```
-
-This separates **input wiring** from **behavior definition**.
+The important point: **TeleOp macros and Autonomous routines both use the same Task model.**
 
 ---
 
@@ -437,41 +462,45 @@ A few guidelines to keep your task code clean and robust:
 
 ### 8.1 Keep tasks non‑blocking
 
-* Never call `sleep()`, `Thread.sleep()`, or busy loops inside a task.
-* Use `RunForSecondsTask` and `WaitUntilTask` instead.
-* Your `update(dt)` methods should return quickly.
+* Never call `sleep()` or busy‑wait inside a `Task`.
+* Use `RunForSecondsTask`, `WaitUntilTask`, and `PlantTasks` helpers instead.
+* `start(clock)` / `update(clock)` should return quickly.
 
-### 8.2 Make tasks small and composable
+### 8.2 Prefer small, composable tasks
 
-* Prefer multiple small tasks combined with `SequenceTask` / `ParallelAllTask`.
-* This makes them easier to test and reuse.
+* Write small tasks for “spin up shooter”, “feed one disc”, “drive forward 1s”, etc.
+* Combine them with `SequenceTask` and `ParallelAllTask` instead of one giant state machine.
 
-### 8.3 Drive through plants and helpers
+### 8.3 Decide how you want to handle interruptions
 
-* In general, tasks should manipulate **plants** and `DriveSignal`s, not raw hardware.
-* This keeps hardware access localized to a few places (`FtcHardware`, `Actuators`, your drivebase).
+* If you call `taskRunner.clear()` before enqueueing, you get **“latest macro wins”** semantics.
+* If you just `enqueue(...)` without clearing, you get **queueing** semantics.
+* For critical actions (e.g., climbing), consider restricting what other bindings can do while the
+  sequence is running (e.g., by checking `taskRunner.hasActiveTask()`).
 
-### 8.4 Use your robot class as a task factory
+### 8.4 Keep plant updates outside tasks
 
-* Methods like `shootOneDisc(...)`, `shootThreeDiscs(...)`, `driveForwardDistance(...)` belong on
-  your robot.
-* This keeps OpModes and Bindings very simple.
+* Tasks should typically **set targets**, not call `plant.update(...)` directly.
+* Your robot’s `updateTeleOp(clock)` / `updateAuto(clock)` should update all plants once per loop.
 
-### 8.5 Think about interruptions
+### 8.5 Centralize task creation on the robot
 
-* Starting a new task while another is running usually **replaces** the current one.
-* For critical sequences (e.g., climbing), consider whether you want to allow interruption or
-  require the sequence to finish.
+* Helper methods like `intakePulse()`, `shootOneDisc(...)`, `buildCenterAuto()` belong on your
+  robot class.
+* Bindings (`Bindings`) should just **enqueue** those tasks.
 
 ---
 
-## 9. Where to go next
+## 9. Summary
 
-After you’re comfortable with the patterns in this quickstart:
+* **`Task`** is the basic unit of non‑blocking behavior over time.
+* **`TaskRunner`** manages a queue of tasks and advances them with `update(clock)`.
+* **`InstantTask`**, **`RunForSecondsTask`**, **`WaitUntilTask`**, **`SequenceTask`**, and
+  **`ParallelAllTask`** are the main building blocks.
+* **`PlantTasks`** make it easy to build tasks around existing mechanism plants.
+* **`Bindings`** connect driver inputs to enqueueing tasks in TeleOp.
+* TeleOp macros and Autonomous routines both use the same task patterns.
 
-* Look at **Example 03** in the Shooter Case Study, which shows a concrete shooter macro.
-* Look at **Example 06** to see tasks combined with TagAim and interpolated shooter speeds.
-* For deeper architectural background and patterns, read **Framework Principles**.
-
-Tasks are one of the main “glue pieces” in Phoenix. Once you have them set up, both TeleOp macros
-and Autonomous routines become straightforward compositions of the same building blocks.
+Once you are comfortable with these patterns, you can layer in more advanced pieces like
+TagAim + vision and interpolated shooter speeds; they all compose on top of the same
+Task/Plant/Drive structure.
