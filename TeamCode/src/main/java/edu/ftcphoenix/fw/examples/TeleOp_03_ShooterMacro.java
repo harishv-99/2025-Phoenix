@@ -11,7 +11,7 @@ import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.task.ParallelAllTask;
@@ -213,7 +213,7 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
 
         // === 2) Drive wiring (same pattern as Examples 01–02) ===
         drivebase = Drives.mecanum(hardwareMap);
-        stickDrive = StickDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
         // === 3) Mechanism wiring using Actuators ===
 

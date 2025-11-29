@@ -8,8 +8,8 @@ import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.StickConfig;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSourceConfig;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.util.LoopClock;
@@ -57,8 +57,8 @@ public final class DriveSubsystem implements Subsystem {
         );
 
         // Stick drive with custom slow-mode scale.
-        StickConfig stickCfg = StickConfig.defaults();
-        DriveSource sticks = StickDriveSource.teleOpMecanum(
+        GamepadDriveSourceConfig stickCfg = GamepadDriveSourceConfig.defaults();
+        DriveSource sticks = GamepadDriveSource.teleOpMecanum(
                 gamepads,
                 stickCfg,
                 gamepads.p1().rightBumper(), // hold for slow mode
@@ -100,8 +100,8 @@ public final class DriveSubsystem implements Subsystem {
                 .addData(p + ".cmd.omega", lastCommand.omega);
 
         // Delegate to deeper layers if you want more detail
-        if (driveSource instanceof StickDriveSource) {
-            StickDriveSource sds = (StickDriveSource) driveSource;
+        if (driveSource instanceof GamepadDriveSource) {
+            GamepadDriveSource sds = (GamepadDriveSource) driveSource;
             sds.debugDump(dbg, p + ".sticks");
         }
         drivebase.debugDump(dbg, p + ".base");

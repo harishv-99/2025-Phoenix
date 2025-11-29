@@ -19,7 +19,7 @@ import edu.ftcphoenix.fw.input.Button;
  *
  * // Driver sticks for mecanum with slow mode on right bumper.
  * edu.ftcphoenix.fw.drive.DriveSource sticks =
- *         edu.ftcphoenix.fw.drive.source.StickDriveSource
+ *         edu.ftcphoenix.fw.drive.source.GamepadDriveSource
  *                 .teleOpMecanumWithSlowMode(
  *                         pads,
  *                         pads.p1().rightBumper(), // hold for slow mode

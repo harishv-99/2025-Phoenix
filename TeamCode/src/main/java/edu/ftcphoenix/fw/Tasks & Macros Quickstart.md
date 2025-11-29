@@ -165,7 +165,7 @@ public final class PhoenixRobot {
                 .invertBackRight()
                 .build();
 
-        this.driveSource = StickDriveSource.teleOpMecanumWithSlowMode(
+        this.driveSource = GamepadDriveSource.teleOpMecanumWithSlowMode(
                 driverKit,
                 driverKit.p1().rightBumper(),
                 0.30);

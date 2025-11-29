@@ -1,7 +1,7 @@
 package edu.ftcphoenix.fw.drive.source;
 
 /**
- * Configuration for stick shaping in {@link StickDriveSource}.
+ * Configuration for stick shaping in {@link GamepadDriveSource}.
  *
  * <p>
  * This class is a simple <strong>mutable data object</strong> that controls how
@@ -15,14 +15,14 @@ package edu.ftcphoenix.fw.drive.source;
  *
  * <pre>{@code
  * // Start from Phoenix defaults.
- * StickConfig cfg = StickConfig.defaults();
+ * GamepadDriveSourceConfig cfg = GamepadDriveSourceConfig.defaults();
  *
  * // Optional: tweak deadband and rotation expo.
  * cfg.deadband = 0.08;
  * cfg.rotateExpo = 1.2;
  *
  * // Pass the config to a helper that builds your drive source.
- * DriveSource drive = StickDriveSource.teleOpMecanum(
+ * DriveSource drive = GamepadDriveSource.teleOpMecanum(
  *         pads,
  *         cfg,
  *         pads.p1().rightBumper(),  // slow-mode button (optional)
@@ -33,7 +33,7 @@ package edu.ftcphoenix.fw.drive.source;
  * <h2>Shaping model</h2>
  *
  * <p>
- * For each axis, {@link StickDriveSource} applies the following steps:
+ * For each axis, {@link GamepadDriveSource} applies the following steps:
  * </p>
  *
  * <ol>
@@ -61,23 +61,23 @@ package edu.ftcphoenix.fw.drive.source;
  * </p>
  *
  * <pre>{@code
- * StickConfig cfg = StickConfig.defaults();
+ * GamepadDriveSourceConfig cfg = GamepadDriveSourceConfig.defaults();
  * cfg.deadband = 0.05;
  * cfg.translateExpo = 1.5;
  * cfg.rotateExpo = 1.5;
  *
- * DriveSource drive = StickDriveSource.teleOpMecanum(pads, cfg, null, 1.0);
+ * DriveSource drive = GamepadDriveSource.teleOpMecanum(pads, cfg, null, 1.0);
  * }</pre>
  *
  * <p>
- * Implementations that accept a {@link StickConfig} (such as the helpers in
- * {@link StickDriveSource}) are expected to make a <em>defensive copy</em> of
- * the config at construction time. Changing the fields of a {@code StickConfig}
+ * Implementations that accept a {@link GamepadDriveSourceConfig} (such as the helpers in
+ * {@link GamepadDriveSource}) are expected to make a <em>defensive copy</em> of
+ * the config at construction time. Changing the fields of a {@code GamepadDriveSourceConfig}
  * instance <strong>after</strong> you pass it into a drive source will
  * <strong>not</strong> affect that already-created source.
  * </p>
  */
-public final class StickConfig {
+public final class GamepadDriveSourceConfig {
 
     // ------------------------------------------------------------------------
     // Deadband and shaping exponents
@@ -171,12 +171,12 @@ public final class StickConfig {
      * This keeps all configs starting from a known, well-documented baseline.
      * </p>
      */
-    private StickConfig() {
+    private GamepadDriveSourceConfig() {
         // Defaults are assigned directly in field initializers above.
     }
 
     /**
-     * Create a new {@link StickConfig} with Phoenix default values.
+     * Create a new {@link GamepadDriveSourceConfig} with Phoenix default values.
      *
      * <p>
      * Defaults are chosen to be safe and intuitive for typical FTC robots:
@@ -185,8 +185,8 @@ public final class StickConfig {
      *
      * @return a new config instance with default values
      */
-    public static StickConfig defaults() {
-        return new StickConfig();
+    public static GamepadDriveSourceConfig defaults() {
+        return new GamepadDriveSourceConfig();
     }
 
     /**
@@ -198,17 +198,17 @@ public final class StickConfig {
      * </p>
      *
      * <pre>{@code
-     * StickConfig base = StickConfig.defaults();
+     * GamepadDriveSourceConfig base = GamepadDriveSourceConfig.defaults();
      * base.deadband = 0.05;
      *
-     * StickConfig copy = base.copy();
+     * GamepadDriveSourceConfig copy = base.copy();
      * copy.rotateExpo = 1.2;
      * }</pre>
      *
-     * @return a new {@link StickConfig} with the same field values
+     * @return a new {@link GamepadDriveSourceConfig} with the same field values
      */
-    public StickConfig copy() {
-        StickConfig c = new StickConfig();
+    public GamepadDriveSourceConfig copy() {
+        GamepadDriveSourceConfig c = new GamepadDriveSourceConfig();
         c.deadband = this.deadband;
         c.translateExpo = this.translateExpo;
         c.rotateExpo = this.rotateExpo;

@@ -39,7 +39,7 @@ import java.util.Locale;
  *
  * <h2>Typical usage</h2>
  *
- * <h3>1. In a core class (e.g., StickDriveSource)</h3>
+ * <h3>1. In a core class (e.g., GamepadDriveSource)</h3>
  *
  * <pre>{@code
  * public void debugDump(DebugSink sink, String prefix) {

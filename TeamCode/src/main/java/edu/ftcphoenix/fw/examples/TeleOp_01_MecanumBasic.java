@@ -8,7 +8,7 @@ import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.util.LoopClock;
 
@@ -24,7 +24,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *     <ul>
  *       <li>{@link Drives#mecanum} to wire the drive motors.</li>
  *       <li>{@link Gamepads} to wrap FTC gamepads.</li>
- *       <li>{@link StickDriveSource#teleOpMecanumStandard(Gamepads)} for
+ *       <li>{@link GamepadDriveSource#teleOpMecanumStandard(Gamepads)} for
  *           stick → mecanum mapping.</li>
  *     </ul>
  *   </li>
@@ -140,7 +140,7 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         drivebase = Drives.mecanum(hardwareMap);
 
         // 3) Use the standard TeleOp stick mapping for mecanum.
-        stickDrive = StickDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
         telemetry.addLine("FW Example 01: Mecanum Basic");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");

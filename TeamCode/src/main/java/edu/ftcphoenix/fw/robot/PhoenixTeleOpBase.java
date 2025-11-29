@@ -60,7 +60,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *                      .build();
  *
  *         // 2) Set up drive controls using player 1 sticks
- *         DriveSource sticks = StickDriveSource.teleOpMecanumWithSlowMode(
+ *         DriveSource sticks = GamepadDriveSource.teleOpMecanumWithSlowMode(
  *                 gamepads(),          // full pair, if needed
  *                 p1().rightBumper(),  // hold for slow mode
  *                 0.30                 // 30% speed

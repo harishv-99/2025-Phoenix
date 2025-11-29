@@ -130,9 +130,9 @@ public final class RateLimitedPlant implements Plant {
     }
 
     /**
-     * @return the desired target as most recently set via {@link #setTarget(double)}.
+     * @return the commanded target as most recently set via {@link #setTarget(double)}.
      */
-    public double getDesiredTarget() {
+    public double getCommandedTarget() {
         return desiredTarget;
     }
 
@@ -179,7 +179,7 @@ public final class RateLimitedPlant implements Plant {
      *
      * <p>Note: this does <b>not</b> check that desired == current. If you want
      * a stricter definition ("rate limiter has also finished slewing"),
-     * you can inspect {@link #getDesiredTarget()} and {@link #getTarget()}.</p>
+     * you can inspect {@link #getCommandedTarget()} and {@link #getTarget()}.</p>
      */
     @Override
     public boolean atSetpoint() {

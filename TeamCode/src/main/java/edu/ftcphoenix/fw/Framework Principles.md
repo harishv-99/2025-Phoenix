@@ -166,8 +166,8 @@ Phoenix follows a "one core abstraction per domain" rule. This keeps concepts sm
 
 **TeleOp presets:**
 
-* `StickDriveSource.teleOpMecanum(DriverKit)` – standard P1 mecanum mapping.
-* `StickDriveSource.teleOpMecanumWithSlowMode(DriverKit, Button slowButton, double slowScale)` –
+* `GamepadDriveSource.teleOpMecanum(DriverKit)` – standard P1 mecanum mapping.
+* `GamepadDriveSource.teleOpMecanumWithSlowMode(DriverKit, Button slowButton, double slowScale)` –
   same mapping with a slow‑mode button.
 * `TagAim.teleOpAim(DriveSource baseDrive, Button aimButton, AprilTagSensor sensor,
   Set<Integer> tagIds)` – wraps a base drive with AprilTag auto‑aim on a button.
@@ -277,8 +277,8 @@ For drive and AprilTags, that surface is:
 * `Gamepads`, `DriverKit`, `Bindings` (input).
 * `Drives`, `MecanumDrivebase` (hardware + drivebase).
 * `DriveSignal`, `DriveSource` (drive abstractions).
-* `StickDriveSource.teleOpMecanum(...)`.
-* `StickDriveSource.teleOpMecanumWithSlowMode(...)`.
+* `GamepadDriveSource.teleOpMecanum(...)`.
+* `GamepadDriveSource.teleOpMecanumWithSlowMode(...)`.
 * `Tags.aprilTags(...)`, `AprilTagSensor`.
 * `TagAim.teleOpAim(...)`.
 
@@ -309,7 +309,7 @@ Typical pattern for drive in TeleOp:
 1. Start with manual sticks:
 
    ```java
-   DriveSource manual = StickDriveSource.teleOpMecanum(driverKit);
+   DriveSource manual = GamepadDriveSource.teleOpMecanum(driverKit);
    ```
 
 2. Wrap with auto‑aim while a button is held:
@@ -378,8 +378,8 @@ Guidelines:
 
     * Examples:
 
-        * `StickDriveSource.teleOpMecanum(...)`.
-        * `StickDriveSource.teleOpMecanumWithSlowMode(...)`.
+        * `GamepadDriveSource.teleOpMecanum(...)`.
+        * `GamepadDriveSource.teleOpMecanumWithSlowMode(...)`.
         * `TagAim.teleOpAim(...)`.
     * Reserved for high‑level, ready‑to‑use configurations appropriate for tutorials and examples.
 

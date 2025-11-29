@@ -14,7 +14,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>Typical implementations include:</p>
  * <ul>
- *   <li>{@code StickDriveSource} – map gamepad sticks to a drive signal.</li>
+ *   <li>{@code GamepadDriveSource} – map gamepad sticks to a drive signal.</li>
  *   <li>A motion planner – follow a trajectory and emit commands.</li>
  *   <li>A closed-loop heading controller – maintain or turn to a target angle.</li>
  * </ul>
@@ -84,7 +84,7 @@ public interface DriveSource {
      *
      * <p>Example:</p>
      * <pre>{@code
-     * DriveSource manual = StickDriveSource.teleOpMecanum(gamepads);
+     * DriveSource manual = GamepadDriveSource.teleOpMecanum(gamepads);
      * DriveSource drive  = manual.scaledWhen(
      *         () -> gamepads.p1().rightBumper().isPressed(),
      *         0.30);
@@ -129,7 +129,7 @@ public interface DriveSource {
      *
      * <p>Example:</p>
      * <pre>{@code
-     * DriveSource manual   = StickDriveSource.teleOpMecanum(gamepads);
+     * DriveSource manual   = GamepadDriveSource.teleOpMecanum(gamepads);
      * DriveSource autoAim  = TagAim.teleOpAim(manual, aimButton, tagSensor, ids);
      *
      * // 40% assist from autoAim, 60% from manual

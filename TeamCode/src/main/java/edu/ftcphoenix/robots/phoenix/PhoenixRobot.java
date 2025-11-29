@@ -8,14 +8,13 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import java.util.Set;
 
 import edu.ftcphoenix.fw.actuation.Actuators;
-import edu.ftcphoenix.fw.actuation.Plants;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
@@ -244,7 +243,7 @@ public final class PhoenixRobot {
         //   - P1 right stick X for omega,
         //   - StickConfig.defaults() for shaping,
         //   - P1 right bumper as slow-mode at 30% speed.
-        baseDrive = StickDriveSource.teleOpMecanumStandard(gamepads);
+        baseDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
         // 4) Wrap base drive with tag-based auto-aim.
         // While left bumper is held, we auto-aim at SCORING_TAGS.

@@ -222,7 +222,7 @@ private void initDrive() {
             .build();
 
     // Base TeleOp drive: sticks + slow mode on right bumper.
-    DriveSource sticks = StickDriveSource.teleOpMecanumWithSlowMode(
+    DriveSource sticks = GamepadDriveSource.teleOpMecanumWithSlowMode(
             gamepads,
             gamepads.p1().rightBumper(),
             0.30   // slow mode scale: 30% speed
@@ -234,7 +234,7 @@ private void initDrive() {
 
 **Rate filtering:**
 
-* `StickDriveSource.teleOpMecanumWithSlowMode(...)` internally wraps the raw stick mapping in a **rate-limited drive source**.
+* `GamepadDriveSource.teleOpMecanumWithSlowMode(...)` internally wraps the raw stick mapping in a **rate-limited drive source**.
 * The lateral axis (strafing) is automatically smoothed.
 * You don’t have to do anything special in your code to get this behavior.
 
@@ -553,7 +553,7 @@ For beginners, this is **optional**. It becomes more useful later when you want 
 * You work mainly in **one class**: `PhoenixRobot`.
 * TeleOp and Autos are **thin shells** delegating to `PhoenixRobot`.
 * **Inputs**: `Gamepads` + `Bindings`.
-* **Drive**: `StickDriveSource` + `MecanumDrivebase`, with **rate filtering** built in.
+* **Drive**: `GamepadDriveSource` + `MecanumDrivebase`, with **rate filtering** built in.
 * **Mechanisms**: modeled as `Plant`s for consistent setpoint-style control.
 * **Advanced features** (optional):
 

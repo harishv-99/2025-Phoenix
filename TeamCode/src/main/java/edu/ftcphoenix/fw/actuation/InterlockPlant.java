@@ -106,9 +106,9 @@ public final class InterlockPlant implements Plant {
     }
 
     /**
-     * @return the desired target as most recently set via {@link #setTarget(double)}.
+     * @return the commanded target as most recently set via {@link #setTarget(double)}.
      */
-    public double getDesiredTarget() {
+    public double getCommandedTarget() {
         return desiredTarget;
     }
 

@@ -524,7 +524,7 @@ public final class PhoenixRobot {
                 .invertBackRight()
                 .build();
 
-        DriveSource manual = StickDriveSource.teleOpMecanum(driverKit);
+        DriveSource manual = GamepadDriveSource.teleOpMecanum(driverKit);
 
         // Optional: AprilTag aim + slow mode
         // AprilTagSensor tagSensor = ... via Tags.aprilTags(...)
@@ -532,7 +532,7 @@ public final class PhoenixRobot {
         // this.driveSource = aimed.scaledWhen(
         //        () -> driverKit.p1().rightBumper().isPressed(), 0.30);
 
-        this.driveSource = StickDriveSource.teleOpMecanumWithSlowMode(
+        this.driveSource = GamepadDriveSource.teleOpMecanumWithSlowMode(
                 driverKit,
                 driverKit.p1().rightBumper(),
                 0.30);
@@ -682,7 +682,7 @@ A few notes on extending this pattern safely:
 
     * Shooter logic is independent of drive; it lives entirely in plants, stages, and tasks.
     * Drive continues to use `DriveSource` + `DriveSignal`, with TeleOp helpers like
-      `StickDriveSource.teleOpMecanumWithSlowMode(...)` and optional `TagAim.teleOpAim(...)`.
+      `GamepadDriveSource.teleOpMecanumWithSlowMode(...)` and optional `TagAim.teleOpAim(...)`.
 
 ---
 

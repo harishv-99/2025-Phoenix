@@ -123,8 +123,8 @@ APIs for drive, plants, sensing, and tasks.
 
     * We standardize a small number of `teleOp...` helper methods:
 
-        * `StickDriveSource.teleOpMecanum(...)`
-        * `StickDriveSource.teleOpMecanumWithSlowMode(...)`
+        * `GamepadDriveSource.teleOpMecanum(...)`
+        * `GamepadDriveSource.teleOpMecanumWithSlowMode(...)`
         * `TagAim.teleOpAim(...)`
     * Beginners wire these together without touching lower-level details.
 
@@ -240,7 +240,7 @@ Think of it as:
 
 Examples of `DriveSource` implementations or factories:
 
-* `StickDriveSource.teleOpMecanum(...)` – maps gamepad sticks → mecanum drive.
+* `GamepadDriveSource.teleOpMecanum(...)` – maps gamepad sticks → mecanum drive.
 * `TagAim.teleOpAim(...)` – wraps an existing drive source to override `omega` when aiming.
 * A future trajectory follower.
 
@@ -275,18 +275,18 @@ drivebase.drive(cmd);
 `Drives` also provides other helpers (e.g., dual-motor shooters, tank drive) that follow the same
 pattern: a small builder to wire hardware into a simple, reusable type.
 
-### 4.4 `StickDriveSource`: TeleOp presets
+### 4.4 `GamepadDriveSource`: TeleOp presets
 
-`StickDriveSource` is the main way beginners drive their robot.
+`GamepadDriveSource` is the main way beginners drive their robot.
 
 For TeleOp, you only need to remember two static helpers:
 
 ```java
 // P1: standard robot-centric mecanum
-StickDriveSource teleOpMecanum(DriverKit kit);
+GamepadDriveSource teleOpMecanum(DriverKit kit);
 
 // P1: mecanum with a slow-mode button
-StickDriveSource teleOpMecanumWithSlowMode(
+GamepadDriveSource teleOpMecanumWithSlowMode(
         DriverKit kit,
         Button slowButton,
         double slowScale);
@@ -295,13 +295,13 @@ StickDriveSource teleOpMecanumWithSlowMode(
 Example wiring in `PhoenixRobot`:
 
 ```java
-DriveSource driveSource = StickDriveSource.teleOpMecanumWithSlowMode(
+DriveSource driveSource = GamepadDriveSource.teleOpMecanumWithSlowMode(
         driverKit,
         driverKit.p1().rightBumper(), // hold for precision driving
         0.30);
 ```
 
-`StickDriveSource` takes care of:
+`GamepadDriveSource` takes care of:
 
 * Reading sticks/axes from `DriverKit`.
 * Deadband.
@@ -319,7 +319,7 @@ Phoenix provides a small helper to add AprilTag-based auto-aim over any `DriveSo
 Example in `PhoenixRobot`:
 
 ```java
-DriveSource manual = StickDriveSource.teleOpMecanum(driverKit);
+DriveSource manual = GamepadDriveSource.teleOpMecanum(driverKit);
 
 DriveSource aimed = TagAim.teleOpAim(
         manual,
@@ -486,7 +486,7 @@ Here is the pattern you’ll see across examples:
 2. **PhoenixRobot:** wires drive and mechanisms using the core APIs.
 
     * Drivebase from `Drives.mecanum(...)` → `MecanumDrivebase`.
-    * Drive source from `StickDriveSource.teleOpMecanum[...]`.
+    * Drive source from `GamepadDriveSource.teleOpMecanum[...]`.
     * Optional tag sensor from `Tags.aprilTags(...)`.
     * Optional tag-aim wrapper via `TagAim.teleOpAim(...)` and/or slow-mode wrapper via
       `DriveSource.scaledWhen(...)`.

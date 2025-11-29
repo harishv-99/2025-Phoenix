@@ -15,7 +15,7 @@ import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.StickDriveSource;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
@@ -31,7 +31,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <ol>
  *   <li><b>Mecanum drive</b> using {@link Drives#mecanum} +
- *       {@link StickDriveSource} (same as Example 01).</li>
+ *       {@link GamepadDriveSource} (same as Example 01).</li>
  *   <li><b>Tag-based auto-aim</b> using {@link TagAim#teleOpAim}:
  *     <ul>
  *       <li>Hold a button to override omega and face a scoring AprilTag.</li>
@@ -143,7 +143,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // 2) Drive wiring: mecanum + sticks.
         drivebase = Drives.mecanum(hardwareMap);
-        baseDrive = StickDriveSource.teleOpMecanumStandard(gamepads);
+        baseDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
         // 3) Tag sensor: real FTC VisionPortal + AprilTagProcessor adapter.
         //

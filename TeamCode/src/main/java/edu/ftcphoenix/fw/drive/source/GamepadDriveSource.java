@@ -19,7 +19,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *
  * <ul>
  *   <li>Stick mapping (which axis controls axial/lateral/turn).</li>
- *   <li>Deadband, expo, and scaling for the sticks (via {@link StickConfig}).</li>
+ *   <li>Deadband, expo, and scaling for the sticks (via {@link GamepadDriveSourceConfig}).</li>
  *   <li>Slow-mode behavior controlled by a button (optional).</li>
  * </ul>
  *
@@ -31,7 +31,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
  *
  * // Standard stick mapping + shaping + slow mode on P1 right bumper.
- * DriveSource drive = StickDriveSource.teleOpMecanumStandard(pads);
+ * DriveSource drive = GamepadDriveSource.teleOpMecanumStandard(pads);
  *
  * // In loop():
  * clock.update(getRuntime());
@@ -42,15 +42,15 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * <h2>Configuration</h2>
  *
  * <p>
- * Stick shaping parameters live in {@link StickConfig}. The recommended pattern:
+ * Stick shaping parameters live in {@link GamepadDriveSourceConfig}. The recommended pattern:
  * </p>
  *
  * <pre>{@code
- * StickConfig cfg = StickConfig.defaults();
+ * GamepadDriveSourceConfig cfg = GamepadDriveSourceConfig.defaults();
  * cfg.deadband = 0.08;
  * cfg.rotateExpo = 1.2;
  *
- * DriveSource drive = StickDriveSource.teleOpMecanum(
+ * DriveSource drive = GamepadDriveSource.teleOpMecanum(
  *         pads,
  *         cfg,
  *         pads.p1().rightBumper(),  // slow-mode button (optional)
@@ -59,10 +59,10 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * }</pre>
  *
  * <p>
- * Implementations that accept a {@link StickConfig} (such as
- * {@link #teleOpMecanum(Gamepads, StickConfig, Button, double)}) make a
+ * Implementations that accept a {@link GamepadDriveSourceConfig} (such as
+ * {@link #teleOpMecanum(Gamepads, GamepadDriveSourceConfig, Button, double)}) make a
  * <em>defensive copy</em> of the config at construction time. Changing the
- * fields of a {@code StickConfig} instance <strong>after</strong> you pass it
+ * fields of a {@code GamepadDriveSourceConfig} instance <strong>after</strong> you pass it
  * into a drive source will <strong>not</strong> affect that already-created
  * source.
  * </p>
@@ -70,20 +70,20 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * <h2>Generators vs wrappers</h2>
  *
  * <p>
- * {@code StickDriveSource} is a <strong>generator</strong>: it reads stick
+ * {@code GamepadDriveSource} is a <strong>generator</strong>: it reads stick
  * inputs and directly produces a complete {@link DriveSignal} in robot-centric
  * coordinates (axial / lateral / omega). Feature-specific wrappers like a tag
  * aiming source should wrap a base {@link DriveSource} produced by this class,
  * but this class itself does not wrap other drive sources.
  * </p>
  */
-public final class StickDriveSource implements DriveSource {
+public final class GamepadDriveSource implements DriveSource {
 
     private final Axis axisLateral;
     private final Axis axisAxial;
     private final Axis axisOmega;
 
-    private final StickConfig cfg;
+    private final GamepadDriveSourceConfig cfg;
 
     // Optional slow-mode configuration.
     private final Button slowButton; // may be null
@@ -107,7 +107,7 @@ public final class StickDriveSource implements DriveSource {
      *   <li>P1 left stick X for lateral (strafe).</li>
      *   <li>P1 left stick Y for axial (forward/back).</li>
      *   <li>P1 right stick X for omega (rotation).</li>
-     *   <li>{@link StickConfig#defaults()} for deadband/expo/scale.</li>
+     *   <li>{@link GamepadDriveSourceConfig#defaults()} for deadband/expo/scale.</li>
      * </ul>
      *
      * @param pads gamepad wrapper created from FTC {@code gamepad1}, {@code gamepad2}
@@ -117,7 +117,7 @@ public final class StickDriveSource implements DriveSource {
         if (pads == null) {
             throw new IllegalArgumentException("Gamepads is required");
         }
-        return teleOpMecanum(pads, StickConfig.defaults(), null, 1.0);
+        return teleOpMecanum(pads, GamepadDriveSourceConfig.defaults(), null, 1.0);
     }
 
     /**
@@ -127,12 +127,12 @@ public final class StickDriveSource implements DriveSource {
      * @param cfg  stick shaping configuration (deadband, expo, scales)
      * @return a {@link DriveSource} that reads P1 sticks and produces drive commands
      */
-    public static DriveSource teleOpMecanum(Gamepads pads, StickConfig cfg) {
+    public static DriveSource teleOpMecanum(Gamepads pads, GamepadDriveSourceConfig cfg) {
         if (pads == null) {
             throw new IllegalArgumentException("Gamepads is required");
         }
         if (cfg == null) {
-            throw new IllegalArgumentException("StickConfig is required");
+            throw new IllegalArgumentException("GamepadDriveSourceConfig is required");
         }
         return teleOpMecanum(pads, cfg, null, 1.0);
     }
@@ -143,7 +143,7 @@ public final class StickDriveSource implements DriveSource {
      * <p>
      * This method is the most flexible entry point for TeleOp stick wiring. It
      * uses P1 left stick X/Y for translation and P1 right stick X for rotation.
-     * The supplied {@link StickConfig} controls deadband/expo/scales, and the
+     * The supplied {@link GamepadDriveSourceConfig} controls deadband/expo/scales, and the
      * optional {@code slowButton} + {@code slowScale} control slow-mode behavior.
      * </p>
      *
@@ -155,17 +155,17 @@ public final class StickDriveSource implements DriveSource {
      * @return a {@link DriveSource} that reads P1 sticks and produces drive commands
      */
     public static DriveSource teleOpMecanum(Gamepads pads,
-                                            StickConfig cfg,
+                                            GamepadDriveSourceConfig cfg,
                                             Button slowButton,
                                             double slowScale) {
         if (pads == null) {
             throw new IllegalArgumentException("Gamepads is required");
         }
         if (cfg == null) {
-            throw new IllegalArgumentException("StickConfig is required");
+            throw new IllegalArgumentException("GamepadDriveSourceConfig is required");
         }
         GamepadDevice p1 = pads.p1();
-        return new StickDriveSource(
+        return new GamepadDriveSource(
                 p1.leftX(),
                 p1.leftY(),
                 p1.rightX(),
@@ -186,7 +186,7 @@ public final class StickDriveSource implements DriveSource {
      *   <li>P1 left stick X for lateral (strafe).</li>
      *   <li>P1 left stick Y for axial (forward/back).</li>
      *   <li>P1 right stick X for omega (rotation).</li>
-     *   <li>{@link StickConfig#defaults()} for deadband/expo/scale.</li>
+     *   <li>{@link GamepadDriveSourceConfig#defaults()} for deadband/expo/scale.</li>
      *   <li>P1 right bumper as a slow-mode button.</li>
      *   <li>Slow-mode scale of {@code 0.30} (30% speed).</li>
      * </ul>
@@ -198,7 +198,7 @@ public final class StickDriveSource implements DriveSource {
         if (pads == null) {
             throw new IllegalArgumentException("Gamepads is required");
         }
-        StickConfig cfg = StickConfig.defaults();
+        GamepadDriveSourceConfig cfg = GamepadDriveSourceConfig.defaults();
         Button slow = pads.p1().rightBumper();
         double slowScale = 0.30;
         return teleOpMecanum(pads, cfg, slow, slowScale);
@@ -225,12 +225,12 @@ public final class StickDriveSource implements DriveSource {
      * @param slowScale   scale applied to all components when slow mode is active
      *                    (must be in (0,1] if {@code slowButton} is non-null)
      */
-    public StickDriveSource(Axis axisLateral,
-                            Axis axisAxial,
-                            Axis axisOmega,
-                            StickConfig cfg,
-                            Button slowButton,
-                            double slowScale) {
+    public GamepadDriveSource(Axis axisLateral,
+                              Axis axisAxial,
+                              Axis axisOmega,
+                              GamepadDriveSourceConfig cfg,
+                              Button slowButton,
+                              double slowScale) {
         if (axisLateral == null) {
             throw new IllegalArgumentException("axisLateral is required");
         }
@@ -241,7 +241,7 @@ public final class StickDriveSource implements DriveSource {
             throw new IllegalArgumentException("axisOmega is required");
         }
         if (cfg == null) {
-            throw new IllegalArgumentException("StickConfig is required");
+            throw new IllegalArgumentException("GamepadDriveSourceConfig is required");
         }
         if (slowButton != null) {
             if (!(slowScale > 0.0 && slowScale <= 1.0)) {
@@ -371,7 +371,7 @@ public final class StickDriveSource implements DriveSource {
         }
         String p = (prefix == null || prefix.isEmpty()) ? "sticks" : prefix;
 
-        dbg.addLine(p + ": StickDriveSource");
+        dbg.addLine(p + ": GamepadDriveSource");
 
         // Current raw axis readings (sampling now).
         dbg.addData(p + ".axis.lateral.raw", axisLateral.get());
