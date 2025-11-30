@@ -11,21 +11,41 @@ import edu.ftcphoenix.fw.util.LoopClock;
 import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
- * Stick-based drive source for common FTC teleop use cases (mecanum / holonomic).
+ * {@link DriveSource} implementation that maps gamepad sticks to a {@link DriveSignal}
+ * for common FTC TeleOp use cases (mecanum / holonomic).
  *
  * <p>
  * This class is the <em>single</em> recommended place to put:
  * </p>
  *
  * <ul>
- *   <li>Stick mapping (which axis controls axial/lateral/turn).</li>
+ *   <li>Stick mapping (which axis controls axial / lateral / turn).</li>
  *   <li>Deadband, expo, and scaling for the sticks (via {@link GamepadDriveSourceConfig}).</li>
  *   <li>Slow-mode behavior controlled by a button (optional).</li>
  * </ul>
  *
- * <p>
- * A typical TeleOp wiring looks like:
- * </p>
+ * <h2>Stick mapping and sign conventions</h2>
+ *
+ * <p>The standard mecanum TeleOp helpers in this class use:</p>
+ *
+ * <ul>
+ *   <li>P1 left stick Y ({@link GamepadDevice#leftY()}): {@code axial}</li>
+ *   <li>P1 left stick X ({@link GamepadDevice#leftX()}): {@code lateral}</li>
+ *   <li>P1 right stick X ({@link GamepadDevice#rightX()}): {@code omega}</li>
+ * </ul>
+ *
+ * <p>With {@link GamepadDevice} and {@link DriveSignal} conventions:</p>
+ *
+ * <ul>
+ *   <li>P1 left stick <b>up</b>   &rarr; {@code axial > 0}   &rarr; drive forward</li>
+ *   <li>P1 left stick <b>down</b> &rarr; {@code axial < 0}   &rarr; drive backward</li>
+ *   <li>P1 left stick <b>right</b> &rarr; {@code lateral > 0} &rarr; strafe right</li>
+ *   <li>P1 left stick <b>left</b>  &rarr; {@code lateral < 0} &rarr; strafe left</li>
+ *   <li>P1 right stick <b>right</b> &rarr; {@code omega > 0}   &rarr; rotate clockwise (turn right)</li>
+ *   <li>P1 right stick <b>left</b>  &rarr; {@code omega < 0}   &rarr; rotate counter-clockwise (turn left)</li>
+ * </ul>
+ *
+ * <h2>Typical usage</h2>
  *
  * <pre>{@code
  * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
@@ -33,10 +53,14 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * // Standard stick mapping + shaping + slow mode on P1 right bumper.
  * DriveSource drive = GamepadDriveSource.teleOpMecanumStandard(pads);
  *
+ * MecanumDrivebase drivebase = Drives.mecanum(hardwareMap);
+ *
  * // In loop():
  * clock.update(getRuntime());
- * DriveSignal cmd = drive.get(clock);
+ *
+ * DriveSignal cmd = drive.get(clock);   // or drive.get(clock).clamped()
  * drivebase.drive(cmd);
+ * drivebase.update(clock);
  * }</pre>
  *
  * <h2>Configuration</h2>
@@ -72,7 +96,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * <p>
  * {@code GamepadDriveSource} is a <strong>generator</strong>: it reads stick
  * inputs and directly produces a complete {@link DriveSignal} in robot-centric
- * coordinates (axial / lateral / omega). Feature-specific wrappers like a tag
+ * coordinates ({@code axial / lateral / omega}). Feature-specific wrappers like a tag
  * aiming source should wrap a base {@link DriveSource} produced by this class,
  * but this class itself does not wrap other drive sources.
  * </p>
@@ -99,14 +123,12 @@ public final class GamepadDriveSource implements DriveSource {
     /**
      * Simple mecanum TeleOp mapping using Phoenix defaults and no slow mode.
      *
-     * <p>
-     * Uses:
-     * </p>
+     * <p>Uses:</p>
      *
      * <ul>
-     *   <li>P1 left stick X for lateral (strafe).</li>
-     *   <li>P1 left stick Y for axial (forward/back).</li>
-     *   <li>P1 right stick X for omega (rotation).</li>
+     *   <li>P1 left stick Y (up &gt; 0) for axial (forward/back).</li>
+     *   <li>P1 left stick X (right &gt; 0) for lateral (strafe).</li>
+     *   <li>P1 right stick X (right &gt; 0) for omega (rotation).</li>
      *   <li>{@link GamepadDriveSourceConfig#defaults()} for deadband/expo/scale.</li>
      * </ul>
      *
@@ -166,9 +188,9 @@ public final class GamepadDriveSource implements DriveSource {
         }
         GamepadDevice p1 = pads.p1();
         return new GamepadDriveSource(
-                p1.leftX(),
-                p1.leftY(),
-                p1.rightX(),
+                p1.leftX(),   // lateral: + = right
+                p1.leftY(),   // axial:   + = forward (stick up)
+                p1.rightX(),  // omega:   + = clockwise (stick right)
                 cfg,
                 slowButton,
                 slowScale
@@ -178,14 +200,12 @@ public final class GamepadDriveSource implements DriveSource {
     /**
      * Phoenix standard mecanum TeleOp mapping with default shaping and slow mode.
      *
-     * <p>
-     * Uses:
-     * </p>
+     * <p>Uses:</p>
      *
      * <ul>
-     *   <li>P1 left stick X for lateral (strafe).</li>
-     *   <li>P1 left stick Y for axial (forward/back).</li>
-     *   <li>P1 right stick X for omega (rotation).</li>
+     *   <li>P1 left stick Y (up &gt; 0) for axial (forward/back).</li>
+     *   <li>P1 left stick X (right &gt; 0) for lateral (strafe).</li>
+     *   <li>P1 right stick X (right &gt; 0) for omega (rotation).</li>
      *   <li>{@link GamepadDriveSourceConfig#defaults()} for deadband/expo/scale.</li>
      *   <li>P1 right bumper as a slow-mode button.</li>
      *   <li>Slow-mode scale of {@code 0.30} (30% speed).</li>
@@ -272,6 +292,15 @@ public final class GamepadDriveSource implements DriveSource {
      * to be handled by the drivebase (for example, via {@code MecanumConfig}
      * in {@code MecanumDrivebase}).
      * </p>
+     *
+     * <p>The resulting {@link DriveSignal} respects the standard sign
+     * conventions:</p>
+     *
+     * <ul>
+     *   <li>{@code axial > 0}   → forward</li>
+     *   <li>{@code lateral > 0} → strafe right</li>
+     *   <li>{@code omega > 0}   → rotate clockwise (turn right)</li>
+     * </ul>
      */
     @Override
     public DriveSignal get(LoopClock clock) {

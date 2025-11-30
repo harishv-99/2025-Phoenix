@@ -143,11 +143,11 @@ public final class MecanumConfig {
      * </p>
      *
      * <p>
-     * Default: {@code 0.0}. A typical Phoenix tuning might set this to a
+     * Default: {@code 4.0}. A typical Phoenix tuning might set this to a
      * small value like {@code 4.0} to smooth strafing.
      * </p>
      */
-    public double maxLateralRatePerSec = 0.0;
+    public double maxLateralRatePerSec = 4.0;
 
     /**
      * Maximum change in rotational command per second.

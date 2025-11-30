@@ -8,7 +8,26 @@ import edu.ftcphoenix.fw.util.MathUtil;
 /**
  * Simple open-loop mecanum mixer.
  *
- * <p>Maps a high-level {@link DriveSignal} to four wheel power commands:</p>
+ * <p>Maps a high-level {@link DriveSignal} to four wheel power commands.</p>
+ *
+ * <h2>Sign conventions</h2>
+ *
+ * <p>Assumes an X-configured mecanum drivetrain (rollers pointing inwards when
+ * viewed from above), with all inversion handled at the hardware level (e.g. via
+ * FTC SDK {@code setDirection(REVERSE)} when constructing {@link PowerOutput}s).
+ * In that configuration, the {@link DriveSignal} components have the following
+ * robot-centric meaning:</p>
+ *
+ * <ul>
+ *   <li><b>axial &gt; 0</b>   &rarr; drive forward</li>
+ *   <li><b>axial &lt; 0</b>   &rarr; drive backward</li>
+ *   <li><b>lateral &gt; 0</b> &rarr; strafe right</li>
+ *   <li><b>lateral &lt; 0</b> &rarr; strafe left</li>
+ *   <li><b>omega &gt; 0</b>   &rarr; rotate clockwise (turn right, viewed from above)</li>
+ *   <li><b>omega &lt; 0</b>   &rarr; rotate counter-clockwise (turn left)</li>
+ * </ul>
+ *
+ * <p>The internal mixer uses the standard mecanum equations:</p>
  *
  * <pre>
  * fl = axial + lateral + omega
@@ -17,97 +36,103 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * br = axial + lateral - omega
  * </pre>
  *
- * <p>Each wheel power is then clamped to [-1, +1] before being applied to
- * the underlying actuators via {@link PowerOutput}.</p>
+ * <h2>Normalization</h2>
  *
  * <p>
- * The {@link MecanumConfig} allows optional scaling of the three drive
- * components (axial, lateral, omega) <em>and</em> optional per-axis rate
- * limiting of how quickly those commands may change over time.
+ * After mixing, the wheel powers are <b>normalized</b> if any magnitude exceeds 1.0,
+ * by dividing all four by {@code max(1, |fl|, |fr|, |bl|, |br|)}. This preserves the
+ * intended direction and ratios even at full-stick inputs, instead of independently
+ * clamping each wheel. A final clamp to [-1, +1] is applied for numerical safety.
  * </p>
- *
- * <h2>Inversion policy</h2>
  *
  * <p>
- * All inversion is handled at the hardware level (e.g., using FTC SDK
- * {@code setDirection(REVERSE)} when constructing {@link PowerOutput}s).
- * This class assumes that positive power means "forward" for each wheel
- * in whatever coordinate system the hardware already uses.
+ * The {@link MecanumConfig} allows optional scaling of the three drive components
+ * (axial, lateral, omega) <em>and</em> optional per-axis rate limiting of how
+ * quickly those commands may change over time.
  * </p>
+ *
+ * <h2>Typical usage</h2>
+ *
+ * <pre>{@code
+ * public final class PhoenixRobot {
+ *     private final MecanumDrivebase drivebase;
+ *     private final DriveSource driveSource;
+ *
+ *     public PhoenixRobot(HardwareMap hw, Gamepads pads) {
+ *         this.drivebase = Drives.mecanum(hw);
+ *         this.driveSource = GamepadDriveSource.teleOpMecanumStandard(pads);
+ *     }
+ *
+ *     public void updateTeleOp(LoopClock clock) {
+ *         // Get a drive command from the current drive source.
+ *         DriveSignal signal = driveSource.get(clock).clamped();
+ *
+ *         // Apply to the drivebase.
+ *         drivebase.drive(signal);
+ *         drivebase.update(clock);
+ *     }
+ * }
+ * }</pre>
  */
 public final class MecanumDrivebase {
 
-    private final PowerOutput fl, fr, bl, br;
+    private final PowerOutput fl;
+    private final PowerOutput fr;
+    private final PowerOutput bl;
+    private final PowerOutput br;
+
     private final MecanumConfig cfg;
 
-    // Last commanded wheel powers (after clamping).
-    private double lastFlPower = 0.0;
-    private double lastFrPower = 0.0;
-    private double lastBlPower = 0.0;
-    private double lastBrPower = 0.0;
+    // Last commanded drive components (after scaling and rate limiting).
+    private double lastAxialCmd;
+    private double lastLateralCmd;
+    private double lastOmegaCmd;
 
-    // Last commanded high-level components (after scaling & rate limiting).
-    private double lastAxialCmd = 0.0;
-    private double lastLateralCmd = 0.0;
-    private double lastOmegaCmd = 0.0;
+    // Last commanded wheel powers (after normalization/clamping).
+    private double lastFlPower;
+    private double lastFrPower;
+    private double lastBlPower;
+    private double lastBrPower;
 
-    // Most recent dtSec provided via update(clock).
-    private double lastDtSec = 0.0;
+    // Last dt (seconds) used for rate limiting.
+    private double lastDtSec;
 
     /**
-     * Construct a mecanum drivebase from four outputs and an optional config.
+     * Construct a new mecanum drivebase.
      *
-     * @param fl  front-left wheel power output
-     * @param fr  front-right wheel power output
-     * @param bl  back-left wheel power output
-     * @param br  back-right wheel power output
-     * @param cfg configuration (may be null to use {@link MecanumConfig#defaults()})
+     * @param flPower power output for the front-left wheel (non-null)
+     * @param frPower power output for the front-right wheel (non-null)
+     * @param blPower power output for the back-left wheel (non-null)
+     * @param brPower power output for the back-right wheel (non-null)
+     * @param cfg     configuration for scaling and rate limiting (non-null)
      */
-    public MecanumDrivebase(PowerOutput fl,
-                            PowerOutput fr,
-                            PowerOutput bl,
-                            PowerOutput br,
+    public MecanumDrivebase(PowerOutput flPower,
+                            PowerOutput frPower,
+                            PowerOutput blPower,
+                            PowerOutput brPower,
                             MecanumConfig cfg) {
-        if (fl == null || fr == null || bl == null || br == null) {
-            throw new IllegalArgumentException("All four PowerOutput channels are required");
-        }
-        this.fl = fl;
-        this.fr = fr;
-        this.bl = bl;
-        this.br = br;
-        this.cfg = (cfg != null) ? cfg : MecanumConfig.defaults();
+        this.fl = flPower;
+        this.fr = frPower;
+        this.bl = blPower;
+        this.br = brPower;
+        this.cfg = cfg != null ? cfg : MecanumConfig.defaults();
     }
 
     /**
-     * Construct a mecanum drivebase with the default {@link MecanumConfig}.
-     */
-    public MecanumDrivebase(PowerOutput fl,
-                            PowerOutput fr,
-                            PowerOutput bl,
-                            PowerOutput br) {
-        this(fl, fr, bl, br, null);
-    }
-
-    /**
-     * Apply a drive signal to the wheels.
+     * Command the drivebase using a {@link DriveSignal}.
      *
      * <p>
-     * Expected input range is [-1, +1] for each component, but values outside
-     * that range will be clamped per wheel after mixing.
+     * This method:
      * </p>
-     *
-     * <p>
-     * This method applies the following processing steps:
-     * </p>
-     *
      * <ol>
-     *   <li>Apply per-axis scaling from {@link MecanumConfig}.</li>
-     *   <li>Optionally apply per-axis rate limiting (also from {@link MecanumConfig}).</li>
-     *   <li>Mix the (possibly rate-limited) components into wheel powers.</li>
-     *   <li>Clamp each wheel power to [-1, +1] and send to the actuators.</li>
+     *   <li>Scales {@code axial}, {@code lateral}, {@code omega} by config limits.</li>
+     *   <li>Optionally rate-limits each component based on {@link #update(LoopClock)}.</li>
+     *   <li>Computes mecanum wheel powers using the standard mix.</li>
+     *   <li>Normalizes wheel powers if any magnitude exceeds 1.0.</li>
+     *   <li>Clamps wheel powers to [-1, +1] and sends them to the hardware.</li>
      * </ol>
      *
-     * @param s drive signal to apply; {@code null} is treated as "stop"
+     * @param s drive command; if {@code null}, this is treated as a stop command
      */
     public void drive(DriveSignal s) {
         if (s == null) {
@@ -118,7 +143,7 @@ public final class MecanumDrivebase {
 
         // 1) Apply per-axis scaling from the config.
         double desiredAxial = s.axial * cfg.maxAxial;
-        double desiredLateral = -s.lateral * cfg.maxLateral;
+        double desiredLateral = s.lateral * cfg.maxLateral;
         double desiredOmega = s.omega * cfg.maxOmega;
 
         // 2) Optionally apply per-axis rate limiting based on lastDtSec.
@@ -132,12 +157,30 @@ public final class MecanumDrivebase {
         lastOmegaCmd = omegaCmd;
 
         // 3) Basic mecanum mixing with the (possibly rate-limited) components.
+        //    Sign conventions (robot-centric):
+        //      axial   > 0 -> forward
+        //      lateral > 0 -> right
+        //      omega   > 0 -> clockwise (turn right, viewed from above)
         double flP = axialCmd + lateralCmd + omegaCmd;
         double frP = axialCmd - lateralCmd - omegaCmd;
         double blP = axialCmd - lateralCmd + omegaCmd;
         double brP = axialCmd + lateralCmd - omegaCmd;
 
-        // 4) Clamp and apply, while tracking last commanded values.
+        // 4) Normalize wheel powers if any exceeds |1.0| to preserve direction.
+        double maxMag = Math.max(
+                1.0,
+                Math.max(
+                        Math.max(Math.abs(flP), Math.abs(frP)),
+                        Math.max(Math.abs(blP), Math.abs(brP))
+                )
+        );
+        flP /= maxMag;
+        frP /= maxMag;
+        blP /= maxMag;
+        brP /= maxMag;
+
+        // 5) Final clamp (mainly for numerical safety) and apply,
+        //    while tracking last commanded values.
         lastFlPower = MathUtil.clamp(flP, -1.0, 1.0);
         lastFrPower = MathUtil.clamp(frP, -1.0, 1.0);
         lastBlPower = MathUtil.clamp(blP, -1.0, 1.0);
@@ -166,6 +209,7 @@ public final class MecanumDrivebase {
         }
         double maxDelta = maxRatePerSec * dtSec;
         double delta = desired - previous;
+
         if (delta > maxDelta) {
             return previous + maxDelta;
         } else if (delta < -maxDelta) {
@@ -179,12 +223,7 @@ public final class MecanumDrivebase {
      *
      * <p>
      * Call this once per loop before calling {@link #drive(DriveSignal)} if
-     * you want rate limiting to be based on the actual loop period.
-     * </p>
-     *
-     * <p>
-     * If {@code clock} is {@code null}, this method does nothing and any
-     * existing {@code dtSec} value is left unchanged.
+     * you want rate limiting to be based on the most recent dt.
      * </p>
      *
      * @param clock loop timing helper (may be {@code null})
@@ -201,14 +240,14 @@ public final class MecanumDrivebase {
      * bookkeeping.
      */
     public void stop() {
+        lastAxialCmd = 0.0;
+        lastLateralCmd = 0.0;
+        lastOmegaCmd = 0.0;
+
         lastFlPower = 0.0;
         lastFrPower = 0.0;
         lastBlPower = 0.0;
         lastBrPower = 0.0;
-
-        lastAxialCmd = 0.0;
-        lastLateralCmd = 0.0;
-        lastOmegaCmd = 0.0;
 
         fl.setPower(0.0);
         fr.setPower(0.0);
@@ -258,28 +297,49 @@ public final class MecanumDrivebase {
     // ------------------------------------------------------------------------
 
     /**
-     * @return last commanded (clamped) power for front-left wheel.
+     * @return last commanded (scaled and rate-limited) axial command.
+     */
+    public double getLastAxialCmd() {
+        return lastAxialCmd;
+    }
+
+    /**
+     * @return last commanded (scaled and rate-limited) lateral command.
+     */
+    public double getLastLateralCmd() {
+        return lastLateralCmd;
+    }
+
+    /**
+     * @return last commanded (scaled and rate-limited) omega command.
+     */
+    public double getLastOmegaCmd() {
+        return lastOmegaCmd;
+    }
+
+    /**
+     * @return last commanded (normalized &amp; clamped) power for front-left wheel.
      */
     public double getLastFlPower() {
         return lastFlPower;
     }
 
     /**
-     * @return last commanded (clamped) power for front-right wheel.
+     * @return last commanded (normalized &amp; clamped) power for front-right wheel.
      */
     public double getLastFrPower() {
         return lastFrPower;
     }
 
     /**
-     * @return last commanded (clamped) power for back-left wheel.
+     * @return last commanded (normalized &amp; clamped) power for back-left wheel.
      */
     public double getLastBlPower() {
         return lastBlPower;
     }
 
     /**
-     * @return last commanded (clamped) power for back-right wheel.
+     * @return last commanded (normalized &amp; clamped) power for back-right wheel.
      */
     public double getLastBrPower() {
         return lastBrPower;

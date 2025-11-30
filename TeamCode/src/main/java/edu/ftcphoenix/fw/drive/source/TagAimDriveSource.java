@@ -21,7 +21,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * <ul>
  *   <li>It holds a "base" {@link DriveSource} (e.g., stick-based drive).</li>
  *   <li>It reads a {@link BearingSource} (e.g., AprilTags wrapped as bearing).</li>
- *   <li>It uses a {@link TagAimController} to turn bearing into omega.</li>
+ *   <li>It uses a {@link TagAimController} to turn bearing into {@code omega}.</li>
  *   <li>When the {@link Button} is pressed:
  *     <ul>
  *       <li>Axial and lateral commands come from the base source.</li>
@@ -36,6 +36,65 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * This class is useful if you prefer to construct and hold an explicit object
  * instead of using an anonymous wrapper or inline lambda.
  * </p>
+ *
+ * <h2>Sign conventions</h2>
+ *
+ * <p>
+ * {@code TagAimDriveSource} does not change the meaning of {@link DriveSignal};
+ * it only decides <em>who</em> supplies {@link DriveSignal#omega}:
+ * </p>
+ *
+ * <ul>
+ *   <li>When aiming is <b>off</b>, {@code omega} comes from {@code baseDrive}.</li>
+ *   <li>When aiming is <b>on</b>, {@code omega} comes from {@link TagAimController}.</li>
+ * </ul>
+ *
+ * <p>
+ * The maintained sign conventions are those of {@link DriveSignal}:
+ * </p>
+ *
+ * <ul>
+ *   <li>{@code axial &gt; 0} &rarr; drive forward</li>
+ *   <li>{@code lateral &gt; 0} &rarr; strafe right</li>
+ *   <li>{@code omega &gt; 0} &rarr; rotate clockwise (turn right, viewed from above)</li>
+ * </ul>
+ *
+ * <p>
+ * {@link TagAimController} is responsible for choosing {@code omega} so that
+ * the robot turns toward the target (e.g., tag left &rarr; {@code omega &lt; 0}
+ * turn left; tag right &rarr; {@code omega &gt; 0} turn right).
+ * </p>
+ *
+ * <h2>Typical usage</h2>
+ *
+ * <pre>{@code
+ * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
+ *
+ * // Base driver control (sticks) for mecanum drive.
+ * DriveSource baseDrive = GamepadDriveSource.teleOpMecanumStandard(pads);
+ *
+ * // Bearing source (e.g., from AprilTag sensor).
+ * BearingSource bearing = myTagSensor.asBearingSource();
+ *
+ * // TagAimController configured elsewhere (PID, deadband, maxOmega, loss policy).
+ * TagAimController aimCtrl = new TagAimController(...);
+ *
+ * // Aim button (e.g., P1 left bumper).
+ * Button aimButton = pads.p1().leftBumper();
+ *
+ * DriveSource aimedDrive = new TagAimDriveSource(
+ *         baseDrive,
+ *         aimButton,
+ *         bearing,
+ *         aimCtrl
+ * );
+ *
+ * // In your loop:
+ * clock.update(getRuntime());
+ * DriveSignal signal = aimedDrive.get(clock).clamped();
+ * drivebase.drive(signal);
+ * drivebase.update(clock);
+ * }</pre>
  */
 public final class TagAimDriveSource implements DriveSource {
 
@@ -94,15 +153,25 @@ public final class TagAimDriveSource implements DriveSource {
      *       <li>Sample bearing via {@link BearingSource#sample(LoopClock)}.</li>
      *       <li>Update the {@link TagAimController} via
      *           {@link TagAimController#update(LoopClock, BearingSample)}.</li>
-     *       <li>Keep axial/lateral from the base drive, override omega.</li>
+     *       <li>Keep axial/lateral from the base drive, override omega using the
+     *           controller's output.</li>
      *     </ul>
      *   </li>
      * </ul>
+     *
+     * <p>
+     * The omega used when aiming is the controller's output and follows the
+     * {@link DriveSignal} convention: {@code omega &gt; 0} rotates clockwise,
+     * {@code omega &lt; 0} rotates counter-clockwise.
+     * </p>
      */
     @Override
     public DriveSignal get(LoopClock clock) {
-        // Always start from the base drive.
+        // Get the base driver command first.
         DriveSignal base = baseDrive.get(clock);
+        if (base == null) {
+            base = DriveSignal.ZERO;
+        }
         lastBaseSignal = base;
 
         if (!aimButton.isHeld()) {
@@ -158,16 +227,17 @@ public final class TagAimDriveSource implements DriveSource {
 
         dbg.addLine(p + ": TagAimDriveSource");
 
-        // Identity of sub-components.
-        dbg.addData(p + ".baseDrive.class", baseDrive.getClass().getSimpleName());
-        dbg.addData(p + ".controller.class", controller.getClass().getSimpleName());
-        dbg.addData(p + ".aimButton.pressed", aimButton.isHeld());
+        dbg.addData(p + ".aimActive", lastAimActive);
 
-        // Aiming state.
-        dbg.addData(p + ".aim.active", lastAimActive);
-        dbg.addData(p + ".aim.lastOmega", lastOmegaFromController);
+        if (lastBearingSample != null) {
+            dbg.addData(p + ".bearing.hasTarget", lastBearingSample.hasTarget);
+            dbg.addData(p + ".bearing.bearingRad", lastBearingSample.bearingRad);
+        } else {
+            dbg.addData(p + ".bearing.hasTarget", false);
+        }
 
-        // Base vs output command.
+        dbg.addData(p + ".omega.fromController", lastOmegaFromController);
+
         dbg.addData(p + ".base.axial", lastBaseSignal.axial);
         dbg.addData(p + ".base.lateral", lastBaseSignal.lateral);
         dbg.addData(p + ".base.omega", lastBaseSignal.omega);
@@ -175,14 +245,27 @@ public final class TagAimDriveSource implements DriveSource {
         dbg.addData(p + ".out.axial", lastOutputSignal.axial);
         dbg.addData(p + ".out.lateral", lastOutputSignal.lateral);
         dbg.addData(p + ".out.omega", lastOutputSignal.omega);
+    }
 
-        // Last bearing sample (if any).
-        boolean hasSample = (lastBearingSample != null);
-        dbg.addData(p + ".bearing.samplePresent", hasSample);
-        if (hasSample) {
-            dbg.addData(p + ".bearing.hasTarget", lastBearingSample.hasTarget);
-            dbg.addData(p + ".bearing.bearingRad", lastBearingSample.bearingRad);
-        }
+    /**
+     * Whether aiming was active the last time {@link #get(LoopClock)} was called.
+     */
+    public boolean isLastAimActive() {
+        return lastAimActive;
+    }
+
+    /**
+     * Last bearing sample observed while aiming, if any.
+     */
+    public BearingSample getLastBearingSample() {
+        return lastBearingSample;
+    }
+
+    /**
+     * Last omega command produced by the {@link TagAimController}.
+     */
+    public double getLastOmegaFromController() {
+        return lastOmegaFromController;
     }
 
     /**

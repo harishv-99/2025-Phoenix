@@ -15,6 +15,41 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * information ({@link LoopClock}), it computes an angular velocity command
  * {@code omega} that tries to drive the bearing to zero.
  *
+ * <h2>Sign conventions</h2>
+ * <p>
+ * Typical {@link BearingSource} implementations (for example those built from
+ * {@link edu.ftcphoenix.fw.sensing.AprilTagObservation}) use a math-style
+ * convention where:
+ * </p>
+ * <ul>
+ *   <li>{@code bearingRad = 0} means the target is directly in front.</li>
+ *   <li>{@code bearingRad &gt; 0} means the target appears to the <b>left</b>
+ *       (counter-clockwise from forward).</li>
+ *   <li>{@code bearingRad &lt; 0} means the target appears to the <b>right</b>
+ *       (clockwise from forward).</li>
+ * </ul>
+ *
+ * <p>
+ * {@code TagAimController} produces an angular velocity command {@code omega}
+ * intended to be used as {@link edu.ftcphoenix.fw.drive.DriveSignal#omega},
+ * which in Phoenix follows:
+ * </p>
+ * <ul>
+ *   <li>{@code omega &gt; 0} &rarr; rotate <b>clockwise</b> (turn right).</li>
+ *   <li>{@code omega &lt; 0} &rarr; rotate <b>counter-clockwise</b> (turn left).</li>
+ * </ul>
+ *
+ * <p>
+ * To reconcile these, the controller internally uses
+ * {@code error = -bearingRad}, so that:
+ * </p>
+ * <ul>
+ *   <li>Target left (positive bearing) &rarr; negative error &rarr; {@code omega &lt; 0}
+ *       &rarr; robot turns left toward the target.</li>
+ *   <li>Target right (negative bearing) &rarr; positive error &rarr; {@code omega &gt; 0}
+ *       &rarr; robot turns right toward the target.</li>
+ * </ul>
+ *
  * <p>It does <strong>not</strong> know or care how the bearing was measured
  * (AprilTags, other vision targets, synthetic sources, etc.). That wiring is
  * handled elsewhere (for example, by {@code TagAim} helpers or
@@ -34,7 +69,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * );
  *
  * // In your TeleOp or Auto loop:
- * BearingSample sample = bearing.sample(clock);
+ * BearingSource.BearingSample sample = bearing.sample(clock);
  * double omega = aim.update(clock, sample);
  * }</pre>
  */
@@ -123,7 +158,7 @@ public final class TagAimController {
     }
 
     /**
-     * Update the controller based on a new bearing sample.
+     * Update the controller given the latest bearing sample and loop timing.
      *
      * <p>High-level behavior:</p>
      * <ul>
@@ -137,7 +172,9 @@ public final class TagAimController {
      *   </li>
      *   <li>Otherwise:
      *     <ul>
-     *       <li>Compute {@code error = bearingRad} (we want bearing → 0).</li>
+     *       <li>Compute {@code error = -bearingRad} (bearing&gt;0 means tag left,
+     *           but positive omega turns right; we negate so tag-left => omega&lt;0
+     *           (turn left)).</li>
      *       <li>Call {@link PidController#update(double, double)} with
      *           {@code (error, clock.dtSec())}.</li>
      *       <li>Clamp the result to {@code [-maxOmega, +maxOmega]}.</li>
@@ -164,7 +201,8 @@ public final class TagAimController {
             return lastOmega;
         }
 
-        double error = sample.bearingRad; // we want bearing → 0
+        // bearing>0 (tag left) -> error<0 -> omega<0 (turn left under DriveSignal convention)
+        double error = -sample.bearingRad; // we want bearing → 0
 
         // Inside deadband: treat as on-target; no turn command.
         if (Math.abs(error) < deadbandRad) {
@@ -175,6 +213,31 @@ public final class TagAimController {
         double raw = pid.update(error, dtSec);
         lastOmega = MathUtil.clamp(raw, -maxOmega, maxOmega);
         return lastOmega;
+    }
+
+    private void handleLoss() {
+        switch (lossPolicy) {
+            case ZERO_OUTPUT_RESET_I:
+                lastOmega = 0.0;
+                pid.reset();
+                break;
+
+            case HOLD_LAST_NO_I:
+                // Keep lastOmega; do not touch PID state here.
+                // Callers may choose to reset separately if desired.
+                break;
+
+            case ZERO_NO_RESET:
+                // Zero output but keep PID state.
+                lastOmega = 0.0;
+                break;
+
+            default:
+                // Defensive default: behave like ZERO_OUTPUT_RESET_I.
+                lastOmega = 0.0;
+                pid.reset();
+                break;
+        }
     }
 
     /**
@@ -202,40 +265,14 @@ public final class TagAimController {
     }
 
     /**
-     * @return loss policy used when no target is visible.
+     * @return configured loss policy.
      */
     public LossPolicy getLossPolicy() {
         return lossPolicy;
     }
 
     /**
-     * Apply the configured loss policy (when no target is visible).
-     */
-    private void handleLoss() {
-        switch (lossPolicy) {
-            case ZERO_OUTPUT_RESET_I:
-                lastOmega = 0.0;
-                pid.reset();
-                break;
-
-            case HOLD_LAST_NO_I:
-                // Keep lastOmega; do not touch PID state here.
-                // Callers may choose to reset separately if desired.
-                break;
-
-            case ZERO_NO_RESET:
-                lastOmega = 0.0;
-                // PID state is preserved; integral may continue when target reappears.
-                break;
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // Debug support
-    // ------------------------------------------------------------------------
-
-    /**
-     * Emit controller configuration and last omega to the provided {@link DebugSink}.
+     * Dump controller configuration and last omega to the provided {@link DebugSink}.
      *
      * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
      * @param prefix base key prefix, e.g. "tagAim"
