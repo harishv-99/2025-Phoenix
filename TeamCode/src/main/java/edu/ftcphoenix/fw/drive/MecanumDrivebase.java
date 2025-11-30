@@ -118,7 +118,7 @@ public final class MecanumDrivebase {
 
         // 1) Apply per-axis scaling from the config.
         double desiredAxial = s.axial * cfg.maxAxial;
-        double desiredLateral = s.lateral * cfg.maxLateral;
+        double desiredLateral = -s.lateral * cfg.maxLateral;
         double desiredOmega = s.omega * cfg.maxOmega;
 
         // 2) Optionally apply per-axis rate limiting based on lastDtSec.

@@ -35,6 +35,8 @@ public class WebcamTester_Raghavan extends LinearOpMode {
         myAprilTagProcessorBuilder.setDrawTagID(true);
         // Set whether or not to draw the tag outline on detections.
         myAprilTagProcessorBuilder.setDrawTagOutline(true);
+        // Camera Calibration
+        // myAprilTagProcessorBuilder.setLensIntrinsics(917.676, 917.676, 658.647, 378.213);
         // Build the AprilTag processor and assign it to a variable.
         myAprilTagProcessor = myAprilTagProcessorBuilder.build();
         // Create a VisionPortal.Builder object so you can specify attributes about the cameras.
@@ -44,9 +46,9 @@ public class WebcamTester_Raghavan extends LinearOpMode {
         // Add the AprilTag processor.
         myVisionPortalBuilder.addProcessor(myAprilTagProcessor);
         // Set the camera resolution.
-        myVisionPortalBuilder.setCameraResolution(new Size(640, 480));
+        myVisionPortalBuilder.setCameraResolution(new Size(1280, 800));
         // Set the stream format.
-        myVisionPortalBuilder.setStreamFormat(VisionPortal.StreamFormat.YUY2);
+        myVisionPortalBuilder.setStreamFormat(VisionPortal.StreamFormat.MJPEG);
         // Set whether the VisionPortal should automatically start streaming
         // when you issue a .build() call on this VisionPortal.Builder object.
         myVisionPortalBuilder.setAutoStartStreamOnBuild(true);
