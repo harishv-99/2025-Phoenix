@@ -293,7 +293,6 @@ These classes abstract over FTC hardware types:
 * `PowerOutput` – something that accepts a power (e.g., `DcMotor` in power mode).
 * `VelocityOutput` – velocity‑controlled outputs.
 * `PositionOutput` – positional (e.g., servo, motor with encoder).
-* `ServoOutput`, `MotorOutput` – convenience wrappers.
 
 They are intentionally small – robot code usually works with `Plant` and
 `Actuators.plant(...)` instead of raw outputs.

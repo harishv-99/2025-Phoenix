@@ -1,9 +1,13 @@
-package edu.ftcphoenix.fw.examples;
+package org.firstinspires.ftc.teamcode.robots;
 
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
+import edu.ftcphoenix.fw.actuation.Actuators;
+import edu.ftcphoenix.fw.actuation.Plant;
+import edu.ftcphoenix.fw.adapters.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
@@ -11,7 +15,9 @@ import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
+import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.robots.phoenix.RobotConfig;
 
 /**
  * <h1>Example 01: Basic Mecanum TeleOp</h1>
@@ -120,7 +126,14 @@ public final class Phoenix4 extends OpMode {
     /**
      * Last commanded drive signal, for telemetry.
      */
-    private DriveSignal lastDrive = new DriveSignal(0.0, 0.0, 0.0);
+    private DriveSignal lastDrive = DriveSignal.ZERO;
+
+    Plant pFL;
+    Plant pFR;
+    Plant pBL;
+    Plant pBR;
+
+    DebugSink dbg;
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -138,11 +151,17 @@ public final class Phoenix4 extends OpMode {
         //   - Applies a standard inversion pattern.
         //   - Uses the default MecanumConfig.
         MecanumConfig mecanumConfig = MecanumConfig.defaults();
-        drivebase = Drives.mecanum(hardwareMap, false, false, true, false, mecanumConfig);
+        drivebase = Drives.mecanum(hardwareMap,
+                RobotConfig.DriveTrain.invertMotorFrontLeft,
+                RobotConfig.DriveTrain.invertMotorFrontRight,
+                RobotConfig.DriveTrain.invertMotorBackLeft,
+                RobotConfig.DriveTrain.invertMotorBackRight,
+                mecanumConfig);
 
         // 3) Use the standard TeleOp stick mapping for mecanum.
         stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
+        dbg = new FtcTelemetryDebugSink(telemetry);
         telemetry.addLine("FW Example 01: Mecanum Basic");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");
         telemetry.update();
@@ -178,6 +197,7 @@ public final class Phoenix4 extends OpMode {
                 .addData("axial", lastDrive.axial)
                 .addData("lateral", lastDrive.lateral)
                 .addData("omega", lastDrive.omega);
+        stickDrive.debugDump(dbg, "stick");
         telemetry.update();
     }
 

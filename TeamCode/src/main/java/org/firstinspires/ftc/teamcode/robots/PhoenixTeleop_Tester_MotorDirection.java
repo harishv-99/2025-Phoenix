@@ -3,18 +3,17 @@ package org.firstinspires.ftc.teamcode.robots;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import edu.ftcphoenix.robots.phoenix.PhoenixRobot;
+import edu.ftcphoenix.robots.phoenix.tester.MotorDirectionTester;
 
-@TeleOp(name = "Phoenix TeleOp", group = "Phoenix")
-public class PhoenixTeleOp extends OpMode {
-    private PhoenixRobot robot;
+@TeleOp(name = "PhoenixTeleop - Tester - MotorDirection", group = "Phoenix")
+public class PhoenixTeleop_Tester_MotorDirection extends OpMode {
+    private MotorDirectionTester robot;
 
     @Override
     public void init() {
 
         // Create the season robot and share its bindings.
-        robot = new PhoenixRobot(hardwareMap, telemetry, gamepad1, gamepad2);
-        robot.initAny();
+        robot = new MotorDirectionTester(hardwareMap, telemetry, gamepad1, gamepad2);
         robot.initTeleOp();
     }
 
@@ -32,7 +31,7 @@ public class PhoenixTeleOp extends OpMode {
 
     @Override
     public void stop() {
-        robot.stopTeleOp();
         robot.stopAny();
+        robot.stopTeleOp();
     }
 }

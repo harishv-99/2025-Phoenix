@@ -350,9 +350,7 @@ Either way, in `updateTeleOp(clock)` you do:
 
 ```java
 DriveSignal signal = driveSource.getDriveSignal();
-drivebase.
-
-apply(signal);
+drivebase.apply(signal);
 ```
 
 Once this is working, you have a solid driving TeleOp.
