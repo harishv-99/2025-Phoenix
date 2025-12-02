@@ -6,7 +6,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
  * A {@link Task} that runs a single action once, immediately on {@link #start(LoopClock)},
- * and then finishes.
+ * and then completes.
  *
  * <p>Typical usage:
  * <pre>{@code
@@ -14,34 +14,35 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * runner.enqueue(new InstantTask(() -> telemetry.addLine("Auto start")));
  * }</pre>
  *
- * <p>Semantics:
+ * <p>Semantics:</p>
  * <ul>
- *   <li>The action is guaranteed to run at most once per {@code InstantTask} instance.</li>
- *   <li>Additional calls to {@link #start(LoopClock)} after the first are ignored.</li>
- *   <li>{@link #update(LoopClock)} does nothing; the task finishes during {@code start()}.</li>
+ *   <li>The provided {@link Runnable} is guaranteed to run at most once.</li>
+ *   <li>If {@link #start(LoopClock)} is called multiple times (e.g. due to user
+ *       error), the action will only run on the first call.</li>
+ *   <li>{@link #update(LoopClock)} does nothing; the task is considered complete
+ *       as soon as the action has been run.</li>
  * </ul>
  */
 public final class InstantTask implements Task {
 
     private final Runnable action;
-    private boolean started = false;
     private boolean finished = false;
 
     /**
-     * @param action action to run once when the task starts
+     * Creates an InstantTask that runs the given action once when the task starts.
+     *
+     * @param action action to run once; must not be {@code null}
      */
     public InstantTask(Runnable action) {
-        this.action = Objects.requireNonNull(action, "action is required");
+        this.action = Objects.requireNonNull(action, "action must not be null");
     }
 
     @Override
     public void start(LoopClock clock) {
         // Idempotent start: only run the action once.
-        if (started) {
+        if (finished) {
             return;
         }
-        started = true;
-
         action.run();
         finished = true;
     }
@@ -52,7 +53,7 @@ public final class InstantTask implements Task {
     }
 
     @Override
-    public boolean isFinished() {
+    public boolean isComplete() {
         return finished;
     }
 }

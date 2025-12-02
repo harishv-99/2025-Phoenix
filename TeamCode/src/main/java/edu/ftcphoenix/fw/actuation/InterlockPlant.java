@@ -15,16 +15,27 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  *   <li>Global "kill switch" / safety interlock for a plant.</li>
  * </ul>
  *
- * <p>Conceptually:</p>
+ * <h2>Example: only feed when shooter is ready</h2>
+ *
+ * <p>Suppose you have:</p>
  *
  * <pre>{@code
- * Plant rawFeeder = FtcPlants.motorPower(hw, "feeder", false);
+ * Plant rawFeeder = Plants.power(
+ *     hardware.feederMotor(),
+ *     -1.0,   // reverse
+ *     +1.0    // forward
+ * );
  *
- * // Feeder only runs when shooterReady.getAsBoolean() is true.
- * // Otherwise, it is held at 0 power.
+ * Shooter shooter = new Shooter(...);
+ *
+ * // We only want to feed when the shooter is spun up and at velocity.
+ * // The interlock condition uses a method reference on Shooter:
+ * BooleanSupplier canFeed = shooter::isReady;
+ *
+ * // When canFeed is false, we instead force the feeder to stop (0 power).
  * Plant feeder = new InterlockPlant(
  *     rawFeeder,
- *     shooter::isReady,
+ *     canFeed,
  *     0.0   // blockedTarget
  * );
  *
@@ -53,9 +64,9 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  *   </li>
  * </ul>
  *
- * <p>This is intentionally simple: interlocking is handled entirely here, and
- * higher-level controllers (GoalController, FunctionController, etc.) just see
- * a normal {@link Plant}.</p>
+ * <p>This is a purely runtime gating mechanism; it does not “cancel” or
+ * modify the desired target except for what is actually applied to the
+ * inner plant on each update.</p>
  */
 public final class InterlockPlant implements Plant {
 
@@ -110,6 +121,14 @@ public final class InterlockPlant implements Plant {
      */
     public double getCommandedTarget() {
         return desiredTarget;
+    }
+
+    @Override
+    public void stop() {
+        inner.stop();
+        // After a stop, keep desiredTarget but mirror whatever the inner plant
+        // reports as its current target for introspection.
+        lastAppliedTarget = inner.getTarget();
     }
 
     /**

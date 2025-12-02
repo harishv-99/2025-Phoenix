@@ -2,84 +2,61 @@ package edu.ftcphoenix.fw.actuation;
 
 import java.util.Objects;
 
-import edu.ftcphoenix.fw.task.InstantTask;
-import edu.ftcphoenix.fw.task.RunForSecondsTask;
 import edu.ftcphoenix.fw.task.Task;
+import edu.ftcphoenix.fw.task.TaskOutcome;
+import edu.ftcphoenix.fw.task.Tasks;
 import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
- * Helper methods for creating common {@link Task} patterns that command a {@link Plant}.
+ * Helper methods and builders for creating common {@link Task} patterns
+ * that command a {@link Plant}.
  *
  * <p>The goal is to make robot code read like:</p>
  *
  * <pre>{@code
  * // Intake at full power for 0.7 seconds, then stop.
- * Task intakePulse = PlantTasks.holdForSeconds(intakePlant, +1.0, 0.7);
+ * Task intakePulse = PlantTasks.holdForSeconds(intakePlant, +1.0, 0.7, 0.0);
  *
- * // Arm: set a target angle and wait until atSetpoint() (no timeout).
- * Task moveArm = PlantTasks.setTargetAndWaitForSetpoint(armPlant, Math.toRadians(45.0));
+ * // Arm: move to an angle and wait until atSetpoint() (with timeout).
+ * Task moveArm = PlantTasks.moveTo(armPlant, Math.toRadians(45.0))
+ *         .waitUntilAtSetpointOrTimeout(1.5)
+ *         .thenHold()
+ *         .build();
  * }</pre>
  *
  * <p>All helpers here are <b>non-blocking</b> and are intended to be used with
  * {@link edu.ftcphoenix.fw.task.TaskRunner} and the rest of the {@code fw.task}
- * package.</p>
- *
- * <h2>Design principles</h2>
- * <ul>
- *   <li>Keep <b>Plant update timing</b> in your main robot loop or mechanism
- *       (<code>plant.update(dtSec)</code> is <b>not</b> called from these tasks).</li>
- *   <li>Use tasks only for <b>targets and waiting</b>: “hold for time” and
- *       “set target and wait for setpoint (with optional timeout).”</li>
- *   <li>Keep this class domain-specific to actuation; it lives in
- *       {@code fw.actuation} and simply reuses the generic task primitives.</li>
- * </ul>
+ * package. These tasks set targets on plants and rely on some other mechanism
+ * to call {@link Plant#update(double)} each loop.</p>
  */
 public final class PlantTasks {
 
     private PlantTasks() {
-        // Utility holder; do not instantiate.
+        // Utility class; do not instantiate.
     }
 
     // ------------------------------------------------------------------------
-    // Timed hold patterns
+    // Timed hold patterns (simple helpers backed by the builder)
     // ------------------------------------------------------------------------
 
     /**
-     * Hold a plant at a given target value for a fixed amount of time, then
-     * optionally change the target again when time is up.
+     * Create a {@link Task} that:
+     * <ol>
+     *   <li>Sets the plant target once at the start.</li>
+     *   <li>Relies on your main loop / mechanism to call
+     *       {@link Plant#update(double)} each iteration.</li>
+     *   <li>Holds that target for a fixed duration (purely by time).</li>
+     *   <li>After the duration elapses, sets a follow-up target.</li>
+     * </ol>
      *
-     * <p>Semantics:</p>
-     * <ul>
-     *   <li>On start:
-     *     <ul>
-     *       <li>Calls {@link Plant#setTarget(double)} with {@code target}.</li>
-     *     </ul>
-     *   </li>
-     *   <li>While the task is running:
-     *     <ul>
-     *       <li><b>Does not</b> call {@link Plant#update(double)}; your robot
-     *           code is responsible for updating the plant each loop.</li>
-     *     </ul>
-     *   </li>
-     *   <li>When {@code durationSec} elapses:
-     *     <ul>
-     *       <li>Calls {@link Plant#setTarget(double)} with {@code afterTarget}.</li>
-     *       <li>{@link Task#isFinished()} becomes {@code true}.</li>
-     *     </ul>
-     *   </li>
-     * </ul>
+     * <p>This is implemented using the builder:</p>
      *
-     * <p>This is a good fit for:</p>
-     * <ul>
-     *   <li>Intake power pulses (target = +1.0, {@code afterTarget} = 0.0).</li>
-     *   <li>Momentary “kick” motions.</li>
-     *   <li>Timed velocity bursts for flywheels (if you want them to spin down
-     *       automatically afterward).</li>
-     * </ul>
-     *
-     * <p><b>Note:</b> Your main loop or mechanism should still call
-     * {@link Plant#update(double)} each iteration; this task only changes targets
-     * and waits for time to elapse.</p>
+     * <pre>{@code
+     * PlantTasks.moveTo(plant, target)
+     *     .waitSeconds(durationSec)
+     *     .thenGoTo(afterTarget)
+     *     .build();
+     * }</pre>
      *
      * @param plant       the plant to command
      * @param target      target value to hold during the timed interval
@@ -93,37 +70,32 @@ public final class PlantTasks {
                                       final double afterTarget) {
         Objects.requireNonNull(plant, "plant is required");
 
-        return new RunForSecondsTask(
-                durationSec,
-                // onStart: command initial target
-                () -> plant.setTarget(target),
-                // onUpdate: no-op; plant.update(dt) is handled elsewhere
-                null,
-                // onFinish: command follow-up target
-                () -> plant.setTarget(afterTarget)
-        );
+        return PlantTasks.moveTo(plant, target)
+                .waitSeconds(durationSec)
+                .thenGoTo(afterTarget)
+                .build();
     }
 
     /**
-     * Convenience overload: hold a plant at a given target for a fixed amount
-     * of time, then automatically set the target back to 0.0.
+     * Convenience overload that holds the same target before and after the
+     * timed interval.
      *
      * <p>Equivalent to:</p>
      *
      * <pre>{@code
-     * PlantTasks.holdForSeconds(plant, target, durationSec, 0.0);
+     * PlantTasks.holdForSeconds(plant, target, durationSec, target);
      * }</pre>
      *
      * @param plant       the plant to command
      * @param target      target value to hold during the timed interval
      * @param durationSec duration in seconds; must be {@code >= 0}
-     * @return a {@link Task} that performs the timed hold and then sets target
-     * back to 0.0
+     * @return a {@link Task} that performs the timed hold and leaves the target
+     * at the commanded value once the time has elapsed
      */
     public static Task holdForSeconds(final Plant plant,
                                       final double target,
                                       final double durationSec) {
-        return holdForSeconds(plant, target, durationSec, 0.0);
+        return holdForSeconds(plant, target, durationSec, target);
     }
 
     // ------------------------------------------------------------------------
@@ -161,37 +133,12 @@ public final class PlantTasks {
      *   <li>Relies on your main loop / mechanism to call
      *       {@link Plant#update(double)} each iteration.</li>
      *   <li>Finishes when {@link Plant#atSetpoint()} returns {@code true},</li>
-     *   <li>and optionally enforces a timeout.</li>
+     *   <li>or when {@code timeoutSec} seconds elapse (whichever comes first).</li>
      * </ol>
      *
-     * <p>Semantics:</p>
-     * <ul>
-     *   <li>On start:
-     *     <ul>
-     *       <li>Calls {@link Plant#setTarget(double)} with {@code target}.</li>
-     *       <li>Resets internal elapsed-time tracking.</li>
-     *     </ul>
-     *   </li>
-     *   <li>On each update while running:
-     *     <ul>
-     *       <li>Accumulates elapsed time using {@link LoopClock#dtSec()}.</li>
-     *       <li><b>Does not</b> call {@link Plant#update(double)}; your robot
-     *           code is responsible for updating the plant each loop.</li>
-     *       <li>Checks {@link Plant#atSetpoint()}; if true, the task finishes.</li>
-     *       <li>If {@code timeoutSec > 0}:
-     *         <ul>
-     *           <li>The task finishes when {@code atSetpoint()} is true, <b>or</b>
-     *               when the timeout elapses, whichever comes first.</li>
-     *           <li>If the timeout elapses first and {@code onTimeout} is not null,
-     *               {@code onTimeout.run()} is called exactly once.</li>
-     *         </ul>
-     *       </li>
-     *     </ul>
-     *   </li>
-     * </ul>
-     *
-     * <p>This pattern is useful for autonomous scripts such as “set arm angle,
-     * but don’t wait forever if something goes wrong.”</p>
+     * <p>When a timeout occurs and {@code onTimeout} is non-null, the
+     * {@code onTimeout.run()} callback is invoked exactly once via a
+     * follow-up {@link Task}.</p>
      *
      * @param plant      plant to command
      * @param target     target setpoint
@@ -206,82 +153,416 @@ public final class PlantTasks {
                                                    final Runnable onTimeout) {
         Objects.requireNonNull(plant, "plant is required");
 
-        return new Task() {
-            private boolean started = false;
-            private boolean finished = false;
-            private double elapsedSec = 0.0;
+        Task move;
+        if (timeoutSec > 0.0) {
+            move = PlantTasks.moveTo(plant, target)
+                    .waitUntilAtSetpointOrTimeout(timeoutSec)
+                    .thenHold()
+                    .build();
+        } else {
+            move = PlantTasks.moveTo(plant, target)
+                    .waitUntilAtSetpoint()
+                    .thenHold()
+                    .build();
+        }
 
-            @Override
-            public void start(LoopClock clock) {
-                if (started) {
-                    return;
-                }
-                started = true;
-                elapsedSec = 0.0;
-                finished = false;
+        // No timeout or no callback: just return the move task directly.
+        if (timeoutSec <= 0.0 || onTimeout == null) {
+            return move;
+        }
 
-                plant.setTarget(target);
-
-                // Edge case: zero-timeout and already at setpoint
-                if (timeoutSec <= 0.0 && plant.atSetpoint()) {
-                    finished = true;
-                }
-            }
-
-            @Override
-            public void update(LoopClock clock) {
-                if (!started || finished) {
-                    return;
-                }
-
-                double dtSec = clock.dtSec();
-                elapsedSec += dtSec;
-
-                // 1) Check if we've reached the setpoint.
-                if (plant.atSetpoint()) {
-                    finished = true;
-                    return;
-                }
-
-                // 2) Check timeout (only if enabled).
-                if (timeoutSec > 0.0 && elapsedSec >= timeoutSec) {
-                    finished = true;
-                    if (onTimeout != null) {
-                        onTimeout.run();
-                    }
-                }
-            }
-
-            @Override
-            public boolean isFinished() {
-                return finished;
-            }
-        };
+        // Otherwise, branch to call onTimeout exactly once if we timed out.
+        return Tasks.branchOnOutcome(
+                move,
+                /* onSuccess */ Tasks.noop(),
+                /* onTimeout */ Tasks.runOnce(onTimeout)
+        );
     }
 
     // ------------------------------------------------------------------------
-    // Instant target set
+    // Instant target set (simple helper backed by the builder)
     // ------------------------------------------------------------------------
 
     /**
      * Convenience method: create a {@link Task} that simply sets the plant
      * target once and then finishes immediately.
      *
-     * <p>This is a thin wrapper over {@link InstantTask}, provided mainly so
-     * robot code can stay in the “PlantTasks.*” vocabulary when building
-     * sequences.</p>
+     * <p>This is implemented using the builder as:</p>
      *
      * <pre>{@code
-     * TaskRunner runner = new TaskRunner();
-     * runner.enqueue(PlantTasks.setTargetInstant(armPlant, Math.toRadians(30.0)));
+     * PlantTasks.moveTo(plant, target)
+     *     .dontWait()
+     *     .build();
      * }</pre>
      *
      * @param plant  plant to command
-     * @param target target value to set
-     * @return a {@link Task} that sets the target once and then finishes
+     * @param target target value
+     * @return a {@link Task} that sets the target once and then completes
      */
-    public static Task setTargetInstant(final Plant plant, final double target) {
+    public static Task setTargetInstant(final Plant plant,
+                                        final double target) {
         Objects.requireNonNull(plant, "plant is required");
-        return new InstantTask(() -> plant.setTarget(target));
+        return PlantTasks.moveTo(plant, target)
+                .dontWait()
+                .build();
+    }
+
+    // ------------------------------------------------------------------------
+    // Builder API
+    // ------------------------------------------------------------------------
+
+    /**
+     * Begin building a move-to-target task for a plant.
+     *
+     * <p>The builder lets you choose:</p>
+     * <ul>
+     *   <li>How the move decides it is complete:
+     *     <ul>
+     *       <li>{@link MoveStart#waitUntilAtSetpoint()}</li>
+     *       <li>{@link MoveStart#waitUntilAtSetpointOrTimeout(double)}</li>
+     *       <li>{@link MoveStart#waitSeconds(double)}</li>
+     *       <li>{@link MoveStart#dontWait()}</li>
+     *     </ul>
+     *   </li>
+     *   <li>What happens to the plant once the move is complete:
+     *     <ul>
+     *       <li>{@link MovePost#thenHold()}</li>
+     *       <li>{@link MovePost#thenGoTo(double)}</li>
+     *     </ul>
+     *   </li>
+     * </ul>
+     *
+     * @param plant  plant to command
+     * @param target target setpoint
+     * @return the first stage of the builder
+     */
+    public static MoveStart moveTo(final Plant plant,
+                                   final double target) {
+        Objects.requireNonNull(plant, "plant is required");
+        return new MoveBuilder(plant, target);
+    }
+
+    /**
+     * First builder stage: choose how the move decides it is complete
+     * (setpoint, time, timeout, or instant).
+     */
+    public interface MoveStart {
+        /**
+         * Complete when {@link Plant#atSetpoint()} first becomes true.
+         */
+        MovePost waitUntilAtSetpoint();
+
+        /**
+         * Complete when {@link Plant#atSetpoint()} becomes true, or when the
+         * given timeout elapses, whichever happens first.
+         *
+         * @param timeoutSec timeout in seconds; must be {@code > 0}
+         */
+        MovePost waitUntilAtSetpointOrTimeout(double timeoutSec);
+
+        /**
+         * Complete after a fixed amount of time has elapsed.
+         *
+         * @param seconds duration in seconds; must be {@code >= 0}
+         */
+        MovePost waitSeconds(double seconds);
+
+        /**
+         * Complete immediately after setting the target once.
+         *
+         * <p>This implicitly behaves like {@code thenHold()} and skips the
+         * post-behavior stage, returning the final build step directly.</p>
+         */
+        MoveBuildStep dontWait();
+    }
+
+    /**
+     * Second builder stage: choose what happens to the plant once the move is
+     * complete.
+     */
+    public interface MovePost {
+        /**
+         * Leave the plant holding the last commanded target.
+         */
+        MoveBuildStep thenHold();
+
+        /**
+         * After completion, command the given safe target.
+         *
+         * @param safeTarget target to apply once the move is done
+         */
+        MoveBuildStep thenGoTo(double safeTarget);
+    }
+
+    /**
+     * Final builder stage.
+     */
+    public interface MoveBuildStep {
+        /**
+         * Build a {@link Task} implementing the configured behavior.
+         */
+        Task build();
+    }
+
+    private enum MoveCompletionMode {
+        INSTANT,
+        WAIT_SETPOINT,
+        WAIT_TIME,
+        WAIT_SETPOINT_OR_TIMEOUT
+    }
+
+    private enum PostBehavior {
+        HOLD,
+        SAFE_TARGET
+    }
+
+    /**
+     * Concrete builder implementation.
+     */
+    private static final class MoveBuilder
+            implements MoveStart, MovePost, MoveBuildStep {
+
+        private final Plant plant;
+        private final double target;
+
+        private MoveCompletionMode completionMode = MoveCompletionMode.INSTANT;
+        private double waitSeconds = 0.0;
+        private double timeoutSec = 0.0;
+
+        private PostBehavior postBehavior = PostBehavior.HOLD;
+        private double postTarget = 0.0;
+
+        MoveBuilder(final Plant plant, final double target) {
+            this.plant = plant;
+            this.target = target;
+        }
+
+        @Override
+        public MovePost waitUntilAtSetpoint() {
+            this.completionMode = MoveCompletionMode.WAIT_SETPOINT;
+            this.waitSeconds = 0.0;
+            this.timeoutSec = 0.0;
+            return this;
+        }
+
+        @Override
+        public MovePost waitUntilAtSetpointOrTimeout(final double timeoutSec) {
+            if (timeoutSec <= 0.0) {
+                throw new IllegalArgumentException(
+                        "timeoutSec must be > 0, got " + timeoutSec);
+            }
+            this.completionMode = MoveCompletionMode.WAIT_SETPOINT_OR_TIMEOUT;
+            this.waitSeconds = 0.0;
+            this.timeoutSec = timeoutSec;
+            return this;
+        }
+
+        @Override
+        public MovePost waitSeconds(final double seconds) {
+            if (seconds < 0.0) {
+                throw new IllegalArgumentException(
+                        "seconds must be >= 0, got " + seconds);
+            }
+            this.completionMode = MoveCompletionMode.WAIT_TIME;
+            this.waitSeconds = seconds;
+            this.timeoutSec = 0.0;
+            return this;
+        }
+
+        @Override
+        public MoveBuildStep dontWait() {
+            this.completionMode = MoveCompletionMode.INSTANT;
+            this.waitSeconds = 0.0;
+            this.timeoutSec = 0.0;
+            this.postBehavior = PostBehavior.HOLD;
+            this.postTarget = 0.0;
+            return this;
+        }
+
+        @Override
+        public MoveBuildStep thenHold() {
+            this.postBehavior = PostBehavior.HOLD;
+            this.postTarget = 0.0;
+            return this;
+        }
+
+        @Override
+        public MoveBuildStep thenGoTo(final double safeTarget) {
+            this.postBehavior = PostBehavior.SAFE_TARGET;
+            this.postTarget = safeTarget;
+            return this;
+        }
+
+        @Override
+        public Task build() {
+            return new MoveTask(
+                    plant,
+                    target,
+                    completionMode,
+                    waitSeconds,
+                    timeoutSec,
+                    postBehavior,
+                    postTarget
+            );
+        }
+    }
+
+    /**
+     * Unified move task that supports both time-based and setpoint-based
+     * completion modes and reports its outcome via {@link Task#getOutcome()}.
+     */
+    private static final class MoveTask implements Task {
+
+        private final Plant plant;
+        private final double target;
+        private final MoveCompletionMode completionMode;
+        private final double waitSeconds;
+        private final double timeoutSec;
+        private final PostBehavior postBehavior;
+        private final double postTarget;
+
+        private boolean started = false;
+        private boolean finished = false;
+        private boolean postApplied = false;
+        private double elapsedSec = 0.0;
+        private TaskOutcome outcome = TaskOutcome.NOT_DONE;
+
+        MoveTask(final Plant plant,
+                 final double target,
+                 final MoveCompletionMode completionMode,
+                 final double waitSeconds,
+                 final double timeoutSec,
+                 final PostBehavior postBehavior,
+                 final double postTarget) {
+
+            this.plant = plant;
+            this.target = target;
+            this.completionMode = completionMode;
+            this.waitSeconds = waitSeconds;
+            this.timeoutSec = timeoutSec;
+            this.postBehavior = postBehavior;
+            this.postTarget = postTarget;
+        }
+
+        @Override
+        public void start(final LoopClock clock) {
+            if (started) {
+                return;
+            }
+            started = true;
+            finished = false;
+            postApplied = false;
+            elapsedSec = 0.0;
+            outcome = TaskOutcome.NOT_DONE;
+
+            plant.setTarget(target);
+
+            // Handle immediate completion cases.
+            switch (completionMode) {
+                case INSTANT:
+                    finished = true;
+                    outcome = TaskOutcome.SUCCESS;
+                    applyPostIfNeeded();
+                    break;
+
+                case WAIT_TIME:
+                    if (waitSeconds <= 0.0) {
+                        finished = true;
+                        outcome = TaskOutcome.SUCCESS;
+                        applyPostIfNeeded();
+                    }
+                    break;
+
+                case WAIT_SETPOINT:
+                case WAIT_SETPOINT_OR_TIMEOUT:
+                    if (plant.atSetpoint()) {
+                        finished = true;
+                        outcome = TaskOutcome.SUCCESS;
+                        applyPostIfNeeded();
+                    }
+                    break;
+
+                default:
+                    // no-op
+            }
+        }
+
+        @Override
+        public void update(final LoopClock clock) {
+            if (!started || finished) {
+                return;
+            }
+
+            double dt = clock.dtSec();
+            if (dt < 0.0) {
+                dt = 0.0;
+            }
+            elapsedSec += dt;
+
+            switch (completionMode) {
+                case INSTANT:
+                    finished = true;
+                    outcome = TaskOutcome.SUCCESS;
+                    break;
+
+                case WAIT_TIME:
+                    if (elapsedSec >= waitSeconds) {
+                        finished = true;
+                        outcome = TaskOutcome.SUCCESS;
+                    }
+                    break;
+
+                case WAIT_SETPOINT:
+                    if (plant.atSetpoint()) {
+                        finished = true;
+                        outcome = TaskOutcome.SUCCESS;
+                    }
+                    break;
+
+                case WAIT_SETPOINT_OR_TIMEOUT:
+                    if (plant.atSetpoint()) {
+                        finished = true;
+                        outcome = TaskOutcome.SUCCESS;
+                    } else if (elapsedSec >= timeoutSec) {
+                        finished = true;
+                        outcome = TaskOutcome.TIMEOUT;
+                    }
+                    break;
+
+                default:
+                    // no-op
+            }
+
+            if (finished) {
+                applyPostIfNeeded();
+            }
+        }
+
+        @Override
+        public boolean isComplete() {
+            return finished;
+        }
+
+        @Override
+        public TaskOutcome getOutcome() {
+            return outcome;
+        }
+
+        private void applyPostIfNeeded() {
+            if (postApplied) {
+                return;
+            }
+            postApplied = true;
+
+            if (postBehavior == PostBehavior.SAFE_TARGET) {
+                plant.setTarget(postTarget);
+            }
+            // HOLD: do nothing; keep last target.
+        }
+
+        @Override
+        public String getDebugName() {
+            return "PlantMove(target=" + target + ")";
+        }
     }
 }

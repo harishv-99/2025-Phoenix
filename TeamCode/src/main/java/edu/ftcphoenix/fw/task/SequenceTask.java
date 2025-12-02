@@ -14,8 +14,8 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   <li>On {@link #start(LoopClock)}, the first child is started.</li>
  *   <li>On each {@link #update(LoopClock)}, the current child is updated.</li>
  *   <li>When the current child finishes, the next child is started on the
- *       next call to {@code update()} (or immediately if it finishes in
- *       {@code start()}).</li>
+ *       following update (or immediately if the child finishes in its
+ *       {@code start()} method).</li>
  *   <li>The sequence finishes when all children have finished.</li>
  * </ul>
  *
@@ -46,8 +46,7 @@ public final class SequenceTask implements Task {
      * <p>The list is copied; subsequent modifications to {@code tasks}
      * do not affect this sequence.</p>
      *
-     * @param tasks ordered list of child tasks to run; must not be {@code null}
-     * @throws IllegalArgumentException if {@code tasks} is {@code null}
+     * @param tasks ordered list of child tasks; must not be {@code null}
      */
     public SequenceTask(List<Task> tasks) {
         if (tasks == null) {
@@ -62,11 +61,8 @@ public final class SequenceTask implements Task {
      * <p>Each element in {@code tasks} must be non-null. The array is copied
      * into an internal list.</p>
      *
-     * @param tasks ordered child tasks to run; must not be {@code null} and
-     *              must not contain {@code null} elements
-     * @return a new {@link SequenceTask} containing the given tasks
-     * @throws IllegalArgumentException if {@code tasks} is {@code null} or
-     *                                  any element is {@code null}
+     * @param tasks ordered child tasks to run; must not be {@code null}
+     * @return a new SequenceTask running the given children in order
      */
     public static SequenceTask of(Task... tasks) {
         if (tasks == null) {
@@ -75,7 +71,7 @@ public final class SequenceTask implements Task {
         List<Task> list = new ArrayList<Task>(tasks.length);
         for (Task t : tasks) {
             if (t == null) {
-                throw new IllegalArgumentException("task element must not be null");
+                throw new IllegalArgumentException("tasks must not contain null elements");
             }
             list.add(t);
         }
@@ -83,54 +79,27 @@ public final class SequenceTask implements Task {
     }
 
     /**
-     * Create a sequence that repeats a pattern task a fixed number of times.
+     * Convenience factory that builds tasks lazily via suppliers.
      *
-     * <p>This helper is useful when you want to run the same logical behavior
-     * multiple times in a row (for example, "fire one shot" repeated three
-     * times), but you still want each repetition to be a <em>fresh</em>
-     * {@link Task} instance.</p>
+     * <p>This can be used to avoid reusing {@link Task} instances, since
+     * each supplier is called once per sequence run to create a fresh task.</p>
      *
-     * <p>Usage example:</p>
-     *
-     * <pre>{@code
-     * // Factory that creates a new one-shot macro each time.
-     * Supplier<Task> oneShotFactory = () -> createOneShotTask();
-     *
-     * // Sequence that fires three shots in a row.
-     * Task tripleShot = SequenceTask.repeat(oneShotFactory, 3);
-     *
-     * taskRunner.enqueue(tripleShot);
-     * }</pre>
-     *
-     * <p><strong>Why a Supplier?</strong><br/>
-     * {@link Task} instances are generally assumed to be single-use. Reusing
-     * the same Task instance multiple times in a sequence can lead to subtle
-     * bugs, because most Task implementations are not designed to be restarted.
-     * This helper therefore accepts a {@link Supplier} that creates a new
-     * Task instance for each repetition.</p>
-     *
-     * @param factory factory that creates a fresh {@link Task} instance for
-     *                each repetition; must not be {@code null} and must not
-     *                return {@code null}
-     * @param times   number of repetitions; must be &gt; 0
-     * @return a {@link SequenceTask} containing {@code times} child tasks
-     * created by {@code factory}
-     * @throws IllegalArgumentException if {@code factory} is {@code null},
-     *                                  {@code times} &lt;= 0, or the factory
-     *                                  returns {@code null} for any repetition
+     * @param taskSuppliers suppliers that create new tasks
+     * @return a SequenceTask using newly-created tasks for each run
      */
-    public static SequenceTask repeat(Supplier<? extends Task> factory, int times) {
-        if (factory == null) {
-            throw new IllegalArgumentException("factory is required");
+    @SafeVarargs
+    public static SequenceTask fromSuppliers(Supplier<Task>... taskSuppliers) {
+        if (taskSuppliers == null) {
+            throw new IllegalArgumentException("taskSuppliers is required");
         }
-        if (times <= 0) {
-            throw new IllegalArgumentException("times must be > 0 (was " + times + ")");
-        }
-        List<Task> list = new ArrayList<Task>(times);
-        for (int i = 0; i < times; i++) {
-            Task t = factory.get();
+        List<Task> list = new ArrayList<Task>(taskSuppliers.length);
+        for (Supplier<Task> supplier : taskSuppliers) {
+            if (supplier == null) {
+                throw new IllegalArgumentException("taskSuppliers must not contain null elements");
+            }
+            Task t = supplier.get();
             if (t == null) {
-                throw new IllegalArgumentException("factory must not create null tasks (at index " + i + ")");
+                throw new IllegalArgumentException("taskSuppliers must not return null");
             }
             list.add(t);
         }
@@ -139,48 +108,45 @@ public final class SequenceTask implements Task {
 
     @Override
     public void start(LoopClock clock) {
-        if (started) {
-            // SequenceTask is single-use; ignore repeated start calls.
-            return;
-        }
         started = true;
+        index = -1;
         advanceToNextTask(clock);
     }
 
     @Override
     public void update(LoopClock clock) {
         if (!started) {
+            // Defensive: if update is called before start, behave as if started now.
             start(clock);
-        }
-        if (isFinished()) {
             return;
         }
 
-        Task current = currentTask();
+        Task current = getCurrentTask();
         if (current == null) {
+            // No tasks; sequence is already complete.
             return;
         }
 
+        // Update current task
         current.update(clock);
 
-        // If the current task finished during update, advance to the next one.
-        if (current.isFinished()) {
+        // If it completed during update, advance to the next one.
+        if (current.isComplete()) {
             advanceToNextTask(clock);
         }
     }
 
     @Override
-    public boolean isFinished() {
+    public boolean isComplete() {
         // Finished when we've advanced past the last child.
         return started && index >= tasks.size();
     }
 
-    // --------------------------------------------------------------------
-    // Internal helpers
-    // --------------------------------------------------------------------
-
-    private Task currentTask() {
-        if (index < 0 || index >= tasks.size()) {
+    /**
+     * @return the current child task, or {@code null} if there is none.
+     */
+    public Task getCurrentTask() {
+        if (!started || index < 0 || index >= tasks.size()) {
             return null;
         }
         return tasks.get(index);
@@ -206,7 +172,7 @@ public final class SequenceTask implements Task {
             next.start(clock);
 
             // If this task finished immediately in start(), loop to pick the next one.
-            if (!next.isFinished()) {
+            if (!next.isComplete()) {
                 return;
             }
         }

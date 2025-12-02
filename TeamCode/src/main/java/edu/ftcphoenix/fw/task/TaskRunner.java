@@ -13,47 +13,37 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * <ul>
  *   <li>Maintain a queue of {@link Task} instances.</li>
  *   <li>Start tasks one at a time in FIFO order.</li>
- *   <li>Update the current task each loop until it reports finished.</li>
+ *   <li>Update the current task each loop until it reports complete.</li>
+ *   <li>Expose a small API to enqueue/clear tasks and query idle status.</li>
  * </ul>
  *
- * <p>Usage pattern:
- * <pre>{@code
- * TaskRunner runner = new TaskRunner();
- * runner.enqueue(new InstantTask(() -> log("start")));
- * runner.enqueue(new WaitUntilTask(() -> sensorReady()));
- *
- * // In loop:
- * clock.update(getRuntime());
- * runner.update(clock);
- * }</pre>
- *
- * <p>Tasks may finish immediately in {@link Task#start(LoopClock)} (e.g. {@link InstantTask});
- * the runner will automatically advance to the next task without calling
- * {@link Task#update(LoopClock)} on a finished task.</p>
+ * <p>Tasks are assumed to be single-use: once a {@link Task} has completed
+ * ({@link Task#isComplete()} returns true), it should not be enqueued again.</p>
  */
 public final class TaskRunner {
 
-    private final List<Task> queue = new ArrayList<Task>();
-    private Task current;
+    private final List<Task> queue = new ArrayList<>();
+    private Task current = null;
 
     /**
-     * Enqueue a task to be run after any already-enqueued tasks.
+     * Enqueue a task to be run after all currently queued tasks.
      *
-     * <p>If no task is currently active, the new task will be started on the
-     * next call to {@link #update(LoopClock)}.</p>
+     * @param task task to enqueue (must not be {@code null})
      */
     public void enqueue(Task task) {
         if (task == null) {
-            throw new IllegalArgumentException("task is required");
+            throw new IllegalArgumentException("task must not be null");
         }
         queue.add(task);
     }
 
     /**
-     * Clear all pending tasks and drop the current task (if any).
+     * Clear the queue and forget any current task.
      *
-     * <p>Note: {@link Task} has no explicit "cancel" hook, so tasks should be
-     * written to tolerate being abandoned between calls to update().</p>
+     * <p>Note: this does not call any special "cancel" logic on the current task;
+     * it simply drops all references. The task's own code is responsible for
+     * ensuring that this is safe (e.g., leaving actuators in a reasonable state
+     * when {@link Task#update(LoopClock)} is no longer called).</p>
      */
     public void clear() {
         queue.clear();
@@ -61,7 +51,7 @@ public final class TaskRunner {
     }
 
     /**
-     * @return true if there is no current task and no tasks queued.
+     * @return true if there is no current task and no queued tasks.
      */
     public boolean isIdle() {
         return current == null && queue.isEmpty();
@@ -76,10 +66,10 @@ public final class TaskRunner {
     }
 
     /**
-     * @return true if a task is currently active (started and not finished).
+     * @return true if a task is currently active (started and not complete).
      */
     public boolean hasActiveTask() {
-        return current != null && !current.isFinished();
+        return current != null && !current.isComplete();
     }
 
     /**
@@ -87,30 +77,30 @@ public final class TaskRunner {
      *
      * <p>Semantics:
      * <ul>
-     *   <li>If there is no current task, or the current task is finished,
+     *   <li>If there is no current task, or the current task is complete,
      *       the runner will pull the next task from the queue and call its
      *       {@link Task#start(LoopClock)} method.</li>
-     *   <li>If the task finishes immediately in {@code start()}, the runner
+     *   <li>If the task completes immediately in {@code start()}, the runner
      *       will advance to the next queued task (if any) before returning.</li>
-     *   <li>If there is an active (not finished) current task after this
+     *   <li>If there is an active (not complete) current task after this
      *       process, its {@link Task#update(LoopClock)} method is called
      *       exactly once.</li>
      * </ul>
      */
     public void update(LoopClock clock) {
-        // Ensure we have a current task that is not yet finished.
-        while ((current == null || current.isFinished()) && !queue.isEmpty()) {
+        // Ensure we have a current task that is not yet complete.
+        while ((current == null || current.isComplete()) && !queue.isEmpty()) {
             current = queue.remove(0);
             current.start(clock);
 
-            // If the task finished immediately in start(), loop to pick another.
-            if (current.isFinished()) {
+            // If the task completed immediately in start(), loop to pick another.
+            if (current.isComplete()) {
                 current = null;
             }
         }
 
         // If we now have an active task, update it.
-        if (current != null && !current.isFinished()) {
+        if (current != null && !current.isComplete()) {
             current.update(clock);
         }
     }
@@ -132,7 +122,7 @@ public final class TaskRunner {
 
         if (current != null) {
             dbg.addData(p + ".currentClass", current.getClass().getSimpleName())
-                    .addData(p + ".currentFinished", current.isFinished());
+                    .addData(p + ".currentComplete", current.isComplete());
         }
     }
 }

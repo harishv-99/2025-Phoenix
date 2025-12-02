@@ -14,15 +14,29 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * TaskRunner runner = new TaskRunner();
  *
  * // Wait until a sensor reports ready
- * runner.enqueue(new WaitUntilTask(() -> sensor.isReady()));
+ * runner.enqueue(new WaitUntilTask(() -> sensorReady()));
  *
- * // Wait until shooter ready, with a 3-second timeout
+ * // Or: wait until ready, but give up after 2 seconds
  * runner.enqueue(new WaitUntilTask(
- *         () -> shooterStage.atSetpoint(),
- *         3.0,
- *         () -> telemetry.addLine("Shooter timeout")
- * ));
+ *         () -> sensorReady(),
+ *         2.0,
+ *         () -> telemetry.addLine("Timed out waiting for sensor")));
  * }</pre>
+ *
+ * <p>Behavior:</p>
+ * <ul>
+ *   <li>On {@link #start(LoopClock)}, the internal timer and flags are reset.</li>
+ *   <li>On each {@link #update(LoopClock)}, the condition is checked first:
+ *     <ul>
+ *       <li>If it returns {@code true}, the task completes successfully.</li>
+ *       <li>Otherwise, if a finite timeout is configured and elapsed time
+ *           reaches the timeout, the task completes with {@link #isTimedOut()}
+ *           returning {@code true} and the timeout callback (if any) is run.</li>
+ *     </ul>
+ *   </li>
+ *   <li>{@link #isComplete()} returns {@code true} once either the condition
+ *       is satisfied or a timeout occurs.</li>
+ * </ul>
  */
 public final class WaitUntilTask implements Task {
 
@@ -37,35 +51,47 @@ public final class WaitUntilTask implements Task {
     /**
      * Create a wait-until task with no timeout.
      *
-     * @param condition condition to wait for; task finishes when this returns true
+     * @param condition condition to wait for; task completes when this returns true
      */
     public WaitUntilTask(BooleanSupplier condition) {
-        this(condition, 0.0, null);
+        this(condition, Double.POSITIVE_INFINITY, null);
     }
 
     /**
-     * Create a wait-until task with an optional timeout.
+     * Create a wait-until task with a timeout but no timeout callback.
      *
-     * @param condition  condition to wait for; task finishes when this returns true
-     * @param timeoutSec timeout in seconds; if {@code <= 0}, no timeout is applied
-     * @param onTimeout  optional callback invoked once if the timeout elapses
-     *                   before {@code condition} is satisfied
+     * @param condition  condition to wait for; task completes when this returns true,
+     *                   or when {@code timeoutSec} elapses
+     * @param timeoutSec timeout in seconds; must be &gt;= 0.0
+     */
+    public WaitUntilTask(BooleanSupplier condition, double timeoutSec) {
+        this(condition, timeoutSec, null);
+    }
+
+    /**
+     * Create a wait-until task with a timeout and timeout callback.
+     *
+     * @param condition  condition to wait for; task completes when this returns true,
+     *                   or when {@code timeoutSec} elapses
+     * @param timeoutSec timeout in seconds; must be &gt;= 0.0 (0 means "check once
+     *                   and immediately timeout if condition is false")
+     * @param onTimeout  callback invoked exactly once if the task completes due to
+     *                   timeout (may be {@code null})
      */
     public WaitUntilTask(BooleanSupplier condition, double timeoutSec, Runnable onTimeout) {
         this.condition = Objects.requireNonNull(condition, "condition is required");
+        if (timeoutSec < 0.0) {
+            throw new IllegalArgumentException("timeoutSec must be >= 0, got " + timeoutSec);
+        }
         this.timeoutSec = timeoutSec;
         this.onTimeout = onTimeout;
     }
 
     @Override
     public void start(LoopClock clock) {
-        elapsedSec = 0.0;
+        finished = false;
         timedOut = false;
-
-        // If condition is already true, finish immediately.
-        if (condition.getAsBoolean()) {
-            finished = true;
-        }
+        elapsedSec = 0.0;
     }
 
     @Override
@@ -74,27 +100,26 @@ public final class WaitUntilTask implements Task {
             return;
         }
 
-        // Check condition first.
+        // First check condition
         if (condition.getAsBoolean()) {
             finished = true;
             return;
         }
 
-        // If there's a timeout configured, check it.
-        if (timeoutSec > 0.0) {
-            elapsedSec += clock.dtSec();
-            if (elapsedSec >= timeoutSec) {
-                timedOut = true;
-                finished = true;
-                if (onTimeout != null) {
-                    onTimeout.run();
-                }
+        // Then update elapsed time and check timeout (if finite)
+        elapsedSec += clock.dtSec();
+
+        if (elapsedSec >= timeoutSec) {
+            finished = true;
+            timedOut = true;
+            if (onTimeout != null) {
+                onTimeout.run();
             }
         }
     }
 
     @Override
-    public boolean isFinished() {
+    public boolean isComplete() {
         return finished;
     }
 

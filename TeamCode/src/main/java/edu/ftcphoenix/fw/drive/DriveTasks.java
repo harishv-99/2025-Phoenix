@@ -3,6 +3,7 @@ package edu.ftcphoenix.fw.drive;
 import edu.ftcphoenix.fw.task.InstantTask;
 import edu.ftcphoenix.fw.task.RunForSecondsTask;
 import edu.ftcphoenix.fw.task.Task;
+import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
  * Small helper class for creating common drive-related {@link Task} patterns.
@@ -15,130 +16,98 @@ import edu.ftcphoenix.fw.task.Task;
  *     DriveTasks.driveForSeconds(drivebase,
  *         new DriveSignal(+0.7, 0.0, 0.0), 0.8),   // forward
  *     DriveTasks.driveForSeconds(drivebase,
- *         new DriveSignal(0.0, -0.7, 0.0), 0.8),   // strafe right
- *     DriveTasks.driveForSeconds(drivebase,
  *         new DriveSignal(0.0, 0.0, +0.7), 0.6)    // rotate CCW
  * );
  *
  * macroRunner.enqueue(macro);
  * }</pre>
- *
- * <p>All methods here are <b>non-blocking</b> and designed to be used with
- * {@link edu.ftcphoenix.fw.task.TaskRunner} and the rest of the {@code fw.task}
- * package.</p>
- *
- * <h2>Design principles</h2>
- * <ul>
- *   <li>Keep the API <b>beginner-friendly</b>: robot code should look like
- *       “drive for 0.8 seconds”, not “construct three callbacks and wire them
- *       into a task”.</li>
- *   <li>Keep this class <b>domain-specific</b> to drive, so it lives in
- *       {@code fw.drive} and does not pollute the generic {@code fw.task}
- *       package.</li>
- *   <li>Internally reuse {@link RunForSecondsTask} and {@link InstantTask} so
- *       that timing and control flow are centralized.</li>
- * </ul>
  */
 public final class DriveTasks {
 
     private DriveTasks() {
-        // Utility class; no instances.
+        // utility class; do not instantiate
     }
 
     // ------------------------------------------------------------------------
-    // Timed drive commands
+    // Timed drive
     // ------------------------------------------------------------------------
 
     /**
-     * Create a {@link Task} that applies a fixed {@link DriveSignal} for a
-     * specific amount of time, then stops the drivebase.
+     * Create a {@link Task} that holds a given {@link DriveSignal} for a fixed
+     * amount of time, then stops the drivebase.
      *
      * <p>Semantics:</p>
      * <ul>
      *   <li>On start:
      *     <ul>
-     *       <li>Calls {@link MecanumDrivebase#drive(DriveSignal)} once with
-     *           {@code signal}.</li>
+     *       <li>Calls {@link MecanumDrivebase#drive(DriveSignal)} with the
+     *           provided signal.</li>
      *     </ul>
      *   </li>
-     *   <li>On each update while running:
+     *   <li>While running:
      *     <ul>
-     *       <li>Calls {@link MecanumDrivebase#update(edu.ftcphoenix.fw.util.LoopClock)}.</li>
-     *       <li>Counts down {@code durationSec} using {@code clock.dtSec()}.</li>
+     *       <li>No further changes are made to the drivebase; your main robot
+     *           loop is responsible for calling {@link MecanumDrivebase#update(LoopClock)}
+     *           if needed.</li>
      *     </ul>
      *   </li>
-     *   <li>When time elapses:
+     *   <li>After {@code durationSec} seconds:
      *     <ul>
-     *       <li>Calls {@link MecanumDrivebase#stop()} once.</li>
-     *       <li>{@link Task#isFinished()} becomes {@code true}.</li>
+     *       <li>Calls {@link MecanumDrivebase#stop()}.</li>
+     *       <li>{@link Task#isComplete()} becomes {@code true}.</li>
      *     </ul>
      *   </li>
      * </ul>
      *
-     * <p>This is the main primitive used in macro examples. You can combine
-     * multiple {@code driveForSeconds(...)} tasks with
-     * {@link edu.ftcphoenix.fw.task.SequenceTask#of(Task...)} to build
-     * longer scripted paths.</p>
+     * <p>This is a good fit for simple autonomous segments like “drive forward
+     * for N seconds” when you don't yet have a trajectory or encoder-based
+     * controller wired up.</p>
      *
      * @param drivebase   the drivebase to command
-     * @param signal      drive command to hold (axial, lateral, omega)
-     * @param durationSec duration in seconds; must be {@code >= 0}
-     * @return a {@link Task} that performs the timed drive action
+     * @param signal      the drive signal to hold (e.g., x, y, rot)
+     * @param durationSec how long to hold the signal, in seconds (must be {@code >= 0})
+     * @return a {@link Task} that runs the drive signal for a fixed time
      */
     public static Task driveForSeconds(final MecanumDrivebase drivebase,
                                        final DriveSignal signal,
                                        final double durationSec) {
         return new RunForSecondsTask(
                 durationSec,
-                // onStart: latch the drive command once.
+                // onStart: set the drive signal
                 () -> drivebase.drive(signal),
-                // onUpdate: keep updating the drivebase while time is running.
-                clock -> drivebase.update(clock),
-                // onFinish: stop the drive and allow the next task to run.
+                // onUpdate: no-op; drivebase.update(dt) is handled elsewhere
+                null,
+                // onFinish: stop the drive
                 drivebase::stop
         );
     }
 
+    // ------------------------------------------------------------------------
+    // Instant drive helpers
+    // ------------------------------------------------------------------------
+
     /**
-     * Convenience overload of {@link #driveForSeconds(MecanumDrivebase, DriveSignal, double)}
-     * that takes the individual {@link DriveSignal} components directly.
+     * Create a {@link Task} that sets a drive signal once and then finishes
+     * immediately. This is a thin wrapper around {@link InstantTask}.
      *
-     * <p>Example:</p>
+     * <p>Useful when you want a one-shot drive step inside a larger sequence,
+     * for example “snap to a heading” or “apply a braking mode,” while keeping
+     * the code in terms of {@link Task}.</p>
      *
-     * <pre>{@code
-     * // Forward for 0.8s
-     * Task forward = DriveTasks.driveForSeconds(
-     *     drivebase,
-     *     +0.7,  // axial
-     *     0.0,   // lateral
-     *     0.0,   // omega
-     *     0.8
-     * );
-     * }</pre>
-     *
-     * @param drivebase   the drivebase to command
-     * @param axial       forward/backward command (+ is forward)
-     * @param lateral     strafe command (+ is left)
-     * @param omega       rotation command (+ is counterclockwise)
-     * @param durationSec duration in seconds; must be {@code >= 0}
-     * @return a {@link Task} that performs the timed drive action
+     * @param drivebase the drivebase to command
+     * @param signal    the drive signal to apply
+     * @return a {@link Task} that sets the drive signal once and then completes
      */
-    public static Task driveForSeconds(MecanumDrivebase drivebase,
-                                       double axial,
-                                       double lateral,
-                                       double omega,
-                                       double durationSec) {
-        return driveForSeconds(drivebase, new DriveSignal(axial, lateral, omega), durationSec);
+    public static Task driveInstant(final MecanumDrivebase drivebase,
+                                    final DriveSignal signal) {
+        return new InstantTask(() -> drivebase.drive(signal));
     }
 
-    // ------------------------------------------------------------------------
-    // Simple helper tasks
-    // ------------------------------------------------------------------------
-
     /**
-     * Create a {@link Task} that immediately stops the drivebase and finishes.
+     * Create a {@link Task} that stops the drivebase once and then finishes.
      *
-     * <p>This is just a small wrapper around {@link InstantTask} for readability
+     * <p>This keeps the “drive tasks” vocabulary consistent when used with
+     * {@link edu.ftcphoenix.fw.task.SequenceTask} or a {@link edu.ftcphoenix.fw.task.TaskRunner}
      * in robot code and examples.</p>
      *
      * <pre>{@code

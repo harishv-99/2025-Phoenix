@@ -15,94 +15,63 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  * <p>Each concrete plant should document which of these categories it uses:</p>
  *
  * <ul>
- *   <li><b>Power plants</b> – target is a normalized power command:
- *     <ul>
- *       <li>Typical range: [-1.0, +1.0].</li>
- *       <li>Examples: intake motor power, buffer/feeder power.</li>
- *     </ul>
- *   </li>
- *
- *   <li><b>Velocity plants</b> – target is angular velocity:
- *     <ul>
- *       <li>Units: rad/s at the motor shaft (unless otherwise documented).</li>
- *       <li>Examples: shooter flywheel velocity, conveyor belt speed.</li>
- *     </ul>
- *   </li>
- *
- *   <li><b>Position plants</b> – target is angle or position:
- *     <ul>
- *       <li>Units: radians at the motor shaft, or [0, 1] for normalized servo
- *           positions, depending on the implementation.</li>
- *       <li>Examples: arm angle, slide extension, servo pusher position.</li>
- *     </ul>
- *   </li>
+ *   <li><b>Power</b>: target is a normalized power command (e.g. {@code -1..+1})
+ *       sent directly to a motor/CR-servo output.</li>
+ *   <li><b>Position</b>: target is a desired position in some native units
+ *       (servo position, encoder ticks, etc.).</li>
+ *   <li><b>Velocity</b>: target is a desired velocity/speed in native units
+ *       (ticks per second, RPM, etc.).</li>
  * </ul>
  *
- * <p>Higher-level code should treat {@code target} as "some scalar command in
- * this plant's native units" and avoid mixing plants with incompatible
- * semantics.</p>
+ * <p>Plants are intentionally simple: they do not know about tasks or macros,
+ * but they may implement local control logic, clamping, rate limiting, or
+ * other behavior that makes sense for a given mechanism.</p>
  */
 public interface Plant {
 
     /**
-     * Update the desired target setpoint.
+     * Set the current target for this plant.
      *
-     * <p>This should be a cheap operation – callers are free to set the
-     * same target repeatedly (e.g., each loop) without penalty.</p>
+     * <p>The interpretation of {@code target} depends on the concrete plant
+     * type (power, position, velocity, etc.) and should be documented by the
+     * implementation.</p>
      *
-     * @param target mechanism-defined target (power, rad/s, radians, etc.)
+     * <p>This method should be cheap to call; it is expected that high-level
+     * code may update targets frequently (e.g., each loop for joystick-driven
+     * drivebases).</p>
+     *
+     * @param target new target value in the plant's native units
      */
     void setTarget(double target);
 
     /**
-     * Optional introspection: return the current target setpoint in the
-     * plant's native units (power, rad/s, radians, etc.).
-     *
-     * <p>Implementations are encouraged (but not required) to store the
-     * last target passed to {@link #setTarget(double)} and return it here
-     * so that callsites (telemetry, {@link #debugDump(DebugSink, String)},
-     * decorators) can inspect it.</p>
-     *
-     * <p>Plants that do not track a target may simply return {@code 0.0}
-     * or any convenient value; callers should treat this as best-effort
-     * telemetry rather than a strict contract.</p>
-     *
-     * @return last commanded target, or {@code 0.0} if not tracked
+     * @return the most recently commanded target value.
      */
-    default double getTarget() {
-        return 0.0;
-    }
+    double getTarget();
 
     /**
-     * Advance the plant by {@code dtSec} seconds.
+     * Update the plant's internal state for the current loop.
      *
-     * <p>Implementations may:</p>
+     * <p>Typical responsibilities include:</p>
+     *
      * <ul>
-     *   <li>Compute new actuator commands based on internal state.</li>
-     *   <li>Call into underlying vendor APIs (e.g., velocity setters).</li>
-     *   <li>Do nothing for stateless plants.</li>
+     *   <li>Running closed-loop control (PID, velocity control, etc.)</li>
+     *   <li>Applying rate limits or filters to the commanded output</li>
+     *   <li>Forwarding the resulting command to one or more hardware outputs</li>
      * </ul>
      *
-     * <p><b>Callers are responsible</b> for invoking this once per control
-     * loop. Helper classes (tasks, controllers, mechanisms) should <b>not</b>
-     * assume exclusive ownership of update timing – it is common for
-     * multiple decorators/controllers to share a plant as long as only
-     * one of them is responsible for calling {@code update(dtSec)}.</p>
+     * <p>This method should be called once per loop with the elapsed time
+     * since the previous call.</p>
      *
-     * @param dtSec time since last update in seconds
+     * @param dtSec time since the last update call, in seconds (non-negative)
      */
     void update(double dtSec);
 
     /**
-     * Optional lifecycle hook to clear any internal state associated with
-     * this plant.
+     * Reset any internal state used by the plant (integrators, filters, etc.).
      *
-     * <p>Examples:</p>
-     * <ul>
-     *   <li>Resetting integrators in a PID controller.</li>
-     *   <li>Zeroing internal timers or filters.</li>
-     *   <li>Reinitializing vendor control modes if needed.</li>
-     * </ul>
+     * <p>This is typically called at the beginning of a mode (e.g. TeleOp,
+     * autonomous) or when a mechanism is reinitialized.</p>
      *
      * <p>Default implementation does nothing.</p>
      */
@@ -111,11 +80,59 @@ public interface Plant {
     }
 
     /**
+     * Immediately stop driving this plant in the most reasonable way for
+     * its underlying hardware.
+     *
+     * <p>Concrete plants <b>must</b> implement this. A typical implementation
+     * will forward to one or more HAL outputs, for example:</p>
+     *
+     * <ul>
+     *   <li>Power plants: call {@code powerOutput.stop()} (equivalent to power 0)</li>
+     *   <li>Velocity plants: call {@code velocityOutput.stop()} (velocity 0)</li>
+     *   <li>Position plants:
+     *     <ul>
+     *       <li>Servos: usually a no-op or re-command the current position</li>
+     *       <li>Motors: call {@code positionOutput.stop()}, which may switch
+     *           modes and cut power to stop chasing the old target</li>
+     *     </ul>
+     *   </li>
+     *   <li>Decorator plants (rate limiters, interlocks): forward to the
+     *       wrapped plant's {@link #stop()}.</li>
+     * </ul>
+     *
+     * <p>Purely virtual or simulated plants <em>may</em> choose to implement
+     * this as a no-op, but they must still provide an implementation.</p>
+     */
+    void stop();
+
+    /**
      * @return {@code true} if this plant considers itself "at" its current
      * target setpoint. Implementations that do not track this can
      * simply return {@code false} or {@code true} unconditionally.
      */
     default boolean atSetpoint() {
+        return false;
+    }
+
+    /**
+     * Indicates whether this plant has meaningful feedback for determining
+     * when it has reached its current target setpoint.
+     *
+     * <p>Examples of feedback-capable plants include velocity or position
+     * controllers that compare a measured value against the commanded target
+     * with some tolerance. For simple open-loop plants (e.g., plain power
+     * outputs or "fire-and-forget" servos), this may return {@code false},
+     * and callers should prefer time-based completion instead of relying on
+     * {@link #atSetpoint()}.</p>
+     *
+     * <p>The default implementation returns {@code false}. Implementations
+     * that override {@link #atSetpoint()} with a sensor-based definition
+     * should also override this to return {@code true}.</p>
+     *
+     * @return {@code true} if this plant exposes a meaningful
+     *         {@link #atSetpoint()} value; {@code false} otherwise
+     */
+    default boolean hasFeedback() {
         return false;
     }
 

@@ -14,44 +14,40 @@ package edu.ftcphoenix.fw.hal;
  * </ul>
  *
  * <h2>Design goals</h2>
- *
- * <ul>
- *   <li>Hide FTC-specific types (DcMotor, CRServo, etc.) from
- *       core logic.</li>
- *   <li>Let {@code Plant} and {@code Task} work with a single,
- *       simple abstraction.</li>
- *   <li>Keep semantics minimal: "set power now", "what was the
- *       last power command?"</li>
- * </ul>
- *
- * <p>Implementations are responsible for mapping the logical
- * {@code power} value to whatever the underlying platform uses
- * (PWM duty cycle, voltage, etc.).</p>
+ * ...
  */
 public interface PowerOutput {
 
     /**
-     * Sets the instantaneous power command for this actuator.
+     * Command the actuator with a normalized power value.
      *
-     * <p>Typical range is {@code [-1.0, +1.0]}, but the exact valid
-     * range and meaning are defined by the implementation. Plants
-     * will usually clamp to a reasonable range before calling this.</p>
+     * <p>The exact interpretation of "power" depends on the
+     * implementation, but the general expectation is:</p>
      *
-     * @param power desired power command
+     * <ul>
+     *   <li>{@code -1.0} = full reverse</li>
+     *   <li>{@code 0.0} = stop / neutral</li>
+     *   <li>{@code +1.0} = full forward</li>
+     * </ul>
+     *
+     * <p>Implementations should clamp or otherwise sanitize the input
+     * to a valid range before applying it to hardware.</p>
+     *
+     * @param power normalized power in the range {@code [-1.0, +1.0]}
      */
     void setPower(double power);
 
     /**
-     * Returns the last power command that was passed to
-     * {@link #setPower(double)}.
+     * Returns the most recently <b>commanded</b> power value.
      *
-     * <p>This is a cached value, not a sensor reading. It reflects
-     * "what we asked the actuator to do", not necessarily what the
-     * hardware actually did.</p>
+     * <p>This is a cached command value, not a sensor reading. It
+     * reflects "what we asked the actuator to do", which may differ
+     * from the actual physical behavior if, for example, the mechanism
+     * is stalled or saturated.</p>
      *
      * @return last commanded power value
      */
-    double getLastPower();
+    double getCommandedPower();
 
     /**
      * Convenience method to set power to zero.

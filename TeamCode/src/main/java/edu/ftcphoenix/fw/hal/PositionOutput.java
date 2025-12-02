@@ -14,34 +14,28 @@ package edu.ftcphoenix.fw.hal;
  *         <li>Matches {@link com.qualcomm.robotcore.hardware.Servo#setPosition(double)}.</li>
  *       </ul>
  *   </li>
- *   <li>Motor with encoder used for positioning:
+ *   <li>Motor with encoder in position mode:
  *       <ul>
- *         <li>Domain: encoder ticks (usually an integer, but passed as {@code double}).</li>
- *         <li>Typical implementation uses {@code RUN_TO_POSITION} mode.</li>
- *       </ul>
- *   </li>
- *   <li>Other platforms:
- *       <ul>
- *         <li>Any consistent "native" position unit defined by the adapter.</li>
+ *         <li>Domain: encoder ticks (or a similar native unit).</li>
+ *         <li>May be backed by a {@code DcMotorEx} in
+ *             {@code RUN_TO_POSITION} mode.</li>
  *       </ul>
  *   </li>
  * </ul>
  *
- * <p>The framework does not impose physical units (radians, degrees, etc.)
- * on this interface. Higher-level code is free to convert to/from those
- * units if needed, but {@code PositionOutput} itself is intentionally
- * simple and device-oriented.</p>
+ * <p>Higher-level code should use this interface rather than accessing
+ * SDK-specific objects directly, to keep mechanism code portable and
+ * testable.</p>
  */
 public interface PositionOutput {
 
     /**
-     * Sets the desired target position for this actuator in its native units.
+     * Command the actuator to move to the given target position in its
+     * native units.
      *
-     * <p>Examples:</p>
-     * <ul>
-     *   <li>Servo: {@code 0.0 .. 1.0}</li>
-     *   <li>Motor with encoder: encoder ticks</li>
-     * </ul>
+     * <p>For a standard FTC servo this is typically in the range
+     * {@code 0.0 .. 1.0}. For a motor in position-control mode, this
+     * may be encoder ticks or another platform-defined unit.</p>
      *
      * <p>Implementations may clamp the input to a valid range before
      * applying it to the underlying hardware.</p>
@@ -51,25 +45,56 @@ public interface PositionOutput {
     void setPosition(double position);
 
     /**
-     * Returns the last target position that was passed to
-     * {@link #setPosition(double)}.
+     * Returns the most recently <b>commanded</b> target position that was
+     * passed to {@link #setPosition(double)}, in native units.
      *
      * <p>This is a cached command value, not necessarily a sensor reading.
-     * It reflects "what we requested" in native units.</p>
+     * It reflects "what we asked the actuator to do", which may differ from
+     * the actual measured position if the mechanism is still moving or has
+     * been blocked.</p>
      *
      * @return last commanded target position (native units)
      */
-    double getLastPosition();
+    double getCommandedPosition();
 
     /**
-     * Convenience method to reset the target position to a default
-     * "home" or "zero" value in native units.
+     * Returns the most recently <b>measured</b> position of the actuator, in
+     * its native units, if available.
      *
-     * <p>By default, this calls {@link #setPosition(double)} with
-     * {@code 0.0}. Implementations may override this if a different
-     * reset value is more appropriate for the device.</p>
+     * <p>Implementations with access to a real sensor (for example,
+     * a motor with an encoder) should override this to return the
+     * current measured position. Implementations without a sensor
+     * (for example, a standard servo where only the last commanded
+     * position is known) may rely on the default implementation,
+     * which simply returns {@link #getCommandedPosition()}.</p>
+     *
+     * @return measured position in native units, if available; otherwise
+     *         the last commanded position
      */
-    default void resetPosition() {
-        setPosition(0.0);
+    default double getMeasuredPosition() {
+        return getCommandedPosition();
+    }
+
+    /**
+     * Convenience method to "stop" motion in the most reasonable way for
+     * this actuator.
+     *
+     * <p>The default behavior is to command the <b>current measured
+     * position</b> as the new target:</p>
+     *
+     * <pre>{@code
+     * stop()  ==  setPosition(getMeasuredPosition());
+     * }</pre>
+     *
+     * <p>For a standard servo, where measured position is effectively the
+     * last commanded position, this is usually a no-op and simply keeps
+     * holding the current target. For a motor in {@code RUN_TO_POSITION}
+     * backed by an encoder, implementations may override this method to
+     * perform a more explicit stop (for example, switching modes and
+     * cutting power), but the default preserves the intent of "stop
+     * chasing the old target" by retargeting to "where we are now".</p>
+     */
+    default void stop() {
+        setPosition(getMeasuredPosition());
     }
 }

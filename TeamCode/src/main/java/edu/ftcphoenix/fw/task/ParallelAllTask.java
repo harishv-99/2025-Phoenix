@@ -14,22 +14,17 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   <li>On {@link #start(LoopClock)}, all children are started.</li>
  *   <li>On each {@link #update(LoopClock)}, all children that are not yet
  *       finished are updated once.</li>
- *   <li>The parallel group finishes when every child reports finished.</li>
+ *   <li>The parallel group finishes when every child task reports complete.</li>
  * </ul>
  *
- * <p>Typical usage:
- * <pre>{@code
- * TaskRunner runner = new TaskRunner();
- *
- * runner.enqueue(new ParallelAllTask(Arrays.asList(
- *     new WaitUntilTask(() -> shooterReady()),
- *     new WaitUntilTask(() -> intakeDown())
- * )));
- * }</pre>
+ * <p>Note that this class does not currently support cancellation semantics;
+ * if you wish to stop a running parallel group early, you should implement
+ * that logic in your own code (for example, by not calling
+ * {@link #update(LoopClock)} any longer).</p>
  */
 public final class ParallelAllTask implements Task {
 
-    private final List<Task> tasks = new ArrayList<Task>();
+    private final List<Task> tasks = new ArrayList<>();
 
     private boolean started = false;
     private boolean finished = false;
@@ -39,6 +34,8 @@ public final class ParallelAllTask implements Task {
      *
      * <p>The list is copied; subsequent modifications to {@code tasks}
      * do not affect this parallel group.</p>
+     *
+     * @param tasks list of child tasks to run in parallel; must not be {@code null}
      */
     public ParallelAllTask(List<Task> tasks) {
         if (tasks == null) {
@@ -78,32 +75,33 @@ public final class ParallelAllTask implements Task {
         }
 
         // If all children finished immediately in start(), mark finished.
-        finished = allFinished();
+        if (allFinished()) {
+            finished = true;
+        }
     }
 
     @Override
     public void update(LoopClock clock) {
-        if (!started) {
-            start(clock);
-        }
-        if (finished) {
+        if (!started || finished) {
             return;
         }
 
-        // Update all children that are not yet finished.
+        // Update all children that are not yet complete.
         for (int i = 0; i < tasks.size(); i++) {
             Task t = tasks.get(i);
-            if (!t.isFinished()) {
+            if (!t.isComplete()) {
                 t.update(clock);
             }
         }
 
-        // If all children are now finished, mark finished.
-        finished = allFinished();
+        // Check if all have now completed.
+        if (allFinished()) {
+            finished = true;
+        }
     }
 
     @Override
-    public boolean isFinished() {
+    public boolean isComplete() {
         return finished;
     }
 
@@ -113,7 +111,7 @@ public final class ParallelAllTask implements Task {
 
     private boolean allFinished() {
         for (int i = 0; i < tasks.size(); i++) {
-            if (!tasks.get(i).isFinished()) {
+            if (!tasks.get(i).isComplete()) {
                 return false;
             }
         }

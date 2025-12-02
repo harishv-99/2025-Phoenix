@@ -3,7 +3,6 @@ package edu.ftcphoenix.fw.actuation;
 import edu.ftcphoenix.fw.hal.PowerOutput;
 import edu.ftcphoenix.fw.hal.PositionOutput;
 import edu.ftcphoenix.fw.hal.VelocityOutput;
-import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
  * Helpers for constructing {@link Plant} instances on top of Phoenix HAL
@@ -24,28 +23,19 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *   </li>
  *   <li><b>Position plants</b>:
  *       <ul>
- *         <li>Servos: {@code 0.0 .. 1.0} (normalized position).</li>
- *         <li>Motors: encoder ticks (or other native units defined by the adapter).</li>
+ *         <li>Servos: {@code 0.0 .. 1.0} (FTC servo position).</li>
+ *         <li>Motors: encoder ticks (or other platform-native units).</li>
  *       </ul>
- *       <p>Position plants are "set-and-hold": they command the target
- *       position and consider themselves at setpoint immediately (there is
- *       no measured position exposed in {@link PositionOutput}).</p>
  *   </li>
  *   <li><b>Velocity plants</b>:
  *       <ul>
- *         <li>Motors: encoder ticks per second (or other native velocity
- *             units defined by the adapter).</li>
+ *         <li>Motors: encoder ticks per second (or other platform-native units).</li>
  *       </ul>
- *       <p>Velocity plants compare commanded vs. measured velocity (via
- *       {@link VelocityOutput#getMeasuredVelocity()}) and implement
- *       {@link Plant#atSetpoint()} with a configurable tolerance in native
- *       velocity units.</p>
  *   </li>
  * </ul>
  *
- * <p>Higher-level code is free to convert to/from physical units
- * (radians, degrees, meters), but this class deliberately stays in
- * native units to keep the interface small and portable.</p>
+ * <p>Higher-level code is responsible for converting between these native
+ * units and physical units (meters, radians, etc.) where necessary.</p>
  */
 public final class Plants {
 
@@ -58,14 +48,17 @@ public final class Plants {
     // =====================================================================
 
     /**
-     * Open-loop power plant driving a single {@link PowerOutput}.
+     * Power plant over a {@link PowerOutput} in normalized units.
      *
-     * <p>The target is treated as a normalized power command, typically
-     * in the range {@code [-1.0, +1.0]}. The underlying
-     * {@link PowerOutput} implementation is responsible for mapping
-     * that to the platform (motor power, CR servo power, etc.).</p>
+     * <p>Target is interpreted as a normalized power in {@code [-1.0, +1.0]}.
+     * The plant does no additional control logic; it simply forwards the
+     * command to the underlying {@link PowerOutput}.</p>
      *
-     * @param out power channel (motor, CR servo, etc.)
+     * <p>{@link Plant#atSetpoint()} is always {@code true} for power plants,
+     * as there is no meaningful "setpoint" concept without feedback.</p>
+     *
+     * @param out power channel in normalized units
+     * @return a {@link Plant} that commands {@code out} as power
      */
     public static Plant power(PowerOutput out) {
         if (out == null) {
@@ -75,14 +68,15 @@ public final class Plants {
     }
 
     /**
-     * Plant that drives two {@link PowerOutput}s with the same power.
+     * Power plant that drives two {@link PowerOutput}s with the same target
+     * power.
      *
-     * <p>Direction handling (inversion) should be done by the adapter
-     * that created the {@link PowerOutput}s; this plant simply mirrors
-     * the same target to both outputs.</p>
+     * <p>Typical use: two motors or CR servos that should track the same
+     * power command (for example, left/right shooter wheels).</p>
      *
      * @param a first power channel
      * @param b second power channel
+     * @return a {@link Plant} that commands both channels
      */
     public static Plant powerPair(PowerOutput a, PowerOutput b) {
         if (a == null || b == null) {
@@ -91,106 +85,8 @@ public final class Plants {
         return new PowerPairPlant(a, b);
     }
 
-    // =====================================================================
-    // POSITION PLANTS (PositionOutput, native units)
-    // =====================================================================
-
     /**
-     * Position plant over a {@link PositionOutput} in native units.
-     *
-     * <p>For servos this is typically {@code 0.0 .. 1.0}. For motors,
-     * this is encoder ticks (or any other native position unit defined
-     * by the adapter).</p>
-     *
-     * <p>This plant is "set-and-hold": it commands the target position
-     * when {@link Plant#setTarget(double)} is called and considers itself
-     * at setpoint immediately (i.e., {@link Plant#atSetpoint()} always returns
-     * {@code true}). If you need more sophisticated position setpoint
-     * detection, combine this with sensor feedback in your own logic or
-     * extend this pattern with a measured position source.</p>
-     *
-     * @param out position channel
-     */
-    public static Plant position(PositionOutput out) {
-        if (out == null) {
-            throw new IllegalArgumentException("PositionOutput is required");
-        }
-        return new PositionPlant(out);
-    }
-
-    /**
-     * Position plant that drives two {@link PositionOutput}s with the
-     * same native position target.
-     *
-     * <p>Typical use: two symmetric servos or motors that should track
-     * the same position command.</p>
-     *
-     * @param a first position channel
-     * @param b second position channel
-     */
-    public static Plant positionPair(PositionOutput a, PositionOutput b) {
-        if (a == null || b == null) {
-            throw new IllegalArgumentException("Both PositionOutputs are required");
-        }
-        return new PositionPairPlant(a, b);
-    }
-
-    // =====================================================================
-    // VELOCITY PLANTS (VelocityOutput, native units)
-    // =====================================================================
-
-    /**
-     * Velocity plant over a single {@link VelocityOutput} in native units
-     * (for example, encoder ticks per second).
-     *
-     * <p>{@link Plant#atSetpoint()} compares the measured velocity (via
-     * {@link VelocityOutput#getMeasuredVelocity()}) to the commanded
-     * target and returns {@code true} when the absolute error is less
-     * than or equal to {@code toleranceNative}.</p>
-     *
-     * @param out             velocity channel
-     * @param toleranceNative allowed error between commanded and measured,
-     *                        in native velocity units
-     */
-    public static Plant velocity(VelocityOutput out, double toleranceNative) {
-        if (out == null) {
-            throw new IllegalArgumentException("VelocityOutput is required");
-        }
-        if (toleranceNative < 0.0) {
-            throw new IllegalArgumentException("toleranceNative must be >= 0");
-        }
-        return new VelocityPlant(out, toleranceNative);
-    }
-
-    /**
-     * Velocity plant that drives two {@link VelocityOutput}s with the
-     * same target velocity, and considers itself at setpoint only when
-     * <b>both</b> channels are within {@code toleranceNative} of the
-     * commanded velocity.
-     *
-     * @param a               first velocity channel
-     * @param b               second velocity channel
-     * @param toleranceNative allowed error between commanded and measured,
-     *                        in native velocity units
-     */
-    public static Plant velocityPair(VelocityOutput a,
-                                     VelocityOutput b,
-                                     double toleranceNative) {
-        if (a == null || b == null) {
-            throw new IllegalArgumentException("Both VelocityOutputs are required");
-        }
-        if (toleranceNative < 0.0) {
-            throw new IllegalArgumentException("toleranceNative must be >= 0");
-        }
-        return new VelocityPairPlant(a, b, toleranceNative);
-    }
-
-    // =====================================================================
-    // INTERNAL IMPLEMENTATIONS
-    // =====================================================================
-
-    /**
-     * Internal implementation for single-output power.
+     * Internal implementation for single-output power (normalized).
      */
     private static final class PowerPlant implements Plant {
         private final PowerOutput out;
@@ -202,9 +98,8 @@ public final class Plants {
 
         @Override
         public void setTarget(double target) {
-            double p = MathUtil.clamp(target, -1.0, 1.0);
-            this.target = p;
-            out.setPower(p);
+            this.target = target;
+            out.setPower(target);
         }
 
         @Override
@@ -214,12 +109,18 @@ public final class Plants {
 
         @Override
         public void update(double dtSec) {
-            // Open-loop: nothing to do per tick.
+            // No additional control logic; relies on underlying implementation.
+        }
+
+        @Override
+        public void stop() {
+            out.stop();
+            target = 0.0;
         }
 
         @Override
         public boolean atSetpoint() {
-            // Open-loop; no notion of "reached" beyond the command itself.
+            // Power plants do not have a meaningful setpoint notion.
             return true;
         }
 
@@ -230,7 +131,7 @@ public final class Plants {
     }
 
     /**
-     * Internal implementation for dual-output power.
+     * Internal implementation for dual-output power (normalized).
      */
     private static final class PowerPairPlant implements Plant {
         private final PowerOutput a;
@@ -244,10 +145,9 @@ public final class Plants {
 
         @Override
         public void setTarget(double target) {
-            double p = MathUtil.clamp(target, -1.0, 1.0);
-            this.target = p;
-            a.setPower(p);
-            b.setPower(p);
+            this.target = target;
+            a.setPower(target);
+            b.setPower(target);
         }
 
         @Override
@@ -257,11 +157,19 @@ public final class Plants {
 
         @Override
         public void update(double dtSec) {
-            // Open-loop.
+            // No additional control logic; relies on underlying implementation.
+        }
+
+        @Override
+        public void stop() {
+            a.stop();
+            b.stop();
+            target = 0.0;
         }
 
         @Override
         public boolean atSetpoint() {
+            // Power plants do not have a meaningful setpoint notion.
             return true;
         }
 
@@ -271,8 +179,113 @@ public final class Plants {
         }
     }
 
+    // =====================================================================
+    // POSITION PLANTS (PositionOutput, native units)
+    // =====================================================================
+
     /**
-     * Internal implementation for single-output position (native units).
+     * Generic position plant over a {@link PositionOutput} in native units.
+     *
+     * <p>For servos this is typically {@code 0.0 .. 1.0}. For motors,
+     * this is encoder ticks (or any other native position unit defined
+     * by the adapter).</p>
+     *
+     * <p>This variant is "set-and-hold": it commands the target position
+     * when {@link Plant#setTarget(double)} is called and immediately
+     * considers itself at setpoint (i.e., {@link Plant#atSetpoint()} always
+     * returns {@code true}). It does not rely on sensor feedback and is
+     * appropriate for open-loop or fire-and-forget use cases (such as
+     * standard servos).</p>
+     *
+     * @param out position channel in native units
+     * @return a {@link Plant} that commands {@code out} in position
+     */
+    public static Plant position(PositionOutput out) {
+        if (out == null) {
+            throw new IllegalArgumentException("PositionOutput is required");
+        }
+        return new PositionPlant(out);
+    }
+
+    /**
+     * Position plant that drives two {@link PositionOutput}s with the same
+     * target position in native units.
+     *
+     * <p>This variant is also "set-and-hold" and does not use sensor
+     * feedback for {@link Plant#atSetpoint()}.</p>
+     *
+     * @param a first position channel
+     * @param b second position channel
+     * @return a {@link Plant} that commands both channels
+     */
+    public static Plant positionPair(PositionOutput a, PositionOutput b) {
+        if (a == null || b == null) {
+            throw new IllegalArgumentException("Both PositionOutputs are required");
+        }
+        return new PositionPairPlant(a, b);
+    }
+
+    /**
+     * Position plant for an encoder-backed motor in native units (ticks).
+     *
+     * <p>This variant assumes that {@link PositionOutput#getMeasuredPosition()}
+     * returns a real sensor reading (for example, motor encoder ticks), and
+     * uses that feedback to implement {@link Plant#atSetpoint()} with a
+     * configurable tolerance.</p>
+     *
+     * <p>It also maintains an internal <b>offset</b> so that
+     * {@link Plant#reset()} can logically re-zero the position at the
+     * current measured value without requiring the HAL to reset the encoder
+     * itself. After {@code reset()}, the plant's coordinate system is such
+     * that the current position is treated as {@code 0}.</p>
+     *
+     * @param out             position channel in native units (ticks)
+     * @param toleranceNative allowed error magnitude in native units
+     *                        for {@link Plant#atSetpoint()} to be true
+     * @return a feedback-capable {@link Plant} for motor position control
+     */
+    public static Plant motorPosition(PositionOutput out, double toleranceNative) {
+        if (out == null) {
+            throw new IllegalArgumentException("PositionOutput is required");
+        }
+        if (toleranceNative < 0.0) {
+            throw new IllegalArgumentException("toleranceNative must be >= 0");
+        }
+        return new MotorPositionPlant(out, toleranceNative);
+    }
+
+    /**
+     * Position plant for a pair of encoder-backed motors in native units
+     * (ticks).
+     *
+     * <p>This variant commands both position channels with the same target
+     * and considers the plant at setpoint only when both measured positions
+     * are within {@code toleranceNative} of the commanded target.</p>
+     *
+     * <p>Like {@link #motorPosition(PositionOutput, double)}, it maintains
+     * per-motor offsets so that {@link Plant#reset()} re-zeros the logical
+     * position of <em>both</em> motors at their current measured positions.</p>
+     *
+     * @param a               first position channel
+     * @param b               second position channel
+     * @param toleranceNative allowed error magnitude in native units
+     *                        for {@link Plant#atSetpoint()} to be true
+     * @return a feedback-capable {@link Plant} for dual motor position control
+     */
+    public static Plant motorPositionPair(PositionOutput a,
+                                          PositionOutput b,
+                                          double toleranceNative) {
+        if (a == null || b == null) {
+            throw new IllegalArgumentException("Both PositionOutputs are required");
+        }
+        if (toleranceNative < 0.0) {
+            throw new IllegalArgumentException("toleranceNative must be >= 0");
+        }
+        return new MotorPositionPairPlant(a, b, toleranceNative);
+    }
+
+    /**
+     * Internal implementation for single-output position (set-and-hold).
      */
     private static final class PositionPlant implements Plant {
         private final PositionOutput out;
@@ -295,12 +308,18 @@ public final class Plants {
 
         @Override
         public void update(double dtSec) {
-            // set-and-hold; no additional per-tick work.
+            // No additional control logic; relies on underlying implementation.
+        }
+
+        @Override
+        public void stop() {
+            out.stop();
+            // Keep target as-is; this plant is open-loop in terms of atSetpoint().
         }
 
         @Override
         public boolean atSetpoint() {
-            // Without a measured position, we treat "commanded" as "reached".
+            // Open-loop set-and-hold: treat "commanded" as "reached".
             return true;
         }
 
@@ -311,7 +330,7 @@ public final class Plants {
     }
 
     /**
-     * Internal implementation for dual-output position (native units).
+     * Internal implementation for dual-output position (set-and-hold).
      */
     private static final class PositionPairPlant implements Plant {
         private final PositionOutput a;
@@ -337,11 +356,19 @@ public final class Plants {
 
         @Override
         public void update(double dtSec) {
-            // set-and-hold.
+            // No additional control logic; relies on underlying implementation.
+        }
+
+        @Override
+        public void stop() {
+            a.stop();
+            b.stop();
+            // Keep target as-is; open-loop semantics.
         }
 
         @Override
         public boolean atSetpoint() {
+            // Open-loop set-and-hold: treat "commanded" as "reached".
             return true;
         }
 
@@ -349,6 +376,211 @@ public final class Plants {
         public String toString() {
             return "PositionPairPlant{target=" + target + "}";
         }
+    }
+
+    /**
+     * Internal implementation for single-output motor position with feedback
+     * and a logical zero offset.
+     */
+    private static final class MotorPositionPlant implements Plant {
+        private final PositionOutput out;
+        private final double toleranceNative;
+
+        // Plant-frame target (after offset).
+        private double target = 0.0;
+
+        // Offset between plant-frame zero and hardware native zero:
+        // hardware_position = plant_position + offsetNative
+        private double offsetNative = 0.0;
+
+        MotorPositionPlant(PositionOutput out, double toleranceNative) {
+            this.out = out;
+            this.toleranceNative = toleranceNative;
+        }
+
+        @Override
+        public void setTarget(double target) {
+            this.target = target;
+            double hardwareTarget = target + offsetNative;
+            out.setPosition(hardwareTarget);
+        }
+
+        @Override
+        public double getTarget() {
+            return target;
+        }
+
+        @Override
+        public void update(double dtSec) {
+            // No additional control beyond the underlying motor controller.
+        }
+
+        @Override
+        public void stop() {
+            // Physically stop chasing the old target.
+            out.stop();
+        }
+
+        @Override
+        public void reset() {
+            // Re-zero the plant's coordinate frame at the current measured position.
+            out.stop();
+            double measuredHardware = out.getMeasuredPosition();
+            offsetNative = measuredHardware;
+            target = 0.0;
+        }
+
+        @Override
+        public boolean atSetpoint() {
+            double measuredHardware = out.getMeasuredPosition();
+            double measuredPlantFrame = measuredHardware - offsetNative;
+            double error = measuredPlantFrame - target;
+            return Math.abs(error) <= toleranceNative;
+        }
+
+        @Override
+        public boolean hasFeedback() {
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return "MotorPositionPlant{target=" + target +
+                    ", offsetNative=" + offsetNative +
+                    ", toleranceNative=" + toleranceNative + "}";
+        }
+    }
+
+    /**
+     * Internal implementation for dual-output motor position with feedback
+     * and per-motor logical zero offsets.
+     */
+    private static final class MotorPositionPairPlant implements Plant {
+        private final PositionOutput a;
+        private final PositionOutput b;
+        private final double toleranceNative;
+
+        private double target = 0.0;
+        private double offsetNativeA = 0.0;
+        private double offsetNativeB = 0.0;
+
+        MotorPositionPairPlant(PositionOutput a,
+                               PositionOutput b,
+                               double toleranceNative) {
+            this.a = a;
+            this.b = b;
+            this.toleranceNative = toleranceNative;
+        }
+
+        @Override
+        public void setTarget(double target) {
+            this.target = target;
+            double hardwareTargetA = target + offsetNativeA;
+            double hardwareTargetB = target + offsetNativeB;
+            a.setPosition(hardwareTargetA);
+            b.setPosition(hardwareTargetB);
+        }
+
+        @Override
+        public double getTarget() {
+            return target;
+        }
+
+        @Override
+        public void update(double dtSec) {
+            // No additional control beyond the underlying motor controllers.
+        }
+
+        @Override
+        public void stop() {
+            a.stop();
+            b.stop();
+        }
+
+        @Override
+        public void reset() {
+            // Re-zero both motors at their current measured positions.
+            a.stop();
+            b.stop();
+            double measuredA = a.getMeasuredPosition();
+            double measuredB = b.getMeasuredPosition();
+            offsetNativeA = measuredA;
+            offsetNativeB = measuredB;
+            target = 0.0;
+        }
+
+        @Override
+        public boolean atSetpoint() {
+            double measuredA = a.getMeasuredPosition() - offsetNativeA;
+            double measuredB = b.getMeasuredPosition() - offsetNativeB;
+            double errA = measuredA - target;
+            double errB = measuredB - target;
+            return Math.abs(errA) <= toleranceNative &&
+                    Math.abs(errB) <= toleranceNative;
+        }
+
+        @Override
+        public boolean hasFeedback() {
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return "MotorPositionPairPlant{target=" + target +
+                    ", offsetNativeA=" + offsetNativeA +
+                    ", offsetNativeB=" + offsetNativeB +
+                    ", toleranceNative=" + toleranceNative + "}";
+        }
+    }
+
+    // =====================================================================
+    // VELOCITY PLANTS (VelocityOutput, native units)
+    // =====================================================================
+
+    /**
+     * Velocity plant over a single {@link VelocityOutput} in native units
+     * (for example, encoder ticks per second).
+     *
+     * <p>{@link Plant#atSetpoint()} compares the measured velocity (via
+     * {@link VelocityOutput#getMeasuredVelocity()}) against the commanded
+     * target with a specified tolerance.</p>
+     *
+     * @param out             velocity channel in native units
+     * @param toleranceNative allowed error magnitude in native units
+     *                        for {@link Plant#atSetpoint()} to be true
+     * @return a feedback-capable {@link Plant} for velocity control
+     */
+    public static Plant velocity(VelocityOutput out, double toleranceNative) {
+        if (out == null) {
+            throw new IllegalArgumentException("VelocityOutput is required");
+        }
+        if (toleranceNative < 0.0) {
+            throw new IllegalArgumentException("toleranceNative must be >= 0");
+        }
+        return new VelocityPlant(out, toleranceNative);
+    }
+
+    /**
+     * Velocity plant that drives two {@link VelocityOutput}s with the
+     * same target velocity, and considers itself at setpoint only when
+     * both measured velocities are within tolerance of the target.
+     *
+     * @param a               first velocity channel
+     * @param b               second velocity channel
+     * @param toleranceNative allowed error magnitude in native units
+     *                        for {@link Plant#atSetpoint()} to be true
+     * @return a feedback-capable {@link Plant} for dual velocity control
+     */
+    public static Plant velocityPair(VelocityOutput a,
+                                     VelocityOutput b,
+                                     double toleranceNative) {
+        if (a == null || b == null) {
+            throw new IllegalArgumentException("Both VelocityOutputs are required");
+        }
+        if (toleranceNative < 0.0) {
+            throw new IllegalArgumentException("toleranceNative must be >= 0");
+        }
+        return new VelocityPairPlant(a, b, toleranceNative);
     }
 
     /**
@@ -381,10 +613,21 @@ public final class Plants {
         }
 
         @Override
+        public void stop() {
+            out.stop();
+            target = 0.0;
+        }
+
+        @Override
         public boolean atSetpoint() {
             double measured = out.getMeasuredVelocity();
             double error = measured - target;
             return Math.abs(error) <= toleranceNative;
+        }
+
+        @Override
+        public boolean hasFeedback() {
+            return true;
         }
 
         @Override
@@ -429,11 +672,23 @@ public final class Plants {
         }
 
         @Override
+        public void stop() {
+            a.stop();
+            b.stop();
+            target = 0.0;
+        }
+
+        @Override
         public boolean atSetpoint() {
             double errA = a.getMeasuredVelocity() - target;
             double errB = b.getMeasuredVelocity() - target;
             return Math.abs(errA) <= toleranceNative &&
                     Math.abs(errB) <= toleranceNative;
+        }
+
+        @Override
+        public boolean hasFeedback() {
+            return true;
         }
 
         @Override

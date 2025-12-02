@@ -28,7 +28,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *             and marks the task finished.</li>
  *       </ul>
  *   </li>
- *   <li>{@link #isFinished()} – returns true once the duration has elapsed.</li>
+ *   <li>{@link #isComplete()} – returns true once the duration has elapsed.</li>
  * </ul>
  *
  * <h2>Typical usage</h2>
@@ -39,22 +39,15 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *     0.7,
  *     // onStart: set target once
  *     () -> intakePlant.setTarget(+1.0),
- *     // onUpdate: advance plant with dt
- *     clock -> intakePlant.update(clock.dtSec()),
- *     // onFinish: turn off
+ *     // onUpdate: nothing (we're just holding constant)
+ *     null,
+ *     // onFinish: stop the intake
  *     () -> intakePlant.setTarget(0.0)
  * );
  *
- * // Example: drive forward with fixed DriveSignal for 0.8 seconds.
- * Task driveForward = new RunForSecondsTask(
- *     0.8,
- *     () -> drivebase.drive(new DriveSignal(+0.6, 0.0, 0.0)),
- *     clock -> drivebase.update(clock),
- *     () -> drivebase.stop()
- * );
+ * TaskRunner runner = new TaskRunner();
+ * runner.enqueue(intakePulse);
  * }</pre>
- *
- * <p>All callbacks are optional; pass {@code null} if you don't need one of them.</p>
  */
 public final class RunForSecondsTask implements Task {
 
@@ -98,6 +91,7 @@ public final class RunForSecondsTask implements Task {
         }
         started = true;
         remainingSec = durationSec;
+        finished = false;
 
         if (onStart != null) {
             onStart.run();
@@ -132,14 +126,14 @@ public final class RunForSecondsTask implements Task {
     }
 
     @Override
-    public boolean isFinished() {
+    public boolean isComplete() {
         return finished;
     }
 
     /**
      * @return remaining time in seconds (clamped at 0) once the task has started,
-     *         or 0 if the task is finished or has not yet been started.
-     *         This is mainly intended for debugging / telemetry.
+     * or 0 if the task is finished or has not yet been started.
+     * This is mainly intended for debugging / telemetry.
      */
     public double getRemainingSec() {
         if (!started || finished) {

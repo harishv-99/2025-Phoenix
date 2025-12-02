@@ -3,82 +3,81 @@ package edu.ftcphoenix.fw.hal;
 /**
  * Generic "velocity" control channel for an actuator.
  *
- * <p>This interface represents a single degree of freedom with a
+ * <p>This interface represents a single degree of freedom driven by a
  * scalar velocity in the actuator's <b>native units</b>. The exact
  * meaning of the velocity value depends on the implementation:</p>
  *
  * <ul>
  *   <li>Motor with encoder:
  *       <ul>
- *         <li>Domain: encoder ticks per second (or the SDK's native
- *             velocity units).</li>
- *         <li>Typical implementation delegates to
- *             {@code DcMotorEx.setVelocity(double)} and reads back from
- *             {@code DcMotorEx.getVelocity()}.</li>
- *       </ul>
- *   </li>
- *   <li>Other platforms:
- *       <ul>
- *         <li>Any consistent "native" velocity unit defined by the
- *             adapter.</li>
+ *         <li>Domain: encoder ticks per second (or similar native units).</li>
+ *         <li>Typically backed by {@code DcMotorEx#setVelocity(double)}.</li>
  *       </ul>
  *   </li>
  * </ul>
  *
- * <p>The framework does not impose physical units (radians per second,
- * meters per second, etc.) on this interface. Higher-level code is free
- * to convert to/from those units if needed, but {@code VelocityOutput}
- * itself is intentionally simple and device-oriented.</p>
+ * <p>Higher-level code should use this interface rather than accessing
+ * SDK-specific objects directly, to keep mechanism code portable and
+ * testable.</p>
  */
 public interface VelocityOutput {
 
     /**
-     * Sets the desired target velocity for this actuator in its native units.
+     * Command the actuator to run at the given target velocity in its
+     * native units.
      *
-     * <p>Examples:</p>
-     * <ul>
-     *   <li>Motor with encoder: ticks per second</li>
-     * </ul>
+     * <p>For a DC motor with an encoder, this is typically in ticks per
+     * second or another platform-defined velocity unit.</p>
      *
-     * <p>Implementations may clamp or scale the input to a valid range
-     * before applying it to the underlying hardware.</p>
+     * <p>Implementations may clamp the input to a valid range before
+     * applying it to the underlying hardware.</p>
      *
      * @param velocity desired target velocity (native units)
      */
     void setVelocity(double velocity);
 
     /**
-     * Returns the last velocity value that was <b>commanded</b> via
-     * {@link #setVelocity(double)}.
+     * Returns the most recently <b>commanded</b> target velocity that was
+     * passed to {@link #setVelocity(double)}, in native units.
      *
-     * <p>This is a cached command value, not a sensor measurement. It
-     * reflects "what we requested" in native units, which may differ
-     * from the actual measured velocity at any given moment.</p>
+     * <p>This is a cached command value, not necessarily a sensor reading.
+     * It reflects "what we asked the actuator to do", which may differ from
+     * the actual measured velocity if the mechanism is saturating, stalled,
+     * or still accelerating.</p>
      *
      * @return last commanded target velocity (native units)
      */
     double getCommandedVelocity();
 
     /**
-     * Returns the latest measured velocity of the actuator in native units.
+     * Returns the most recently <b>measured</b> velocity of the actuator, in
+     * its native units, if available.
      *
-     * <p>When supported, this should be backed by a sensor reading
-     * (for example, {@code DcMotorEx.getVelocity()} in ticks per
-     * second). Implementations that cannot provide a real measurement
-     * may return a best-effort estimate (such as {@link #getCommandedVelocity()})
-     * or a sentinel value, but should document their behavior.</p>
+     * <p>Implementations with access to a real sensor (for example,
+     * a motor with an encoder) should override this to return the
+     * current measured velocity. Implementations without a sensor
+     * may choose to approximate this or, in extreme cases, simply
+     * return {@link #getCommandedVelocity()} if no better information
+     * is available.</p>
      *
-     * @return measured velocity (native units), or an implementation-defined
-     * fallback if no sensor data is available
+     * @return measured velocity in native units, if available; otherwise
+     *         an implementation-defined approximation
      */
     double getMeasuredVelocity();
 
     /**
-     * Convenience method to command zero velocity.
+     * Convenience method to "stop" motion in the most reasonable way for
+     * this actuator.
      *
-     * <p>By default, this is equivalent to calling
-     * {@link #setVelocity(double)} with {@code 0.0}. Implementations
-     * may override this if zero has special semantics.</p>
+     * <p>The default behavior is to command a velocity of zero:</p>
+     *
+     * <pre>{@code
+     * stop()  ==  setVelocity(0.0);
+     * }</pre>
+     *
+     * <p>Implementations may override this if zero velocity has a special
+     * meaning or requires additional state changes, but the default
+     * preserves the intent of stopping the actuator.</p>
      */
     default void stop() {
         setVelocity(0.0);

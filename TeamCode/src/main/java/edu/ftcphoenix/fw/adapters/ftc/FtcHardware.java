@@ -33,10 +33,8 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *   </li>
  * </ul>
  *
- * <h2>Inversion policy</h2>
- *
- * <p>All inversion is handled at the hardware level using the FTC SDK's
- * direction settings:</p>
+ * <p>All inversion/direction handling is centralized here, using the
+ * FTC SDK's direction APIs:</p>
  *
  * <ul>
  *   <li>{@link DcMotor#setDirection(DcMotorSimple.Direction)}</li>
@@ -87,7 +85,7 @@ public final class FtcHardware {
             }
 
             @Override
-            public double getLastPower() {
+            public double getCommandedPower() {
                 return last;
             }
         };
@@ -122,7 +120,7 @@ public final class FtcHardware {
             }
 
             @Override
-            public double getLastPower() {
+            public double getCommandedPower() {
                 return last;
             }
         };
@@ -164,7 +162,7 @@ public final class FtcHardware {
             }
 
             @Override
-            public double getLastPosition() {
+            public double getCommandedPosition() {
                 return last;
             }
         };
@@ -212,8 +210,21 @@ public final class FtcHardware {
             }
 
             @Override
-            public double getLastPosition() {
+            public double getCommandedPosition() {
                 return lastTicks;
+            }
+
+            @Override
+            public double getMeasuredPosition() {
+                // True encoder-based feedback in native ticks.
+                return m.getCurrentPosition();
+            }
+
+            @Override
+            public void stop() {
+                // Stop actively driving toward the previous target.
+                m.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                m.setPower(0.0);
             }
         };
     }
@@ -240,7 +251,7 @@ public final class FtcHardware {
      * @param hw       hardware map
      * @param name     configured device name
      * @param inverted whether to invert the motor direction
-     * @return a {@link VelocityOutput} controlling the motor in ticks/sec
+     * @return a {@link VelocityOutput} controlling the motor velocity
      */
     public static VelocityOutput motorVelocity(HardwareMap hw,
                                                String name,

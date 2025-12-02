@@ -14,12 +14,17 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  *
  * <pre>{@code
  * // raw plant (no smoothing)
- * Plant rawShooter = FtcPlants.motorVelocity(hw, "shooter", false, TICKS_PER_REV);
+ * Plant shooter = Plants.velocity(
+ *     hw.flywheelMotor(),
+ *     /* maxRps = * / 50.0
+ * );
  *
- * // rate-limited wrapper: target can only change 100 units/sec
- * Plant shooter = new RateLimitedPlant(rawShooter, 100.0);
+ * // rate-limited wrapper: clamp changes to +/- 30 units per second
+ * Plant smoothShooter = new RateLimitedPlant(shooter, 30.0);
  *
- * // now pass 'shooter' into higher-level controllers:
+ * // wrap in a controller that lets you change shooter "modes"
+ * enum ShooterMode { OFF, LOW, HIGH }
+ *
  * GoalController<ShooterMode> shooterCtrl =
  *     GoalController.forEnum(
  *         shooter,
@@ -34,15 +39,11 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  * <p>Typical use cases:</p>
  * <ul>
  *   <li>Soft-starting intake or drive power to avoid brownouts.</li>
- *   <li>Slewing shooter velocity up/down instead of instant jumps.</li>
- *   <li>Limiting how quickly an arm position setpoint can change.</li>
+ *   <li>Slewing shooter velocity between modes to reduce overshoot.</li>
+ *   <li>Applying a low-pass / "slew rate" filter on any scalar target.</li>
  * </ul>
- *
- * <p><b>Composition:</b> because this implements {@link Plant}, you can pass
- * a {@code RateLimitedPlant} anywhere a plant is expected (e.g. into
- * {@link GoalController} or {@link FunctionController}).</p>
  */
-public final class RateLimitedPlant implements Plant {
+class RateLimitedPlant implements Plant {
 
     private final Plant inner;
 
@@ -62,27 +63,35 @@ public final class RateLimitedPlant implements Plant {
     private double currentTarget;
 
     /**
-     * Desired target as most recently set via {@link #setTarget(double)}.
+     * Commanded target (what callers <em>want</em> the plant to be at).
      */
     private double desiredTarget;
 
     /**
      * Construct a {@link RateLimitedPlant} with separate up/down limits.
      *
-     * @param inner         plant to wrap (non-null)
-     * @param maxUpPerSec   max rate of increase (target units per second, must be >= 0)
-     * @param maxDownPerSec max rate of decrease (target units per second, must be >= 0)
+     * @param inner         plant to wrap
+     * @param maxUpPerSec   maximum increase per second (target units per second)
+     *                      must be {@code >= 0}
+     * @param maxDownPerSec maximum decrease per second (target units per second,
+     *                      positive). The actual downward rate is
+     *                      {@code -maxDownPerSec}.
      */
     public RateLimitedPlant(Plant inner,
                             double maxUpPerSec,
                             double maxDownPerSec) {
+
         this.inner = Objects.requireNonNull(inner, "inner plant is required");
+
         if (maxUpPerSec < 0.0) {
-            throw new IllegalArgumentException("maxUpPerSec must be >= 0");
+            throw new IllegalArgumentException(
+                    "maxUpPerSec must be >= 0, got " + maxUpPerSec);
         }
         if (maxDownPerSec < 0.0) {
-            throw new IllegalArgumentException("maxDownPerSec must be >= 0");
+            throw new IllegalArgumentException(
+                    "maxDownPerSec must be >= 0, got " + maxDownPerSec);
         }
+
         this.maxUpPerSec = maxUpPerSec;
         this.maxDownPerSec = maxDownPerSec;
 
@@ -109,11 +118,9 @@ public final class RateLimitedPlant implements Plant {
     // ---------------------------------------------------------------------
 
     /**
-     * Set the <b>desired</b> target. The actual command applied to the
-     * underlying plant will move toward this value at a bounded rate on
-     * subsequent calls to {@link #update(double)}.
-     *
-     * <p>This is cheap and may be called every loop.</p>
+     * Set the desired target. This does not immediately change the target
+     * applied to the inner plant; instead the value is slewed towards this
+     * desired target at the configured rate limits on each {@link #update}.
      */
     @Override
     public void setTarget(double target) {
@@ -121,8 +128,8 @@ public final class RateLimitedPlant implements Plant {
     }
 
     /**
-     * @return the current commanded target after rate limiting (what is
-     * actually being sent to the inner plant).
+     * @return the last target value that was actually applied to the inner
+     * plant after rate limiting.
      */
     @Override
     public double getTarget() {
@@ -137,6 +144,15 @@ public final class RateLimitedPlant implements Plant {
     }
 
     @Override
+    public void stop() {
+        inner.stop();
+        // After a stop, treat the inner plant's target as our new baseline.
+        currentTarget = inner.getTarget();
+        desiredTarget = currentTarget;
+    }
+
+
+    @Override
     public void update(double dtSec) {
         if (dtSec < 0.0) {
             dtSec = 0.0;
@@ -145,19 +161,12 @@ public final class RateLimitedPlant implements Plant {
         double maxUp = maxUpPerSec * dtSec;
         double maxDown = maxDownPerSec * dtSec;
 
-        double error = desiredTarget - currentTarget;
+        double delta = desiredTarget - currentTarget;
 
-        double delta;
-        if (error > 0.0) {
-            // Increasing toward desiredTarget, limit by maxUp.
-            delta = Math.min(error, maxUp);
-        } else if (error < 0.0) {
-            // Decreasing toward desiredTarget, limit by maxDown.
-            double down = -error; // positive magnitude
-            double limitedDown = Math.min(down, maxDown);
-            delta = -limitedDown;
-        } else {
-            delta = 0.0;
+        if (delta > maxUp) {
+            delta = maxUp;
+        } else if (delta < -maxDown) {
+            delta = -maxDown;
         }
 
         currentTarget += delta;
@@ -170,25 +179,22 @@ public final class RateLimitedPlant implements Plant {
     public void reset() {
         inner.reset();
         double t = inner.getTarget();
-        currentTarget = t;
-        desiredTarget = t;
+        this.currentTarget = t;
+        this.desiredTarget = t;
     }
 
-    /**
-     * By default, we defer to the inner plant's notion of at-setpoint.
-     *
-     * <p>Note: this does <b>not</b> check that desired == current. If you want
-     * a stricter definition ("rate limiter has also finished slewing"),
-     * you can inspect {@link #getCommandedTarget()} and {@link #getTarget()}.</p>
-     */
     @Override
     public boolean atSetpoint() {
+        // Defer to the inner plant's definition of at-setpoint, based on the
+        // rate-limited target we are actually feeding it.
         return inner.atSetpoint();
     }
 
     @Override
     public void debugDump(DebugSink dbg, String prefix) {
-        if (dbg == null) return;
+        if (dbg == null) {
+            return;
+        }
         String p = (prefix == null || prefix.isEmpty()) ? "rate" : prefix;
         dbg.addData(p + ".desiredTarget", desiredTarget)
                 .addData(p + ".currentTarget", currentTarget)
