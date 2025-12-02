@@ -71,17 +71,17 @@ public final class MotorDirectionTester {
 
         // Create bindings
         bindings.whileHeld(gamepads.p1().x(),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantFL, 0.5)),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantFL, 0)));
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantFL, 0.5)),
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantFL, 0)));
         bindings.whileHeld(gamepads.p1().y(),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantFR, 0.5)),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantFR, 0)));
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantFR, 0.5)),
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantFR, 0)));
         bindings.whileHeld(gamepads.p1().a(),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantBL, 0.5)),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantBL, 0)));
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantBL, 0.5)),
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantBL, 0)));
         bindings.whileHeld(gamepads.p1().b(),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantBR, 0.5)),
-                () -> taskRunner.enqueue(PlantTasks.setTargetInstant(plantBR, 0)));
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantBR, 0.5)),
+                () -> taskRunner.enqueue(PlantTasks.setInstant(plantBR, 0)));
     }
 
     public void startAny(double runtime) {

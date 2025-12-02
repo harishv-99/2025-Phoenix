@@ -386,31 +386,29 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
      */
     private Task buildShootOneBallMacro(double shooterTargetVel) {
         // Step 1: set shooter target and wait for atSetpoint() or timeout.
-        Task spinUp = PlantTasks.setTargetAndWaitForSetpoint(
+        Task spinUp = PlantTasks.moveTo(
                 shooter,
                 shooterTargetVel,
-                SHOOTER_SPINUP_TIMEOUT_SEC,
-                null  // onTimeout: do nothing special
+                SHOOTER_SPINUP_TIMEOUT_SEC
         );
 
         // Step 2: feed one ball.
         //
         //  - Transfer runs at shoot power for TRANSFER_PULSE_SEC, then stops.
         //  - Pusher steps through LOAD → SHOOT → RETRACT positions.
-        Task feedTransfer = PlantTasks.holdForSeconds(
+        Task feedTransfer = PlantTasks.holdFor(
                 transfer,
                 TRANSFER_POWER_SHOOT,
                 TRANSFER_PULSE_SEC
         );
 
-        Task pusherLoad = PlantTasks.holdForSeconds(
+        Task pusherLoad = PlantTasks.holdFor(
                 pusher,
                 PUSHER_POS_LOAD,
-                PUSHER_STAGE_SEC,
-                PUSHER_POS_LOAD
+                PUSHER_STAGE_SEC
         );
 
-        Task pusherShoot = PlantTasks.holdForSeconds(
+        Task pusherShoot = PlantTasks.holdForThen(
                 pusher,
                 PUSHER_POS_SHOOT,
                 PUSHER_STAGE_SEC,
@@ -428,14 +426,13 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         );
 
         // Step 3: optionally hold shooter briefly, then spin down to 0.
-        Task holdBeforeSpinDown = PlantTasks.holdForSeconds(
+        Task holdBeforeSpinDown = PlantTasks.holdFor(
                 shooter,
                 shooterTargetVel,
-                SHOOTER_SPINDOWN_HOLD_SEC,
-                shooterTargetVel
+                SHOOTER_SPINDOWN_HOLD_SEC
         );
 
-        Task spinDown = PlantTasks.setTargetInstant(shooter, 0.0);
+        Task spinDown = PlantTasks.setInstant(shooter, 0.0);
 
         return SequenceTask.of(
                 spinUp,

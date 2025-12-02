@@ -25,7 +25,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *     DriveTasks.driveForSeconds(drivebase, forwardSignal, 0.8),
  *
  *     // 3) Run intake for 0.5 seconds.
- *     Tasks.waitSeconds(0.5)
+ *     Tasks.waitForSeconds(0.5)
  * );
  *
  * TaskRunner runner = new TaskRunner();
@@ -86,7 +86,7 @@ public final class Tasks {
      *
      * @param seconds duration in seconds; must be {@code >= 0}
      */
-    public static Task waitSeconds(double seconds) {
+    public static Task waitForSeconds(double seconds) {
         return new RunForSecondsTask(seconds, null, null, null);
     }
 

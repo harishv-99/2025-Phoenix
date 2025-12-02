@@ -85,26 +85,26 @@ public class Shooter {
 
     public Task startShooter() {
         isShooterOn = true;
-        PlantTasks.moveTo(plantShooter, 400)
-                .waitUntilAtSetpoint()
+        PlantTasks.configureTask(plantShooter, 400)
+                .waitForSetpoint()
                 .thenHold()
                 .build();
-        return PlantTasks.setTargetInstant(plantShooter, velocity);
+        return PlantTasks.setInstant(plantShooter, velocity);
     }
 
     public Task stopShooter() {
         isShooterOn = false;
-        return PlantTasks.setTargetInstant(plantShooter, 0);
+        return PlantTasks.setInstant(plantShooter, 0);
     }
 
     public Task setPusherBack() {
-        return PlantTasks.holdForSeconds(plantPusher,
+        return PlantTasks.holdFor(plantPusher,
                 RobotConfig.Shooter.targetPusherBack,
                 0.5);
     }
 
     public Task setPusherFront() {
-        return PlantTasks.holdForSeconds(plantPusher,
+        return PlantTasks.holdFor(plantPusher,
                 RobotConfig.Shooter.targetPusherFront,
                 0.5);
     }
@@ -112,15 +112,15 @@ public class Shooter {
     public Task startTransfer(TransferDirection direction) {
         switch (direction) {
             case FORWARD:
-                return PlantTasks.setTargetInstant(plantTransfer, 1);
+                return PlantTasks.setInstant(plantTransfer, 1);
             case BACKWARD:
-                return PlantTasks.setTargetInstant(plantTransfer, -1);
+                return PlantTasks.setInstant(plantTransfer, -1);
         }
 
         throw new IllegalArgumentException("Unknown direction provided!!!");
     }
 
     public Task stopTransfer() {
-        return PlantTasks.setTargetInstant(plantTransfer, 0);
+        return PlantTasks.setInstant(plantTransfer, 0);
     }
 }
