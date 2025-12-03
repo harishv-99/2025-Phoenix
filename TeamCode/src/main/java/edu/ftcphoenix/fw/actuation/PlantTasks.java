@@ -24,6 +24,19 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * );
  * }</pre>
  *
+ * <p>Helpers that rely on {@link Plant#atSetpoint()} (for example,
+ * {@link #moveTo(Plant, double)}, {@link #moveTo(Plant, double, double)}, and
+ * {@link #moveToThen(Plant, double, double, double)}) require a
+ * <b>feedback-capable</b> plant where {@link Plant#hasFeedback()} returns
+ * {@code true}. In practice this usually means plants created from DC motors
+ * using the {@code Actuators.plant(...).motor(...).position(...)} or
+ * {@code Actuators.plant(...).motor(...).velocity(...)} paths.</p>
+ *
+ * <p>Time-based helpers such as {@link #holdFor(Plant, double, double)} and
+ * {@link #holdForThen(Plant, double, double, double)} only care about time and
+ * work with both feedback and open-loop plants (for example, servo position or
+ * power-only plants where {@code hasFeedback() == false}).</p>
+ *
  * <p>All helpers here are <b>non-blocking</b> and are intended to be used with
  * {@link edu.ftcphoenix.fw.task.TaskRunner} and the rest of the {@code fw.task}
  * package. These tasks set targets on plants and rely on some other mechanism
@@ -82,7 +95,8 @@ public final class PlantTasks {
      *
      * <p><b>Only use this with feedback-capable plants</b> where
      * {@link Plant#hasFeedback()} returns {@code true} and {@link Plant#atSetpoint()}
-     * has a meaningful implementation. At runtime this method will throw an
+     * has a meaningful implementation (for example, velocity plants or motor
+     * position plants). At runtime this method will throw an
      * {@link IllegalStateException} if {@code plant.hasFeedback() == false}.</p>
      *
      * @param plant      plant to command (must be feedback-capable)
@@ -141,6 +155,7 @@ public final class PlantTasks {
             throw new IllegalArgumentException(
                     "timeoutSec must be > 0, got " + timeoutSec);
         }
+
         return configureTask(plant, target)
                 .waitForSetpointOrTimeout(timeoutSec)
                 .then(finalTarget)
@@ -200,14 +215,17 @@ public final class PlantTasks {
     }
 
     /**
-     * Convenience overload that holds the same target before and after the
-     * timed interval.
+     * Create a {@link Task} that:
+     * <ol>
+     *   <li>Sets the plant target once at the start.</li>
+     *   <li>Relies on your main loop / mechanism to call
+     *       {@link Plant#update(double)} each iteration.</li>
+     *   <li>Holds that target for a fixed duration (purely by time).</li>
+     *   <li>After the duration elapses, leaves the plant holding that target.</li>
+     * </ol>
      *
-     * <p>Equivalent to:</p>
-     *
-     * <pre>{@code
-     * PlantTasks.holdForThen(plant, target, durationSec, target);
-     * }</pre>
+     * <p>Internally this is just {@link #holdForThen(Plant, double, double, double)}
+     * with {@code finalTarget == target}.</p>
      *
      * @param plant       the plant to command
      * @param target      target value to hold during the timed interval
@@ -226,14 +244,21 @@ public final class PlantTasks {
     // ------------------------------------------------------------------------
 
     /**
-     * Convenience method: create a {@link Task} that simply sets the plant
-     * target once and then finishes immediately.
+     * Create a {@link Task} that:
+     * <ol>
+     *   <li>Sets the plant's target once at start.</li>
+     *   <li>Relies on your main loop / mechanism to call
+     *       {@link Plant#update(double)} each iteration.</li>
+     *   <li>Completes immediately (in a single iteration), leaving the plant
+     *       holding that target.</li>
+     * </ol>
      *
-     * <p>This is implemented using the builder as:</p>
+     * <p>Internally this is implemented via the builder as:</p>
      *
      * <pre>{@code
      * PlantTasks.configureTask(plant, target)
      *     .instant()
+     *     .thenHold()
      *     .build();
      * }</pre>
      *
@@ -246,6 +271,7 @@ public final class PlantTasks {
         Objects.requireNonNull(plant, "plant is required");
         return configureTask(plant, target)
                 .instant()
+                .thenHold()
                 .build();
     }
 
@@ -295,8 +321,7 @@ public final class PlantTasks {
     }
 
     /**
-     * First builder stage: choose how the task decides it is complete
-     * (setpoint, time, timeout, or instant).
+     * First builder stage: choose how the task decides it is complete.
      */
     public interface TargetTaskStart {
         /**
@@ -330,33 +355,33 @@ public final class PlantTasks {
         TargetTaskPost waitFor(double seconds);
 
         /**
-         * Complete immediately after setting the initial target once.
-         *
-         * <p>This implicitly behaves like {@code thenHold()} and skips the
-         * post-behavior stage, returning the final build step directly.</p>
+         * Complete immediately (in a single iteration).
          */
-        TargetTaskBuild instant();
+        TargetTaskPost instant();
     }
 
     /**
-     * Second builder stage: choose what happens to the plant's target once
-     * the task is complete.
+     * Second builder stage: choose what happens to the plant's target once the
+     * task is complete.
      */
     public interface TargetTaskPost {
         /**
-         * Leave the plant holding the last commanded target.
+         * Leave the plant holding the last target value that was sent to it.
+         *
+         * <p>For example, if the task was created with
+         * {@link TargetTaskStart#waitForSetpoint()} and the plant is a velocity
+         * plant, the plant will keep holding the velocity that was set when the
+         * task started.</p>
          */
         TargetTaskBuild thenHold();
 
         /**
-         * After the main move/hold behavior has completed, set the plant's
-         * target once to {@code finalTarget}.
+         * Set the plant's target once to a new value after the task is complete.
          *
-         * <p>This does <b>not</b> perform or wait for a second move-to-setpoint
-         * sequence. It is just a single {@link Plant#setTarget(double)} call
-         * applied when the task finishes.</p>
+         * <p>For example, you can wait for a shooter flywheel to spin up to a
+         * velocity, then once that is done set the velocity to zero.</p>
          *
-         * @param finalTarget target to apply once the task is complete
+         * @param finalTarget target value to apply once the task is complete
          */
         TargetTaskBuild then(double finalTarget);
     }
@@ -383,9 +408,6 @@ public final class PlantTasks {
         FINAL_TARGET
     }
 
-    /**
-     * Concrete builder implementation.
-     */
     private static final class TargetTaskBuilder
             implements TargetTaskStart, TargetTaskPost, TargetTaskBuild {
 
@@ -408,7 +430,7 @@ public final class PlantTasks {
         public TargetTaskPost waitForSetpoint() {
             if (!plant.hasFeedback()) {
                 throw new IllegalStateException(
-                        "TargetTaskStart.waitForSetpoint() requires a feedback-capable plant "
+                        "TargetTaskStart.waitForSetpoint(...) requires a feedback-capable plant "
                                 + "(plant.hasFeedback() == true).");
             }
             this.completionMode = CompletionMode.WAIT_SETPOINT;
@@ -447,19 +469,16 @@ public final class PlantTasks {
         }
 
         @Override
-        public TargetTaskBuild instant() {
+        public TargetTaskPost instant() {
             this.completionMode = CompletionMode.INSTANT;
             this.waitSeconds = 0.0;
             this.timeoutSec = 0.0;
-            this.postBehavior = PostBehavior.HOLD;
-            this.finalTarget = 0.0;
             return this;
         }
 
         @Override
         public TargetTaskBuild thenHold() {
             this.postBehavior = PostBehavior.HOLD;
-            this.finalTarget = 0.0;
             return this;
         }
 
@@ -493,16 +512,19 @@ public final class PlantTasks {
         private final Plant plant;
         private final double initialTarget;
         private final CompletionMode completionMode;
+
         private final double waitSeconds;
         private final double timeoutSec;
+
         private final PostBehavior postBehavior;
         private final double finalTarget;
 
         private boolean started = false;
         private boolean finished = false;
-        private boolean postApplied = false;
+        private TaskOutcome outcome = TaskOutcome.UNKNOWN;
+
         private double elapsedSec = 0.0;
-        private TaskOutcome outcome = TaskOutcome.NOT_DONE;
+        private double remainingSec = 0.0;
 
         TargetTask(final Plant plant,
                    final double initialTarget,
@@ -511,7 +533,6 @@ public final class PlantTasks {
                    final double timeoutSec,
                    final PostBehavior postBehavior,
                    final double finalTarget) {
-
             this.plant = plant;
             this.initialTarget = initialTarget;
             this.completionMode = completionMode;
@@ -528,40 +549,23 @@ public final class PlantTasks {
             }
             started = true;
             finished = false;
-            postApplied = false;
             elapsedSec = 0.0;
-            outcome = TaskOutcome.NOT_DONE;
+            remainingSec = waitSeconds;
 
-            // All configured tasks begin by setting the initial target.
+            outcome = TaskOutcome.UNKNOWN;
+
             plant.setTarget(initialTarget);
 
-            // Handle immediate completion cases.
-            switch (completionMode) {
-                case INSTANT:
-                    finished = true;
-                    outcome = TaskOutcome.SUCCESS;
-                    applyPostIfNeeded();
-                    break;
-
-                case WAIT_TIME:
-                    if (waitSeconds <= 0.0) {
-                        finished = true;
-                        outcome = TaskOutcome.SUCCESS;
-                        applyPostIfNeeded();
-                    }
-                    break;
-
-                case WAIT_SETPOINT:
-                case WAIT_SETPOINT_OR_TIMEOUT:
-                    if (plant.atSetpoint()) {
-                        finished = true;
-                        outcome = TaskOutcome.SUCCESS;
-                        applyPostIfNeeded();
-                    }
-                    break;
-
-                default:
-                    // no-op
+            // Edge case: INSTANT completion finishes immediately.
+            if (completionMode == CompletionMode.INSTANT) {
+                finished = true;
+                outcome = TaskOutcome.SUCCESS;
+                applyPostBehavior();
+            } else if (completionMode == CompletionMode.WAIT_TIME && waitSeconds == 0.0) {
+                // Zero-duration time wait: also finish immediately.
+                finished = true;
+                outcome = TaskOutcome.SUCCESS;
+                applyPostBehavior();
             }
         }
 
@@ -584,7 +588,8 @@ public final class PlantTasks {
                     break;
 
                 case WAIT_TIME:
-                    if (elapsedSec >= waitSeconds) {
+                    remainingSec -= dt;
+                    if (remainingSec <= 0.0) {
                         finished = true;
                         outcome = TaskOutcome.SUCCESS;
                     }
@@ -606,13 +611,10 @@ public final class PlantTasks {
                         outcome = TaskOutcome.TIMEOUT;
                     }
                     break;
-
-                default:
-                    // no-op
             }
 
             if (finished) {
-                applyPostIfNeeded();
+                applyPostBehavior();
             }
         }
 
@@ -626,7 +628,9 @@ public final class PlantTasks {
             return outcome;
         }
 
-        private void applyPostIfNeeded() {
+        private boolean postApplied = false;
+
+        private void applyPostBehavior() {
             if (postApplied) {
                 return;
             }

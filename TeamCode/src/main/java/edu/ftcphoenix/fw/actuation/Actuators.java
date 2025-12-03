@@ -21,7 +21,7 @@ import edu.ftcphoenix.fw.hal.VelocityOutput;
  * Plant shooter = Actuators.plant(hardwareMap)
  *         .motorPair("shooterLeftMotor",  false,
  *                    "shooterRightMotor", true)
- *         .velocity(100.0)            // tolerance in native units
+ *         .velocity()                 // uses a default tolerance
  *         .rateLimit(500.0)           // max delta in native units per second
  *         .build();
  *
@@ -35,7 +35,7 @@ import edu.ftcphoenix.fw.hal.VelocityOutput;
  * // Pusher: positional servo.
  * Plant pusher = Actuators.plant(hardwareMap)
  *         .servo("pusherServo", false)
- *         .position()
+ *         .position()                 // servo set-and-hold (no feedback)
  *         .build();
  * }</pre>
  *
@@ -55,39 +55,53 @@ import edu.ftcphoenix.fw.hal.VelocityOutput;
  *   <li><b>Pick control type</b> – {@link ControlStep}:
  *     <ul>
  *       <li>{@link ControlStep#power()} for open-loop power (-1..+1).</li>
- *       <li>{@link ControlStep#velocity(double)} for closed-loop velocity
- *           (native units per second).</li>
- *       <li>{@link ControlStep#position()} for positional control
- *           (usually 0..1 for servos, native units for motors).</li>
+ *       <li>{@link ControlStep#velocity()} or
+ *           {@link ControlStep#velocity(double)} for closed-loop velocity
+ *           with default or explicit tolerance.</li>
+ *       <li>{@link ControlStep#position()} or
+ *           {@link ControlStep#position(double)} for positional control:
+ *           <ul>
+ *             <li>DC motors: encoder-backed, feedback-based position plants
+ *                 with a tolerance in native units.</li>
+ *             <li>Servos: open-loop "set-and-hold" plants without feedback.</li>
+ *           </ul>
+ *       </li>
  *     </ul>
  *   </li>
  *   <li><b>Modifiers + build</b> – {@link ModifiersStep}:
  *     <ul>
  *       <li>{@link ModifiersStep#rateLimit(double)} to limit how quickly
  *           the target may change.</li>
- *       <li>{@link ModifiersStep#build()} to obtain the final {@link Plant}.</li>
+ *       <li>{@link ModifiersStep#build()} to get the final {@link Plant}.</li>
  *     </ul>
  *   </li>
  * </ol>
  *
- * <p>Not every hardware selection supports every control type. For example:</p>
- *
- * <ul>
- *   <li>{@code servo(...)} and {@code servoPair(...)} only support
- *       {@link ControlStep#position()} (power/velocity will throw).</li>
- *   <li>{@code crServo(...)} and {@code crServoPair(...)} only support
- *       {@link ControlStep#power()}.</li>
- *   <li>{@code motor(...)} and {@code motorPair(...)} support
- *       {@link ControlStep#power()}, {@link ControlStep#velocity(double)},
- *       and {@link ControlStep#position()}.</li>
- * </ul>
- *
- * <p>All units are in the "native" units of the underlying hardware
- * (e.g., encoder ticks for motors). The framework does not attempt to
- * interpret ticks as physical units here; that can be built on top by
- * teams if desired.</p>
+ * <p>The intent is that <b>students</b> mostly interact with {@code Actuators}
+ * and higher-level APIs like {@link PlantTasks}, while the {@link Plants}
+ * class (and the HAL interfaces) remain an internal detail.</p>
  */
 public final class Actuators {
+
+    /**
+     * Default tolerance for closed-loop motor position plants created via
+     * {@link ControlStep#position()} when used with DC motors.
+     *
+     * <p>This value is in native position units (for REV encoders, ticks).
+     * Teams with more advanced needs can use
+     * {@link ControlStep#position(double)} to override it.</p>
+     */
+    private static final double DEFAULT_MOTOR_POSITION_TOLERANCE_NATIVE = 10.0;
+
+    /**
+     * Default tolerance for closed-loop motor velocity plants created via
+     * {@link ControlStep#velocity()}.
+     *
+     * <p>This value is in native velocity units (e.g. ticks per second).
+     * Teams that need a tighter or looser band can use
+     * {@link ControlStep#velocity(double)} to override it.</p>
+     */
+    private static final double DEFAULT_MOTOR_VELOCITY_TOLERANCE_NATIVE = 100.0;
 
     private Actuators() {
         // no instances
@@ -134,6 +148,7 @@ public final class Actuators {
         private final HardwareMap hw;
 
         private HardwareKind hardwareKind = HardwareKind.NONE;
+
         private String nameA;
         private String nameB;
         private boolean invertedA;
@@ -145,10 +160,6 @@ public final class Actuators {
             }
             this.hw = hw;
         }
-
-        // -----------------------------------------------------------------
-        // Hardware selection
-        // -----------------------------------------------------------------
 
         private void ensureUnset() {
             if (hardwareKind != HardwareKind.NONE) {
@@ -175,8 +186,7 @@ public final class Actuators {
         /**
          * Use a pair of DC motors as a single logical actuator.
          *
-         * <p>Both motors will receive the same command (power, velocity,
-         * or position) depending on the control type you choose.</p>
+         * <p>Both motors will receive the same command.</p>
          *
          * @param nameA     first motor name
          * @param invertedA invert flag for first motor
@@ -200,9 +210,10 @@ public final class Actuators {
         /**
          * Use a single positional servo as the underlying actuator.
          *
-         * <p>This selection supports {@link ControlStep#position()}, but will
-         * throw if you attempt to use {@link ControlStep#power()} or
-         * {@link ControlStep#velocity(double)}.</p>
+         * <p>This selection supports {@link ControlStep#position()} and
+         * {@link ControlStep#position(double)}, but will throw if you attempt
+         * to use {@link ControlStep#power()} or
+         * {@link ControlStep#velocity()} / {@link ControlStep#velocity(double)}.</p>
          *
          * @param name     servo name in the FTC Robot Configuration
          * @param inverted whether to invert the logical direction
@@ -221,9 +232,10 @@ public final class Actuators {
          *
          * <p>Both servos will receive the same position command.</p>
          *
-         * <p>This selection supports {@link ControlStep#position()}, but will
-         * throw if you attempt to use {@link ControlStep#power()} or
-         * {@link ControlStep#velocity(double)}.</p>
+         * <p>This selection supports {@link ControlStep#position()} and
+         * {@link ControlStep#position(double)}, but will throw if you attempt
+         * to use {@link ControlStep#power()} or
+         * {@link ControlStep#velocity()} / {@link ControlStep#velocity(double)}.</p>
          *
          * @param nameA     first servo name
          * @param invertedA invert flag for first servo
@@ -248,8 +260,9 @@ public final class Actuators {
          * Use a single continuous-rotation (CR) servo as the underlying actuator.
          *
          * <p>This selection supports {@link ControlStep#power()}, but will
-         * throw if you attempt to use {@link ControlStep#velocity(double)} or
-         * {@link ControlStep#position()}.</p>
+         * throw if you attempt to use {@link ControlStep#velocity()} /
+         * {@link ControlStep#velocity(double)} or
+         * {@link ControlStep#position()} / {@link ControlStep#position(double)}.</p>
          *
          * @param name     CR servo name in the FTC Robot Configuration
          * @param inverted whether to invert the logical direction
@@ -269,8 +282,9 @@ public final class Actuators {
          * <p>Both CR servos will receive the same power command.</p>
          *
          * <p>This selection supports {@link ControlStep#power()}, but will
-         * throw if you attempt to use {@link ControlStep#velocity(double)} or
-         * {@link ControlStep#position()}.</p>
+         * throw if you attempt to use {@link ControlStep#velocity()} /
+         * {@link ControlStep#velocity(double)} or
+         * {@link ControlStep#position()} / {@link ControlStep#position(double)}.</p>
          *
          * @param nameA     first CR servo name
          * @param invertedA invert flag for first CR servo
@@ -316,9 +330,9 @@ public final class Actuators {
      * Stage 2: choose the control type (power / velocity / position)
      * for the selected hardware.
      *
-     * <p>Each method here creates a <em>base plant</em> and returns a
-     * {@link ModifiersStep} where you can apply rate limiting and finally
-     * {@link ModifiersStep#build()} the plant.</p>
+     * <p>This stage combines the hardware choice from {@link HardwareStep}
+     * with a control mode, and constructs the underlying {@link Plant}
+     * using {@link Plants} helpers.</p>
      */
     public static final class ControlStep {
 
@@ -391,6 +405,23 @@ public final class Actuators {
             return new ModifiersStep(plant);
         }
 
+        // -----------------------------------------------------------------
+        // VELOCITY CONTROL
+        // -----------------------------------------------------------------
+
+        /**
+         * Choose closed-loop velocity control with a default tolerance.
+         *
+         * <p>This is equivalent to calling
+         * {@link #velocity(double)} with
+         * {@link #DEFAULT_MOTOR_VELOCITY_TOLERANCE_NATIVE}.</p>
+         *
+         * @return {@link ModifiersStep} to apply modifiers and build
+         */
+        public ModifiersStep velocity() {
+            return velocity(DEFAULT_MOTOR_VELOCITY_TOLERANCE_NATIVE);
+        }
+
         /**
          * Choose closed-loop velocity control for the selected hardware.
          *
@@ -429,8 +460,41 @@ public final class Actuators {
             return new ModifiersStep(plant);
         }
 
+        // -----------------------------------------------------------------
+        // POSITION CONTROL
+        // -----------------------------------------------------------------
+
+        /**
+         * Choose positional control with a default motor tolerance.
+         *
+         * <p>For DC motors, this is equivalent to calling
+         * {@link #position(double)} with
+         * {@link #DEFAULT_MOTOR_POSITION_TOLERANCE_NATIVE}.</p>
+         *
+         * <p>For standard servos, the tolerance is not used because there is
+         * no feedback; the plant is open-loop "set-and-hold" and always
+         * considers itself at setpoint.</p>
+         *
+         * @return {@link ModifiersStep} to apply modifiers and build
+         */
+        public ModifiersStep position() {
+            return position(DEFAULT_MOTOR_POSITION_TOLERANCE_NATIVE);
+        }
+
         /**
          * Choose positional control for the selected hardware.
+         *
+         * <p>For DC motors, this creates a <b>feedback-based</b> position plant
+         * (using encoders via {@link FtcHardware#motorPosition}) with the given
+         * tolerance in native units, so that {@link Plant#atSetpoint()} and
+         * {@link Plant#hasFeedback()} behave as expected for "move to" style
+         * tasks.</p>
+         *
+         * <p>For standard servos, this creates an open-loop "set-and-hold"
+         * plant that simply commands the target (typically 0..1) and treats
+         * itself as always at setpoint; servos generally do not expose a
+         * measured position, so {@code toleranceNative} is ignored and
+         * {@link Plant#hasFeedback()} will be {@code false}.</p>
          *
          * <p>Valid hardware kinds:</p>
          *
@@ -441,31 +505,32 @@ public final class Actuators {
          *   <li>{@link HardwareKind#SERVO_PAIR}</li>
          * </ul>
          *
+         * @param toleranceNative acceptable error band (native units) for motors
          * @return {@link ModifiersStep} to apply modifiers and build
          */
-        public ModifiersStep position() {
+        public ModifiersStep position(double toleranceNative) {
             Plant plant;
             switch (kind) {
                 case MOTOR: {
                     PositionOutput out = FtcHardware.motorPosition(hw, nameA, invertedA);
-                    plant = Plants.position(out);
+                    plant = Plants.motorPosition(out, toleranceNative);
                     break;
                 }
                 case MOTOR_PAIR: {
                     PositionOutput outA = FtcHardware.motorPosition(hw, nameA, invertedA);
                     PositionOutput outB = FtcHardware.motorPosition(hw, nameB, invertedB);
-                    plant = Plants.positionPair(outA, outB);
+                    plant = Plants.motorPositionPair(outA, outB, toleranceNative);
                     break;
                 }
                 case SERVO: {
                     PositionOutput out = FtcHardware.servoPosition(hw, nameA, invertedA);
-                    plant = Plants.position(out);
+                    plant = Plants.servoPosition(out);
                     break;
                 }
                 case SERVO_PAIR: {
                     PositionOutput outA = FtcHardware.servoPosition(hw, nameA, invertedA);
                     PositionOutput outB = FtcHardware.servoPosition(hw, nameB, invertedB);
-                    plant = Plants.positionPair(outA, outB);
+                    plant = Plants.servoPositionPair(outA, outB);
                     break;
                 }
                 case CR_SERVO:
