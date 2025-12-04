@@ -258,7 +258,6 @@ public final class PlantTasks {
      * <pre>{@code
      * PlantTasks.configureTask(plant, target)
      *     .instant()
-     *     .thenHold()
      *     .build();
      * }</pre>
      *
@@ -271,7 +270,6 @@ public final class PlantTasks {
         Objects.requireNonNull(plant, "plant is required");
         return configureTask(plant, target)
                 .instant()
-                .thenHold()
                 .build();
     }
 
@@ -294,7 +292,8 @@ public final class PlantTasks {
      *       <li>{@link TargetTaskStart#instant()}</li>
      *     </ul>
      *   </li>
-     *   <li>What happens to the plant's target once the task is complete:
+     *   <li>What happens to the plant's target once the task is complete
+     *       (for the non-instant completion modes):
      *     <ul>
      *       <li>{@link TargetTaskPost#thenHold()}</li>
      *       <li>{@link TargetTaskPost#then(double)}</li>
@@ -357,7 +356,7 @@ public final class PlantTasks {
         /**
          * Complete immediately (in a single iteration).
          */
-        TargetTaskPost instant();
+        TargetTaskBuild instant();
     }
 
     /**
@@ -469,7 +468,7 @@ public final class PlantTasks {
         }
 
         @Override
-        public TargetTaskPost instant() {
+        public TargetTaskBuild instant() {
             this.completionMode = CompletionMode.INSTANT;
             this.waitSeconds = 0.0;
             this.timeoutSec = 0.0;

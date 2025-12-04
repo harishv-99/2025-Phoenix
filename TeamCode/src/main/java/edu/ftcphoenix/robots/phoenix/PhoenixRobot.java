@@ -10,6 +10,7 @@ import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
@@ -56,6 +57,8 @@ public final class PhoenixRobot {
     public void initTeleOp() {
 
         // --- Create mechanisms ---
+        MecanumConfig mecanumConfig = MecanumConfig.defaults();
+        mecanumConfig.maxLateralRatePerSec = 0.01;
         drivebase = Drives.mecanum(hardwareMap,
                 RobotConfig.DriveTrain.invertMotorFrontLeft,
                 RobotConfig.DriveTrain.invertMotorFrontRight,
@@ -77,36 +80,36 @@ public final class PhoenixRobot {
 
     private void createBindings() {
         bindings.onPress(gamepads.p2().y(),
-                () -> taskRunnerTeleOp.enqueue(shooter.setPusherFront()));
+                () -> taskRunnerTeleOp.enqueue(shooter.instantSetPusherFront()));
 
         bindings.onPress(gamepads.p2().a(),
-                () -> taskRunnerTeleOp.enqueue(shooter.setPusherBack()));
+                () -> taskRunnerTeleOp.enqueue(shooter.instantSetPusherBack()));
 
         bindings.whileHeld(gamepads.p2().b(),
-                () -> taskRunnerTeleOp.enqueue(shooter.startTransfer(Shooter.TransferDirection.FORWARD)),
-                () -> taskRunnerTeleOp.enqueue(shooter.stopTransfer()));
+                () -> taskRunnerTeleOp.enqueue(shooter.instantStartTransfer(Shooter.TransferDirection.FORWARD)),
+                () -> taskRunnerTeleOp.enqueue(shooter.instantStopTransfer()));
 
         bindings.whileHeld(gamepads.p2().x(),
-                () -> taskRunnerTeleOp.enqueue(shooter.startTransfer(Shooter.TransferDirection.BACKWARD)),
-                () -> taskRunnerTeleOp.enqueue(shooter.stopTransfer()));
+                () -> taskRunnerTeleOp.enqueue(shooter.instantStartTransfer(Shooter.TransferDirection.BACKWARD)),
+                () -> taskRunnerTeleOp.enqueue(shooter.instantStopTransfer()));
 
 
         bindings.toggle(gamepads.p2().rightBumper(),
                 (isOn) -> {
             if(isOn) {
-                taskRunnerTeleOp.enqueue(shooter.startShooter());
+                taskRunnerTeleOp.enqueue(shooter.instantStartShooter());
             }
 
             else {
-                taskRunnerTeleOp.enqueue(shooter.stopShooter());
+                taskRunnerTeleOp.enqueue(shooter.instantStopShooter());
             }
                 });
 
         bindings.onPress(gamepads.p2().dpadUp(),
-                () -> taskRunnerTeleOp.enqueue(shooter.increaseVelocity()));
+                () -> taskRunnerTeleOp.enqueue(shooter.instantIncreaseVelocity()));
 
         bindings.onPress(gamepads.p2().dpadDown(),
-                () -> taskRunnerTeleOp.enqueue(shooter.decreaseVelocity()));
+                () -> taskRunnerTeleOp.enqueue(shooter.instantDecreaseVelocity()));
     }
 
     public void startAny(double runtime) {
