@@ -1,6 +1,7 @@
 package edu.ftcphoenix.fw.input;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
+import edu.ftcphoenix.fw.debug.DebugSink;
 
 /**
  * Thin wrapper around an FTC {@link Gamepad} that exposes:
@@ -172,12 +173,12 @@ public final class GamepadDevice {
 
         // Axes: build them in terms of raw + calibration + deadband.
         // X passes through, Y is inverted so that "up" is positive.
-        this.leftX = Axis.of(() -> applyDeadband(calibratedStick(rawLeftX(), leftXCenter)));
-        this.leftY = Axis.of(() -> applyDeadband(calibratedStick(rawLeftY(), leftYCenter)));
+        this.leftX  = Axis.of(() -> applyDeadband(calibratedStick(rawLeftX(),  leftXCenter)));
+        this.leftY  = Axis.of(() -> applyDeadband(calibratedStick(rawLeftY(),  leftYCenter)));
         this.rightX = Axis.of(() -> applyDeadband(calibratedStick(rawRightX(), rightXCenter)));
         this.rightY = Axis.of(() -> applyDeadband(calibratedStick(rawRightY(), rightYCenter)));
 
-        this.leftTrigger = Axis.of(() -> applyDeadband(calibratedTrigger(rawLeftTrigger(), leftTriggerCenter)));
+        this.leftTrigger  = Axis.of(() -> applyDeadband(calibratedTrigger(rawLeftTrigger(),  leftTriggerCenter)));
         this.rightTrigger = Axis.of(() -> applyDeadband(calibratedTrigger(rawRightTrigger(), rightTriggerCenter)));
 
         // Buttons – same mapping as before.
@@ -186,12 +187,12 @@ public final class GamepadDevice {
         this.x = Button.of(() -> gp.x);
         this.y = Button.of(() -> gp.y);
 
-        this.leftBumper = Button.of(() -> gp.left_bumper);
+        this.leftBumper  = Button.of(() -> gp.left_bumper);
         this.rightBumper = Button.of(() -> gp.right_bumper);
 
-        this.dpadUp = Button.of(() -> gp.dpad_up);
-        this.dpadDown = Button.of(() -> gp.dpad_down);
-        this.dpadLeft = Button.of(() -> gp.dpad_left);
+        this.dpadUp    = Button.of(() -> gp.dpad_up);
+        this.dpadDown  = Button.of(() -> gp.dpad_down);
+        this.dpadLeft  = Button.of(() -> gp.dpad_left);
         this.dpadRight = Button.of(() -> gp.dpad_right);
 
         // ... initialize the rest of your buttons exactly as before ...
@@ -327,9 +328,7 @@ public final class GamepadDevice {
 
     // --- Public API: axes ---
 
-    /**
-     * Left stick X axis: -1.0 = full left, +1.0 = full right.
-     */
+    /** Left stick X axis: -1.0 = full left, +1.0 = full right. */
     public Axis leftX() {
         return leftX;
     }
@@ -352,9 +351,7 @@ public final class GamepadDevice {
         return leftY;
     }
 
-    /**
-     * Right stick X axis: -1.0 = full left, +1.0 = full right.
-     */
+    /** Right stick X axis: -1.0 = full left, +1.0 = full right. */
     public Axis rightX() {
         return rightX;
     }
@@ -377,61 +374,30 @@ public final class GamepadDevice {
         return rightY;
     }
 
-    /**
-     * Left trigger axis: 0.0 = released, 1.0 = fully pressed (after calibration and deadband).
-     */
+    /** Left trigger axis: 0.0 = released, 1.0 = fully pressed (after calibration and deadband). */
     public Axis leftTrigger() {
         return leftTrigger;
     }
 
-    /**
-     * Right trigger axis: 0.0 = released, 1.0 = fully pressed (after calibration and deadband).
-     */
+    /** Right trigger axis: 0.0 = released, 1.0 = fully pressed (after calibration and deadband). */
     public Axis rightTrigger() {
         return rightTrigger;
     }
 
     // --- Public API: buttons ---
 
-    public Button a() {
-        return a;
-    }
+    public Button a() { return a; }
+    public Button b() { return b; }
+    public Button x() { return x; }
+    public Button y() { return y; }
 
-    public Button b() {
-        return b;
-    }
+    public Button leftBumper() { return leftBumper; }
+    public Button rightBumper() { return rightBumper; }
 
-    public Button x() {
-        return x;
-    }
-
-    public Button y() {
-        return y;
-    }
-
-    public Button leftBumper() {
-        return leftBumper;
-    }
-
-    public Button rightBumper() {
-        return rightBumper;
-    }
-
-    public Button dpadUp() {
-        return dpadUp;
-    }
-
-    public Button dpadDown() {
-        return dpadDown;
-    }
-
-    public Button dpadLeft() {
-        return dpadLeft;
-    }
-
-    public Button dpadRight() {
-        return dpadRight;
-    }
+    public Button dpadUp() { return dpadUp; }
+    public Button dpadDown() { return dpadDown; }
+    public Button dpadLeft() { return dpadLeft; }
+    public Button dpadRight() { return dpadRight; }
 
     // ... expose the rest of your buttons as in the existing implementation ...
 
@@ -465,11 +431,11 @@ public final class GamepadDevice {
      * </ul>
      */
     public void calibrate() {
-        leftXCenter = rawLeftX();
-        leftYCenter = rawLeftY();
-        rightXCenter = rawRightX();
-        rightYCenter = rawRightY();
-        leftTriggerCenter = rawLeftTrigger();
+        leftXCenter        = rawLeftX();
+        leftYCenter        = rawLeftY();
+        rightXCenter       = rawRightX();
+        rightYCenter       = rawRightY();
+        leftTriggerCenter  = rawLeftTrigger();
         rightTriggerCenter = rawRightTrigger();
     }
 
@@ -493,5 +459,98 @@ public final class GamepadDevice {
      */
     public double axisDeadband() {
         return axisDeadband;
+    }
+
+    // --- Debugging ---
+
+    /**
+     * Emits diagnostic information about the current state of this
+     * {@code GamepadDevice} into the provided {@link DebugSink}.
+     *
+     * <p>
+     * The dump includes, for each axis:
+     * </p>
+     * <ul>
+     *     <li>Raw stick and trigger readings in human-friendly coordinates.</li>
+     *     <li>Current center offsets used for calibration.</li>
+     *     <li>Calibrated values before deadband.</li>
+     *     <li>Final values after deadband.</li>
+     *     <li>The current deadband setting.</li>
+     * </ul>
+     *
+     * <p>
+     * This is intended for logging or telemetry when debugging controller issues
+     * such as drift, asymmetry, or unexpected scaling.
+     * </p>
+     *
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
+     * @param prefix base key prefix, e.g. {@code "p1.gamepad"}
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "gamepad" : prefix;
+
+        double rawLX  = rawLeftX();
+        double rawLY  = rawLeftY();
+        double rawRX  = rawRightX();
+        double rawRY  = rawRightY();
+        double rawLT  = rawLeftTrigger();
+        double rawRT  = rawRightTrigger();
+
+        double calLX  = calibratedStick(rawLX, leftXCenter);
+        double calLY  = calibratedStick(rawLY, leftYCenter);
+        double calRX  = calibratedStick(rawRX, rightXCenter);
+        double calRY  = calibratedStick(rawRY, rightYCenter);
+        double calLT  = calibratedTrigger(rawLT, leftTriggerCenter);
+        double calRT  = calibratedTrigger(rawRT, rightTriggerCenter);
+
+        double outLX  = applyDeadband(calLX);
+        double outLY  = applyDeadband(calLY);
+        double outRX  = applyDeadband(calRX);
+        double outRY  = applyDeadband(calRY);
+        double outLT  = applyDeadband(calLT);
+        double outRT  = applyDeadband(calRT);
+
+        dbg.addLine(p + ": GamepadDevice");
+
+        dbg.addData(p + ".deadband", axisDeadband);
+
+        // Left stick X
+        dbg.addData(p + ".leftX.raw", rawLX)
+                .addData(p + ".leftX.center", leftXCenter)
+                .addData(p + ".leftX.calib", calLX)
+                .addData(p + ".leftX.out", outLX);
+
+        // Left stick Y
+        dbg.addData(p + ".leftY.raw", rawLY)
+                .addData(p + ".leftY.center", leftYCenter)
+                .addData(p + ".leftY.calib", calLY)
+                .addData(p + ".leftY.out", outLY);
+
+        // Right stick X
+        dbg.addData(p + ".rightX.raw", rawRX)
+                .addData(p + ".rightX.center", rightXCenter)
+                .addData(p + ".rightX.calib", calRX)
+                .addData(p + ".rightX.out", outRX);
+
+        // Right stick Y
+        dbg.addData(p + ".rightY.raw", rawRY)
+                .addData(p + ".rightY.center", rightYCenter)
+                .addData(p + ".rightY.calib", calRY)
+                .addData(p + ".rightY.out", outRY);
+
+        // Left trigger
+        dbg.addData(p + ".leftTrigger.raw", rawLT)
+                .addData(p + ".leftTrigger.center", leftTriggerCenter)
+                .addData(p + ".leftTrigger.calib", calLT)
+                .addData(p + ".leftTrigger.out", outLT);
+
+        // Right trigger
+        dbg.addData(p + ".rightTrigger.raw", rawRT)
+                .addData(p + ".rightTrigger.center", rightTriggerCenter)
+                .addData(p + ".rightTrigger.calib", calRT)
+                .addData(p + ".rightTrigger.out", outRT);
     }
 }
