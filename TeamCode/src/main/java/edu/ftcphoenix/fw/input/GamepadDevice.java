@@ -1,8 +1,6 @@
 package edu.ftcphoenix.fw.input;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
-import edu.ftcphoenix.fw.input.Axis;
-import edu.ftcphoenix.fw.input.Button;
 
 /**
  * Thin wrapper around an FTC {@link Gamepad} that exposes:
@@ -18,12 +16,41 @@ import edu.ftcphoenix.fw.input.Button;
  *     <li><b>leftY</b>:  -1.0 = full down, +1.0 = full up</li>
  *     <li><b>rightX</b>: -1.0 = full left,  +1.0 = full right</li>
  *     <li><b>rightY</b>: -1.0 = full down, +1.0 = full up</li>
+ *     <li>Triggers: 0.0 = released, 1.0 = fully pressed</li>
  * </ul>
  *
  * <p>
  * This inverts the raw FTC {@link Gamepad} Y-axis values (where pushing a stick
  * up yields a <em>negative</em> value and down yields a <em>positive</em> value) so that
- * <b>\"up\" is always positive</b> in Phoenix code. X-axis values are passed through as-is.
+ * <b>"up" is always positive</b> in Phoenix code. X-axis values are passed through as-is.
+ * </p>
+ *
+ * <h2>Axis calibration, rescaling, and deadband</h2>
+ * <p>
+ * Some gamepads do not return an exact 0.0 when the sticks are released, or may drift
+ * slightly over time. {@code GamepadDevice} supports two layers of error correction:
+ * </p>
+ * <ul>
+ *     <li><b>Center offsets</b> – a per-axis "neutral" value that is treated as 0.0.
+ *     This is set by {@link #calibrate()} and recentered so that the current readings
+ *     become the logical center.</li>
+ *     <li><b>Rescaling</b> – after recentering, axes are linearly rescaled so that the
+ *     full mechanical travel still maps to the full logical range:
+ *     <ul>
+ *         <li>Sticks: [-1.0, +1.0]</li>
+ *         <li>Triggers: [0.0, 1.0]</li>
+ *     </ul>
+ *     For example, if a stick is slightly off-center at rest, pushing it fully to the
+ *     edge will still yield values near -1.0 or +1.0 after calibration.</li>
+ *     <li><b>Deadband</b> – any corrected value whose magnitude is below
+ *     {@link #axisDeadband()} is treated as exactly 0.0. This filters out small noise
+ *     around center even after calibration and rescaling.</li>
+ * </ul>
+ *
+ * <p>
+ * On construction, {@link #calibrate()} is called automatically, so in the typical case
+ * users do not need to call any extra methods. The calibration method remains public so
+ * you can re-calibrate later if a gamepad starts to drift during a match.
  * </p>
  *
  * <h2>Typical usage</h2>
@@ -93,12 +120,31 @@ import edu.ftcphoenix.fw.input.Button;
  *
  * <p>
  * The intent is that all raw controller access goes through {@link Gamepads} /
- * {@code GamepadDevice}, and all \"which button does what\" logic lives in a
+ * {@code GamepadDevice}, and all "which button does what" logic lives in a
  * single {@code configureBindings()} method on your robot.
  * </p>
  */
 public final class GamepadDevice {
+    /**
+     * Default deadband applied to all axes after calibration. Values whose absolute
+     * magnitude is below this threshold are treated as exactly 0.0.
+     */
+    public static final double DEFAULT_AXIS_DEADBAND = 0.02;
+
+    private static final double MIN_SCALE = 1e-3; // protect against division by zero
+
     private final Gamepad gp;
+
+    // Per-axis center offsets in "human-friendly" coordinates (after Y inversion).
+    private double leftXCenter = 0.0;
+    private double leftYCenter = 0.0;
+    private double rightXCenter = 0.0;
+    private double rightYCenter = 0.0;
+    private double leftTriggerCenter = 0.0;
+    private double rightTriggerCenter = 0.0;
+
+    // Deadband applied to all corrected axis values.
+    private double axisDeadband = DEFAULT_AXIS_DEADBAND;
 
     // Axes
     private final Axis leftX;
@@ -124,14 +170,15 @@ public final class GamepadDevice {
     public GamepadDevice(Gamepad gp) {
         this.gp = gp;
 
-        // Axes: X passes through, Y is inverted so that "up" is positive.
-        this.leftX  = Axis.of(() -> gp.left_stick_x);
-        this.leftY  = Axis.of(() -> -gp.left_stick_y);   // NOTE: inverted
-        this.rightX = Axis.of(() -> gp.right_stick_x);
-        this.rightY = Axis.of(() -> -gp.right_stick_y);   // NOTE: inverted
+        // Axes: build them in terms of raw + calibration + deadband.
+        // X passes through, Y is inverted so that "up" is positive.
+        this.leftX = Axis.of(() -> applyDeadband(calibratedStick(rawLeftX(), leftXCenter)));
+        this.leftY = Axis.of(() -> applyDeadband(calibratedStick(rawLeftY(), leftYCenter)));
+        this.rightX = Axis.of(() -> applyDeadband(calibratedStick(rawRightX(), rightXCenter)));
+        this.rightY = Axis.of(() -> applyDeadband(calibratedStick(rawRightY(), rightYCenter)));
 
-        this.leftTrigger  = Axis.of(() -> gp.left_trigger);
-        this.rightTrigger = Axis.of(() -> gp.right_trigger);
+        this.leftTrigger = Axis.of(() -> applyDeadband(calibratedTrigger(rawLeftTrigger(), leftTriggerCenter)));
+        this.rightTrigger = Axis.of(() -> applyDeadband(calibratedTrigger(rawRightTrigger(), rightTriggerCenter)));
 
         // Buttons – same mapping as before.
         this.a = Button.of(() -> gp.a);
@@ -139,18 +186,150 @@ public final class GamepadDevice {
         this.x = Button.of(() -> gp.x);
         this.y = Button.of(() -> gp.y);
 
-        this.leftBumper  = Button.of(() -> gp.left_bumper);
+        this.leftBumper = Button.of(() -> gp.left_bumper);
         this.rightBumper = Button.of(() -> gp.right_bumper);
 
-        this.dpadUp    = Button.of(() -> gp.dpad_up);
-        this.dpadDown  = Button.of(() -> gp.dpad_down);
-        this.dpadLeft  = Button.of(() -> gp.dpad_left);
+        this.dpadUp = Button.of(() -> gp.dpad_up);
+        this.dpadDown = Button.of(() -> gp.dpad_down);
+        this.dpadLeft = Button.of(() -> gp.dpad_left);
         this.dpadRight = Button.of(() -> gp.dpad_right);
 
         // ... initialize the rest of your buttons exactly as before ...
+
+        // Automatically treat the current stick/trigger positions as neutral and
+        // configure scaling so we still reach the full logical range.
+        calibrate();
     }
 
-    /** Left stick X axis: -1.0 = full left, +1.0 = full right. */
+    // --- Raw axis helpers in human-friendly coordinates ---
+
+    /**
+     * Raw left stick X in human-friendly coordinates: -1.0 = left, +1.0 = right.
+     */
+    private double rawLeftX() {
+        return gp.left_stick_x;
+    }
+
+    /**
+     * Raw left stick Y in human-friendly coordinates: -1.0 = down, +1.0 = up.
+     * The FTC SDK reports up as negative, so we invert here.
+     */
+    private double rawLeftY() {
+        return -gp.left_stick_y;
+    }
+
+    /**
+     * Raw right stick X in human-friendly coordinates: -1.0 = left, +1.0 = right.
+     */
+    private double rawRightX() {
+        return gp.right_stick_x;
+    }
+
+    /**
+     * Raw right stick Y in human-friendly coordinates: -1.0 = down, +1.0 = up.
+     */
+    private double rawRightY() {
+        return -gp.right_stick_y;
+    }
+
+    /**
+     * Raw left trigger in human-friendly coordinates: 0.0 = released, 1.0 = fully pressed.
+     */
+    private double rawLeftTrigger() {
+        return gp.left_trigger;
+    }
+
+    /**
+     * Raw right trigger in human-friendly coordinates: 0.0 = released, 1.0 = fully pressed.
+     */
+    private double rawRightTrigger() {
+        return gp.right_trigger;
+    }
+
+    // --- Calibration math ---
+
+    /**
+     * Calibrates a stick axis (range [-1, +1]) given the current raw value and
+     * stored center.
+     *
+     * <p>
+     * We do a piecewise linear rescaling so that:
+     * </p>
+     * <ul>
+     *     <li>{@code raw == center} maps to 0.0</li>
+     *     <li>{@code raw == +1.0} maps to +1.0</li>
+     *     <li>{@code raw == -1.0} maps to -1.0</li>
+     * </ul>
+     *
+     * <p>
+     * Positive and negative sides can have slightly different scale factors if
+     * the center is not exactly 0.0, but the mapping is continuous at the center.
+     * </p>
+     */
+    private double calibratedStick(double raw, double center) {
+        if (raw == center) {
+            return 0.0;
+        }
+
+        final double scale;
+        if (raw > center) {
+            // Map [center, +1] → [0, +1]
+            scale = Math.max(MIN_SCALE, 1.0 - center);
+        } else {
+            // Map [-1, center] → [-1, 0]
+            scale = Math.max(MIN_SCALE, 1.0 + center);
+        }
+
+        double value = (raw - center) / scale;
+
+        // Clamp to [-1, +1] in case of slight overshoot or odd gamepad behaviour.
+        if (value > 1.0) value = 1.0;
+        if (value < -1.0) value = -1.0;
+        return value;
+    }
+
+    /**
+     * Calibrates a trigger axis (range [0, +1]) given the current raw value and
+     * stored center.
+     *
+     * <p>
+     * We treat {@code center} as the logical 0.0 and rescale so that:
+     * </p>
+     * <ul>
+     *     <li>{@code raw == center} maps to 0.0</li>
+     *     <li>{@code raw == +1.0} maps to +1.0</li>
+     * </ul>
+     *
+     * <p>
+     * Values below the center (which can occur due to noise) are clamped at 0.0.
+     * </p>
+     */
+    private double calibratedTrigger(double raw, double center) {
+        double scale = Math.max(MIN_SCALE, 1.0 - center);
+        double value = (raw - center) / scale;
+
+        if (value < 0.0) value = 0.0;
+        if (value > 1.0) value = 1.0;
+        return value;
+    }
+
+    /**
+     * Applies the current deadband to a corrected axis value.
+     * Values whose absolute magnitude is below {@link #axisDeadband} are treated as 0.0.
+     * <p>
+     * For triggers (which are non-negative), this simply means very small values
+     * near zero are forced to 0.0.
+     * </p>
+     */
+    private double applyDeadband(double value) {
+        return (Math.abs(value) < axisDeadband) ? 0.0 : value;
+    }
+
+    // --- Public API: axes ---
+
+    /**
+     * Left stick X axis: -1.0 = full left, +1.0 = full right.
+     */
     public Axis leftX() {
         return leftX;
     }
@@ -160,13 +339,22 @@ public final class GamepadDevice {
      *
      * <p>This inverts the raw FTC {@link Gamepad#left_stick_y} (which is
      * negative when pushed up) so that pushing the stick up yields a
-     * <b>positive</b> value and pushing it down yields a <b>negative</b> value.</p>
+     * <b>positive</b> value and pushing it down yields a <b>negative</b> value.
+     * The reported value is then:
+     * </p>
+     * <ul>
+     *     <li>recentred using the current calibration offset (set by {@link #calibrate()}),</li>
+     *     <li>rescaled so that full travel still maps to [-1, +1], and</li>
+     *     <li>filtered through the current deadband.</li>
+     * </ul>
      */
     public Axis leftY() {
         return leftY;
     }
 
-    /** Right stick X axis: -1.0 = full left, +1.0 = full right. */
+    /**
+     * Right stick X axis: -1.0 = full left, +1.0 = full right.
+     */
     public Axis rightX() {
         return rightX;
     }
@@ -176,32 +364,134 @@ public final class GamepadDevice {
      *
      * <p>This inverts the raw FTC {@link Gamepad#right_stick_y} (which is
      * negative when pushed up) so that pushing the stick up yields a
-     * <b>positive</b> value and pushing it down yields a <b>negative</b> value.</p>
+     * <b>positive</b> value and pushing it down yields a <b>negative</b> value.
+     * The reported value is then:
+     * </p>
+     * <ul>
+     *     <li>recentred using the current calibration offset (set by {@link #calibrate()}),</li>
+     *     <li>rescaled so that full travel still maps to [-1, +1], and</li>
+     *     <li>filtered through the current deadband.</li>
+     * </ul>
      */
     public Axis rightY() {
         return rightY;
     }
 
+    /**
+     * Left trigger axis: 0.0 = released, 1.0 = fully pressed (after calibration and deadband).
+     */
     public Axis leftTrigger() {
         return leftTrigger;
     }
 
+    /**
+     * Right trigger axis: 0.0 = released, 1.0 = fully pressed (after calibration and deadband).
+     */
     public Axis rightTrigger() {
         return rightTrigger;
     }
 
-    public Button a() { return a; }
-    public Button b() { return b; }
-    public Button x() { return x; }
-    public Button y() { return y; }
+    // --- Public API: buttons ---
 
-    public Button leftBumper() { return leftBumper; }
-    public Button rightBumper() { return rightBumper; }
+    public Button a() {
+        return a;
+    }
 
-    public Button dpadUp() { return dpadUp; }
-    public Button dpadDown() { return dpadDown; }
-    public Button dpadLeft() { return dpadLeft; }
-    public Button dpadRight() { return dpadRight; }
+    public Button b() {
+        return b;
+    }
+
+    public Button x() {
+        return x;
+    }
+
+    public Button y() {
+        return y;
+    }
+
+    public Button leftBumper() {
+        return leftBumper;
+    }
+
+    public Button rightBumper() {
+        return rightBumper;
+    }
+
+    public Button dpadUp() {
+        return dpadUp;
+    }
+
+    public Button dpadDown() {
+        return dpadDown;
+    }
+
+    public Button dpadLeft() {
+        return dpadLeft;
+    }
+
+    public Button dpadRight() {
+        return dpadRight;
+    }
 
     // ... expose the rest of your buttons as in the existing implementation ...
+
+    // --- Calibration / deadband configuration ---
+
+    /**
+     * Calibrates all analog axes (sticks and triggers) by treating their <b>current</b>
+     * positions as neutral.
+     *
+     * <p>
+     * This method is called once automatically from the constructor, so in the
+     * typical case users do not need to call it themselves. It remains public so
+     * you can re-calibrate later (for example, if a gamepad starts to drift during
+     * a match or you suspect it was bumped during {@code init()}).
+     * </p>
+     *
+     * <p>
+     * Internally this method:
+     * </p>
+     * <ul>
+     *     <li>Reads the current raw values for left/right sticks and triggers,
+     *     after converting them into human-friendly coordinates.</li>
+     *     <li>Saves those readings as per-axis "center" offsets.</li>
+     *     <li>Subsequent calls to {@link Axis#get()} for these axes will:
+     *         <ul>
+     *             <li>subtract this center value,</li>
+     *             <li>rescale so that full travel still maps to the full logical range, and</li>
+     *             <li>apply the configured deadband.</li>
+     *         </ul>
+     *     </li>
+     * </ul>
+     */
+    public void calibrate() {
+        leftXCenter = rawLeftX();
+        leftYCenter = rawLeftY();
+        rightXCenter = rawRightX();
+        rightYCenter = rawRightY();
+        leftTriggerCenter = rawLeftTrigger();
+        rightTriggerCenter = rawRightTrigger();
+    }
+
+    /**
+     * Sets the deadband used for all axes.
+     *
+     * <p>
+     * Any corrected axis value (after subtracting the calibration offset and rescaling)
+     * whose absolute magnitude is below this threshold will be reported as exactly 0.0.
+     * Use a slightly larger deadband if your gamepad is noisy around center.
+     * </p>
+     *
+     * @param deadband new deadband threshold in the range [0.0, 1.0].
+     */
+    public void setAxisDeadband(double deadband) {
+        this.axisDeadband = Math.max(0.0, Math.min(1.0, deadband));
+    }
+
+    /**
+     * Returns the current axis deadband.
+     */
+    public double axisDeadband() {
+        return axisDeadband;
+    }
 }
