@@ -53,27 +53,27 @@ public class Shooter {
         velocity = RobotConfig.Shooter.velocityMin;
     }
 
-    public Task increaseVelocity() {
+    public Task instantIncreaseVelocity() {
         velocity += RobotConfig.Shooter.velocityIncrement;
         velocity = MathUtil.clamp(velocity,
                 RobotConfig.Shooter.velocityMin,
                 RobotConfig.Shooter.velocityMax);
 
         if (isShooterOn) {
-            return startShooter();
+            return instantStartShooter();
         }
 
         return Tasks.noop();
     }
 
-    public Task decreaseVelocity() {
+    public Task instantDecreaseVelocity() {
         velocity -= RobotConfig.Shooter.velocityIncrement;
         velocity = MathUtil.clamp(velocity,
                 RobotConfig.Shooter.velocityMin,
                 RobotConfig.Shooter.velocityMax);
 
         if (isShooterOn) {
-            return startShooter();
+            return instantStartShooter();
         }
 
         return Tasks.noop();
@@ -83,33 +83,33 @@ public class Shooter {
         return velocity;
     }
 
-    public Task startShooter() {
+    public Task instantStartShooter() {
         isShooterOn = true;
-        PlantTasks.configureTask(plantShooter, 400)
-                .waitForSetpoint()
-                .thenHold()
-                .build();
         return PlantTasks.setInstant(plantShooter, velocity);
     }
 
-    public Task stopShooter() {
+    public Task instantStopShooter() {
         isShooterOn = false;
         return PlantTasks.setInstant(plantShooter, 0);
     }
 
-    public Task setPusherBack() {
-        return PlantTasks.holdFor(plantPusher,
-                RobotConfig.Shooter.targetPusherBack,
-                0.5);
+    public Task instantSetPusherBack() {
+//        return PlantTasks.holdFor(plantPusher,
+//                RobotConfig.Shooter.targetPusherBack,
+//                0.5);
+        return PlantTasks.setInstant(plantPusher,
+                RobotConfig.Shooter.targetPusherBack);
     }
 
-    public Task setPusherFront() {
-        return PlantTasks.holdFor(plantPusher,
-                RobotConfig.Shooter.targetPusherFront,
-                0.5);
+    public Task instantSetPusherFront() {
+//        return PlantTasks.holdFor(plantPusher,
+//                RobotConfig.Shooter.targetPusherFront,
+//                0.5);
+        return PlantTasks.setInstant(plantPusher,
+                RobotConfig.Shooter.targetPusherFront);
     }
 
-    public Task startTransfer(TransferDirection direction) {
+    public Task instantStartTransfer(TransferDirection direction) {
         switch (direction) {
             case FORWARD:
                 return PlantTasks.setInstant(plantTransfer, 1);
@@ -120,7 +120,7 @@ public class Shooter {
         throw new IllegalArgumentException("Unknown direction provided!!!");
     }
 
-    public Task stopTransfer() {
+    public Task instantStopTransfer() {
         return PlantTasks.setInstant(plantTransfer, 0);
     }
 }
