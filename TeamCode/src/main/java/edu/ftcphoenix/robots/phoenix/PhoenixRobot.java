@@ -5,7 +5,12 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 import edu.ftcphoenix.fw.adapters.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.adapters.ftc.FtcVision;
 import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
@@ -15,6 +20,9 @@ import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
+import edu.ftcphoenix.fw.sensing.AprilTagObservation;
+import edu.ftcphoenix.fw.sensing.AprilTagSensor;
+import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.util.LoopClock;
 
@@ -43,6 +51,21 @@ public final class PhoenixRobot {
     private Shooter shooter;
     private MecanumDrivebase drivebase;
     private DriveSource stickDrive;
+    private DriveSource driveWithAim;
+    private AprilTagSensor tagSensor;
+
+    // ----------------------------------------------------------------------
+    // Tag IDs we care about (example values; adjust per game) – Java 8 style
+    // ----------------------------------------------------------------------
+
+    private static final Set<Integer> SCORING_TAG_IDS;
+
+    static {
+        HashSet<Integer> ids = new HashSet<Integer>();
+        ids.add(20);
+        ids.add(24);
+        SCORING_TAG_IDS = Collections.unmodifiableSet(ids);
+    }
 
     public PhoenixRobot(HardwareMap hardwareMap, Telemetry telemetry, Gamepad gamepad1, Gamepad gamepad2) {
         this.hardwareMap = hardwareMap;
@@ -70,7 +93,22 @@ public final class PhoenixRobot {
         // --- Use the standard TeleOp stick mapping for mecanum.
         stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
-        telemetry.addLine("FW Example 01: Mecanum Basic");
+        // ---
+        tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
+
+        // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
+        TagAim.Config aimConfig = TagAim.Config.defaults();
+        aimConfig.kp = 1;
+        aimConfig.deadbandDeg = 0.25;
+        driveWithAim = TagAim.teleOpAim(
+                stickDrive,
+                gamepads.p2().leftBumper(),
+                tagSensor,
+                SCORING_TAG_IDS,
+                aimConfig
+        );
+
+        telemetry.addLine("Phoenix TeleOp with AutoAim");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");
         telemetry.update();
 
@@ -138,7 +176,7 @@ public final class PhoenixRobot {
         }
 
         // --- 4) Drive: TagAim-wrapped drive source (LB may override omega) ---
-        DriveSignal cmd = stickDrive.get(clock);
+        DriveSignal cmd = driveWithAim.get(clock);
         drivebase.drive(cmd);
         drivebase.update(clock);
 
@@ -147,6 +185,13 @@ public final class PhoenixRobot {
 
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
+        driveWithAim.debugDump(dbg, "driveWAim");
+        AprilTagObservation obs = tagSensor.best(Set.of(20, 24), 0.5);
+        if (obs.hasTarget) {
+            telemetry.addData("id", obs.id);
+            telemetry.addData("dist", obs.rangeInches);
+        }
+
         telemetry.update();
     }
 
