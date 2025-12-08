@@ -10,6 +10,7 @@ import edu.ftcphoenix.fw.actuation.PlantTasks;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.task.Tasks;
+import edu.ftcphoenix.fw.util.InterpolatingTable1D;
 import edu.ftcphoenix.fw.util.MathUtil;
 
 public class Shooter {
@@ -25,6 +26,35 @@ public class Shooter {
 
     private double velocity;
     private boolean isShooterOn;
+
+    // ----------------------------------------------------------------------
+    // Calibration table: distance (in) → shooter velocity (native units)
+    // ----------------------------------------------------------------------
+
+    /**
+     * Shooter velocity table built from sorted (distance, velocity) pairs.
+     */
+    private static final InterpolatingTable1D SHOOTER_VELOCITY_TABLE =
+            InterpolatingTable1D.ofSortedPairs(
+                    42, 0,
+                    45.8, 1600,
+                    47, 1600,
+                    49.9, 1550,
+                    56.6, 1550,
+                    66.5, 1550,
+                    76.6, 1600,
+                    83.4, 1600,
+                    94.5, 1650,
+                    103.8, 1650,
+                    112.4, 1700,
+                    123.5, 1750,
+                    125.2, 1750,
+                    132.5, 1750,
+                    137.4, 1800,
+                    141.4, 1850,
+                    148.6, 1850
+            );
+
 
     public Shooter(HardwareMap hardwareMap, Telemetry telemetry, Gamepads gamepads) {
         plantPusher = Actuators.plant(hardwareMap)
@@ -46,7 +76,7 @@ public class Shooter {
                         RobotConfig.Shooter.invertMotorShooterLeft,
                         RobotConfig.Shooter.nameMotorShooterRight,
                         RobotConfig.Shooter.invertMotorShooterRight)
-                .velocity(100)
+                .velocity(50)
                 .build();
 
         isShooterOn = false;
