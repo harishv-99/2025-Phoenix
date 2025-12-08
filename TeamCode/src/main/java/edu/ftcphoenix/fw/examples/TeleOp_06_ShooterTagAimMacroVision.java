@@ -22,6 +22,7 @@ import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.TagAim;
+import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.task.ParallelAllTask;
 import edu.ftcphoenix.fw.task.SequenceTask;
 import edu.ftcphoenix.fw.task.Task;
@@ -39,7 +40,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *       {@link GamepadDriveSource#teleOpMecanumStandard(Gamepads)}.</li>
  *   <li><b>Tag-based auto-aim</b> via
  *       {@link TagAim#teleOpAim(DriveSource, edu.ftcphoenix.fw.input.Button,
- *       AprilTagSensor, Set)} – hold LB to face a scoring tag.</li>
+ *       TagTarget)} – hold LB to face a scoring tag.</li>
  *   <li><b>Vision-based shooter velocity</b>: AprilTag distance →
  *       {@link InterpolatingTable1D} → shooter velocity (native units).</li>
  *   <li><b>One-button shoot macro</b> (shooter + transfer + pusher)
@@ -161,6 +162,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
     private DriveSource driveWithAim;
 
     private AprilTagSensor tagSensor;
+    private TagTarget scoringTarget;
 
     private Plant shooter;
     private Plant transfer;
@@ -201,12 +203,14 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         // Robot Configuration.
         tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
 
+        // Track scoring tags with a freshness window.
+        scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
+
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
         driveWithAim = TagAim.teleOpAim(
                 baseDrive,
                 gamepads.p1().leftBumper(),
-                tagSensor,
-                SCORING_TAG_IDS
+                scoringTarget
         );
 
         // 4) Mechanism wiring using Actuators.
@@ -282,7 +286,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
         // --- 4) Vision: observe tags for telemetry and future macros ---
 
-        AprilTagObservation obs = tagSensor.best(SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
+        scoringTarget.update();
+        AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
         lastTagRangeInches = obs.rangeInches;
         lastTagBearingRad = obs.bearingRad;
@@ -345,7 +350,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
             return;
         }
 
-        AprilTagObservation obs = tagSensor.best(SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
+        AprilTagObservation obs = scoringTarget.last();
         if (!obs.hasTarget) {
             lastMacroStatus = "no tag: macro not started";
             return;
@@ -408,16 +413,22 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
                 PUSHER_STAGE_SEC
         );
 
-        Task pusherShoot = PlantTasks.holdForThen(
+        Task pusherShoot = PlantTasks.holdFor(
                 pusher,
                 PUSHER_POS_SHOOT,
-                PUSHER_STAGE_SEC,
-                PUSHER_POS_RETRACT
+                PUSHER_STAGE_SEC
+        );
+
+        Task pusherRetract = PlantTasks.holdFor(
+                pusher,
+                PUSHER_POS_RETRACT,
+                PUSHER_STAGE_SEC
         );
 
         Task feedPusher = SequenceTask.of(
                 pusherLoad,
-                pusherShoot
+                pusherShoot,
+                pusherRetract
         );
 
         Task feedBoth = ParallelAllTask.of(

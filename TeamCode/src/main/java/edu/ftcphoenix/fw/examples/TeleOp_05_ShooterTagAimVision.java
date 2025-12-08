@@ -21,6 +21,7 @@ import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.TagAim;
+import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.util.InterpolatingTable1D;
 import edu.ftcphoenix.fw.util.LoopClock;
 
@@ -71,13 +72,22 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
      */
     private static final InterpolatingTable1D SHOOTER_VELOCITY_TABLE =
             InterpolatingTable1D.ofSortedPairs(
-                    24.0, 170.0,  // close shot
-                    30.0, 180.0,
-                    36.0, 195.0,
-                    42.0, 210.0,
-                    48.0, 225.0   // farther shot
+                    // Example calibration data (distanceInches, velocityNative):
+                    24.0, 3500.0,
+                    30.0, 3600.0,
+                    36.0, 3700.0,
+                    42.0, 3800.0,
+                    48.0, 3900.0
             );
 
+    // ----------------------------------------------------------------------
+    // Tag age constraint
+    // ----------------------------------------------------------------------
+
+    /**
+     * Maximum age (seconds) for a tag observation to be considered valid for
+     * shooter distance and aiming.
+     */
     private static final double MAX_TAG_AGE_SEC = 0.5;
 
     // ----------------------------------------------------------------------
@@ -116,6 +126,8 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     private AprilTagSensor tagSensor;
 
+    private TagTarget scoringTarget;
+
     private Plant shooter;
 
     private boolean shooterEnabled = false;
@@ -151,12 +163,14 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         // Robot Configuration.
         tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
 
+        // Track scoring tags with a freshness window.
+        scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
+
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
         driveWithAim = TagAim.teleOpAim(
                 baseDrive,
                 gamepads.p1().leftBumper(),
-                tagSensor,
-                SCORING_TAG_IDS
+                scoringTarget
         );
 
         // 4) Shooter wiring using Actuators.
@@ -200,6 +214,9 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         gamepads.update(dtSec);
         bindings.update(dtSec);
 
+        // Update tracked tag once per loop.
+        scoringTarget.update();
+
         // --- 3) Drive: TagAim-wrapped drive source ---
         DriveSignal cmd = driveWithAim.get(clock).clamped();
         lastDrive = cmd;
@@ -209,7 +226,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // --- 4) Vision-based distance → shooter velocity ---
 
-        AprilTagObservation obs = tagSensor.best(SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
+        AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
         lastTagRangeInches = obs.rangeInches;
         lastTagBearingRad = obs.bearingRad;

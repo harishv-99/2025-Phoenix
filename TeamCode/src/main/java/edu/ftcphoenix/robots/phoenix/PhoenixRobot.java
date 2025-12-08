@@ -23,6 +23,7 @@ import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.TagAim;
+import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.util.LoopClock;
 
@@ -53,6 +54,8 @@ public final class PhoenixRobot {
     private DriveSource stickDrive;
     private DriveSource driveWithAim;
     private AprilTagSensor tagSensor;
+    private TagTarget scoringTarget;
+
 
     // ----------------------------------------------------------------------
     // Tag IDs we care about (example values; adjust per game) – Java 8 style
@@ -96,16 +99,17 @@ public final class PhoenixRobot {
         // ---
         tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
 
+        // Track scoring tags with a freshness window.
+        scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, 0.5);
+
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
         TagAim.Config aimConfig = TagAim.Config.defaults();
         aimConfig.kp = 1;
-        aimConfig.deadbandDeg = 0.25;
+        aimConfig.deadbandRad = Math.toRadians(0.25);
         driveWithAim = TagAim.teleOpAim(
                 stickDrive,
                 gamepads.p2().leftBumper(),
-                tagSensor,
-                SCORING_TAG_IDS,
-                aimConfig
+                scoringTarget
         );
 
         telemetry.addLine("Phoenix TeleOp with AutoAim");
@@ -168,6 +172,9 @@ public final class PhoenixRobot {
         gamepads.update(clock.dtSec());
         bindings.update(clock.dtSec());
 
+        // Update tracked tag once per loop.
+        scoringTarget.update();
+
         // --- 3) TeleOp Macros ---
         taskRunnerTeleOp.update(clock);
 
@@ -186,7 +193,7 @@ public final class PhoenixRobot {
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
         driveWithAim.debugDump(dbg, "driveWAim");
-        AprilTagObservation obs = tagSensor.best(Set.of(20, 24), 0.5);
+        AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
             telemetry.addData("id", obs.id);
             telemetry.addData("dist", obs.rangeInches);
