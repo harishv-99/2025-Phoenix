@@ -46,8 +46,6 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   <li><b>One-button shoot macro</b> (shooter + transfer + pusher)
  *       using {@link TaskRunner} and {@link PlantTasks}.</li>
  * </ol>
- * <p>
- * <hr/>
  *
  * <h2>Driver behavior</h2>
  *
@@ -64,11 +62,11 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *     <ul>
  *       <li>P1 Y: run “shoot one ball” macro:
  *         <ol>
- *           <li>Read current tag distance.</li>
- *           <li>Look up shooter velocity from table.</li>
+ *           <li>Read current tag distance from {@link TagTarget}.</li>
+ *           <li>Look up shooter velocity from {@link #SHOOTER_VELOCITY_TABLE}.</li>
  *           <li>Spin up shooter and wait for atSetpoint (with timeout).</li>
  *           <li>Feed one ball using transfer + pusher in parallel.</li>
- *           <li>Spin shooter down to 0.</li>
+ *           <li>Hold briefly, then spin shooter down to 0.</li>
  *         </ol>
  *       </li>
  *       <li>P1 B: cancel macro and stop shooter/transfer/pusher.</li>
@@ -104,6 +102,10 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
                     48.0, 225.0   // farther shot
             );
 
+    /**
+     * Maximum age (seconds) for a tag observation to be considered valid for
+     * shooting decisions.
+     */
     private static final double MAX_TAG_AGE_SEC = 0.5;
 
     // ----------------------------------------------------------------------
@@ -266,27 +268,52 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
     @Override
     public void loop() {
-        // --- 1) Clock ---
+        // ------------------------------------------------------------------
+        // 1) Clock
+        // ------------------------------------------------------------------
         clock.update(getRuntime());
         double dtSec = clock.dtSec();
 
-        // --- 2) Inputs + bindings ---
-        gamepads.update(dtSec);
+        // ------------------------------------------------------------------
+        // 2) Sense (inputs & sensors)
+        // ------------------------------------------------------------------
+        gamepads.update(dtSec);      // controller state
+        scoringTarget.update();      // AprilTags via TagTarget
+
+        // ------------------------------------------------------------------
+        // 3) Decide (high-level logic)
+        // ------------------------------------------------------------------
+        // User-input–driven decisions (may start/cancel macros).
         bindings.update(dtSec);
 
-        // --- 3) Macros: update TaskRunner (shooter/transfer/pusher) ---
+        // High-level task/macro logic (sets plant targets over time).
         macroRunner.update(clock);
 
-        // When no macro is active, hold a safe default state.
+        // When no macro is active, choose safe default targets.
         if (!macroRunner.hasActiveTask()) {
             shooter.setTarget(0.0);
             transfer.setTarget(0.0);
             pusher.setTarget(PUSHER_POS_RETRACT);
         }
 
-        // --- 4) Vision: observe tags for telemetry and future macros ---
+        // ------------------------------------------------------------------
+        // 4) Control / Actuate (subsystems)
+        // ------------------------------------------------------------------
+        // Drive: TagAim-wrapped drive source (LB may override omega).
+        DriveSignal cmd = driveWithAim.get(clock).clamped();
+        lastDrive = cmd;
 
-        scoringTarget.update();
+        drivebase.drive(cmd);
+        drivebase.update(clock);
+
+        // Plants: shooter, transfer, pusher.
+        shooter.update(dtSec);
+        transfer.update(dtSec);
+        pusher.update(dtSec);
+
+        // ------------------------------------------------------------------
+        // 5) Report (telemetry only; no behavior changes)
+        // ------------------------------------------------------------------
         AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
         lastTagRangeInches = obs.rangeInches;
@@ -294,19 +321,6 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         lastTagAgeSec = obs.ageSec;
         lastTagId = obs.id;
 
-        // --- 5) Drive: TagAim-wrapped drive source (LB may override omega) ---
-        DriveSignal cmd = driveWithAim.get(clock).clamped();
-        lastDrive = cmd;
-
-        drivebase.drive(cmd);
-        drivebase.update(clock);
-
-        // --- 6) Mechanism updates ---
-        shooter.update(dtSec);
-        transfer.update(dtSec);
-        pusher.update(dtSec);
-
-        // --- 7) Telemetry ---
         telemetry.addLine("FW Example 06: Shooter TagAim Macro Vision");
 
         telemetry.addLine("Drive (axial / lateral / omega)")
@@ -388,6 +402,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
      * </ol>
      *
      * @param shooterTargetVel target shooter velocity in native units
+     * @return a {@link Task} representing the macro
      */
     private Task buildShootOneBallMacro(double shooterTargetVel) {
         // Step 1: set shooter target and wait for atSetpoint() or timeout.

@@ -206,26 +206,20 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     @Override
     public void loop() {
-        // --- 1) Clock ---
+        // 1) Clock
         clock.update(getRuntime());
         double dtSec = clock.dtSec();
 
-        // --- 2) Inputs + bindings ---
+        // 2) Sense (inputs & sensors)
         gamepads.update(dtSec);
+        scoringTarget.update();      // TagTarget → AprilTagSensor.best(...)
+
+        // 3) Decide (high-level logic)
+
+        // User-input driven decisions (e.g., shooterEnabled toggle on A)
         bindings.update(dtSec);
 
-        // Update tracked tag once per loop.
-        scoringTarget.update();
-
-        // --- 3) Drive: TagAim-wrapped drive source ---
-        DriveSignal cmd = driveWithAim.get(clock).clamped();
-        lastDrive = cmd;
-
-        drivebase.drive(cmd);
-        drivebase.update(clock);
-
-        // --- 4) Vision-based distance → shooter velocity ---
-
+        // Vision-based shooter target decision
         AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
         lastTagRangeInches = obs.rangeInches;
@@ -242,9 +236,19 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
             shooter.setTarget(0.0);
         }
 
+        // 4) Control / Actuate (subsystems)
+
+        // Drive: TagAim-wrapped drive source
+        DriveSignal cmd = driveWithAim.get(clock).clamped();
+        lastDrive = cmd;
+
+        drivebase.drive(cmd);
+        drivebase.update(clock);
+
+        // Shooter plant executes whatever target we just decided above
         shooter.update(dtSec);
 
-        // --- 5) Telemetry ---
+        // 5) Report (telemetry only, no behavior changes)
         telemetry.addLine("FW Example 05: Shooter TagAim Vision");
 
         telemetry.addLine("Drive (axial / lateral / omega)")

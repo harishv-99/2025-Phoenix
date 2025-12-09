@@ -75,7 +75,5 @@ public interface Task {
      *
      * @return the current outcome for this task
      */
-    default TaskOutcome getOutcome() {
-        return TaskOutcome.UNKNOWN;
-    }
+    TaskOutcome getOutcome();
 }

@@ -61,6 +61,10 @@ public final class Tasks {
      * <pre>{@code
      * return shouldShoot ? createShootMacro() : Tasks.noop();
      * }</pre>
+     *
+     * <p>Outcome semantics: this task reports
+     * {@link TaskOutcome#SUCCESS} as soon as it is created, since there
+     * is no failure mode.</p>
      */
     public static Task noop() {
         return new Task() {
@@ -78,6 +82,12 @@ public final class Tasks {
             public boolean isComplete() {
                 return true;
             }
+
+            @Override
+            public TaskOutcome getOutcome() {
+                // A no-op task is always considered a successful no-op.
+                return TaskOutcome.SUCCESS;
+            }
         };
     }
 
@@ -94,13 +104,29 @@ public final class Tasks {
      * Create a {@link Task} that waits until a condition becomes {@code true}.
      *
      * <p>This wraps {@link WaitUntilTask} with no timeout. If the condition
-     * can get stuck, consider constructing a {@link WaitUntilTask} directly
-     * with a timeout.</p>
+     * can get stuck, prefer {@link #waitUntil(BooleanSupplier, double)} or
+     * construct a {@link WaitUntilTask} directly with a timeout.</p>
      *
      * @param condition condition to wait for
      */
     public static Task waitUntil(BooleanSupplier condition) {
         return new WaitUntilTask(condition);
+    }
+
+    /**
+     * Create a {@link Task} that waits until a condition becomes {@code true},
+     * but gives up if it takes longer than the given timeout.
+     *
+     * <p>This is a convenience overload for {@link WaitUntilTask} that exposes
+     * the timeout in the {@code Tasks} facade. The returned task will report
+     * {@link TaskOutcome#TIMEOUT} if the timeout elapses before the condition
+     * becomes {@code true}.</p>
+     *
+     * @param condition  condition to wait for; must not be {@code null}
+     * @param timeoutSec timeout in seconds; must be {@code >= 0.0}
+     */
+    public static Task waitUntil(BooleanSupplier condition, double timeoutSec) {
+        return new WaitUntilTask(condition, timeoutSec);
     }
 
     /**
@@ -149,13 +175,25 @@ public final class Tasks {
      * <ol>
      *   <li>Runs the given {@link Task} until it completes, then</li>
      *   <li>Runs either {@code onSuccess} or {@code onTimeout} depending on
-     *       the {@link TaskOutcome} reported by {@link Task#getOutcome()}.</li>
+     *       the {@link TaskOutcome} reported by {@link Task#getOutcome()} on
+     *       the {@code move} task.</li>
      * </ol>
      *
-     * <p>For any outcome other than {@link TaskOutcome#TIMEOUT}, this helper
-     * chooses {@code onSuccess}. This includes {@link TaskOutcome#UNKNOWN}
-     * and {@link TaskOutcome#NOT_DONE} (though the latter should not normally
-     * be observed once the task reports complete).</p>
+     * <p>Outcome semantics for the returned task:</p>
+     * <ul>
+     *   <li>While it is still running (move or branch phase), the outcome
+     *       mirrors the currently active child task's outcome.</li>
+     *   <li>Once the chosen branch has completed and the wrapper is done,
+     *       {@link Task#getOutcome()} returns <b>the chosen branch's outcome</b>.
+     *       The initial {@code move} outcome is used only to decide which
+     *       branch to execute; it does not directly drive the wrapper's
+     *       final outcome.</li>
+     * </ul>
+     *
+     * <p>This makes {@code branchOnOutcome} behave like a structured
+     * "try/handle-timeout" block: a timeout in {@code move} is <em>handled</em>
+     * by running {@code onTimeout}, and from the outside, what matters is
+     * whether that timeout-handling branch ultimately succeeded or not.</p>
      *
      * @param move      the task to run first
      * @param onSuccess task to run if the move succeeds or completes normally
@@ -172,6 +210,8 @@ public final class Tasks {
         return new Task() {
             private BranchPhase phase = BranchPhase.MOVE;
             private Task current = move;
+
+            private TaskOutcome branchOutcome = TaskOutcome.UNKNOWN;
 
             @Override
             public void start(LoopClock clock) {
@@ -192,9 +232,9 @@ public final class Tasks {
 
                 switch (phase) {
                     case MOVE:
-                        // Decide which branch to run based on outcome.
-                        TaskOutcome outcome = move.getOutcome();
-                        if (outcome == TaskOutcome.TIMEOUT) {
+                        // Decide which branch to run based on the move's outcome.
+                        TaskOutcome moveOutcome = move.getOutcome();
+                        if (moveOutcome == TaskOutcome.TIMEOUT) {
                             current = onTimeout;
                         } else {
                             current = onSuccess;
@@ -204,6 +244,8 @@ public final class Tasks {
                         break;
 
                     case BRANCH:
+                        // Finished running the chosen branch.
+                        branchOutcome = current.getOutcome();
                         phase = BranchPhase.DONE;
                         break;
 
@@ -215,6 +257,23 @@ public final class Tasks {
             @Override
             public boolean isComplete() {
                 return phase == BranchPhase.DONE;
+            }
+
+            @Override
+            public TaskOutcome getOutcome() {
+                switch (phase) {
+                    case MOVE:
+                    case BRANCH:
+                        // While executing, mirror the active child.
+                        return current.getOutcome();
+
+                    case DONE:
+                    default:
+                        // Once done, report the branch's outcome. Any timeout
+                        // in the move phase is considered "handled" by the
+                        // chosen branch.
+                        return branchOutcome;
+                }
             }
 
             @Override
