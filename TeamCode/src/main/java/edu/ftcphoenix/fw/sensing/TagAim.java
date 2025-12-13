@@ -1,9 +1,13 @@
 package edu.ftcphoenix.fw.sensing;
 
+import java.util.Objects;
+
 import edu.ftcphoenix.fw.core.PidController;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.source.TagAimDriveSource;
 import edu.ftcphoenix.fw.input.Button;
+import edu.ftcphoenix.fw.task.Task;
+import edu.ftcphoenix.fw.task.WaitUntilTask;
 
 /**
  * Helpers for tag-based auto-aim that wrap an existing {@link DriveSource}.
@@ -249,6 +253,94 @@ public final class TagAim {
         TagAimController controller = controllerFromConfig(cfg);
 
         return teleOpAim(baseDrive, aimButton, bearing, controller);
+    }
+
+    // ------------------------------------------------------------------------
+    // Aim readiness helpers: tasks that wait for alignment
+    // ------------------------------------------------------------------------
+
+    /**
+     * Create a {@link Task} that waits until the given {@link TagTarget}'s
+     * bearing is within a specified angular tolerance.
+     *
+     * <p>This is a thin convenience wrapper around
+     * {@link TagTarget#isBearingWithin(double)} and {@link WaitUntilTask} that
+     * lets you express "wait until aim is good" as a reusable task. It
+     * performs no drive control by itself; it only watches the target state.
+     * </p>
+     *
+     * <p>Semantics:</p>
+     * <ul>
+     *   <li>If {@link TagTarget#hasTarget()} is {@code false}, the condition is
+     *       treated as not satisfied.</li>
+     *   <li>The task completes successfully when
+     *       {@code target.isBearingWithin(toleranceRad)} first returns
+     *       {@code true}.</li>
+     *   <li>There is no timeout; if the condition never becomes true, this task
+     *       can run indefinitely. If you want a timeout, use the overload that
+     *       accepts {@code timeoutSec}.</li>
+     * </ul>
+     *
+     * @param target       tag target to observe; must not be {@code null}
+     * @param toleranceRad non-negative angular tolerance in radians
+     * @return a {@link Task} that reports {@link edu.ftcphoenix.fw.task.TaskOutcome#SUCCESS}
+     *         when the aim is within tolerance
+     * @throws IllegalArgumentException if {@code toleranceRad} is negative
+     */
+    public static Task waitForAim(TagTarget target, double toleranceRad) {
+        Objects.requireNonNull(target, "target is required");
+        if (toleranceRad < 0.0) {
+            throw new IllegalArgumentException("toleranceRad must be >= 0, got " + toleranceRad);
+        }
+
+        return new WaitUntilTask(() -> target.isBearingWithin(toleranceRad));
+    }
+
+    /**
+     * Create a {@link Task} that waits until the given {@link TagTarget}'s
+     * bearing is within a specified angular tolerance, but gives up if it
+     * takes longer than {@code timeoutSec}.
+     *
+     * <p>Outcome semantics:</p>
+     * <ul>
+     *   <li>If the aim enters the tolerance band before the timeout, the task
+     *       completes with {@link edu.ftcphoenix.fw.task.TaskOutcome#SUCCESS}.</li>
+     *   <li>If {@code timeoutSec} elapses first, the task completes with
+     *       {@link edu.ftcphoenix.fw.task.TaskOutcome#TIMEOUT}.</li>
+     * </ul>
+     *
+     * <p>Typical usage in a shooter macro:</p>
+     * <pre>{@code
+     * Task waitForAim = TagAim.waitForAim(scoringTarget,
+     *                                     aimConfig.deadbandRad,
+     *                                     1.0 /* timeout in seconds *\/);
+     * }</pre>
+     *
+     * @param target       tag target to observe; must not be {@code null}
+     * @param toleranceRad non-negative angular tolerance in radians
+     * @param timeoutSec   timeout in seconds; must be {@code >= 0.0}.
+     *                     A value of {@code 0.0} means "fail immediately unless
+     *                     we are already within tolerance".
+     * @return a {@link Task} that reports {@link edu.ftcphoenix.fw.task.TaskOutcome#SUCCESS}
+     *         when the aim is within tolerance, or
+     *         {@link edu.ftcphoenix.fw.task.TaskOutcome#TIMEOUT} if the timeout elapses
+     * @throws IllegalArgumentException if {@code toleranceRad} or {@code timeoutSec} is negative
+     */
+    public static Task waitForAim(TagTarget target,
+                                  double toleranceRad,
+                                  double timeoutSec) {
+        Objects.requireNonNull(target, "target is required");
+        if (toleranceRad < 0.0) {
+            throw new IllegalArgumentException("toleranceRad must be >= 0, got " + toleranceRad);
+        }
+        if (timeoutSec < 0.0) {
+            throw new IllegalArgumentException("timeoutSec must be >= 0, got " + timeoutSec);
+        }
+
+        return new WaitUntilTask(
+                () -> target.isBearingWithin(toleranceRad),
+                timeoutSec
+        );
     }
 
     // ------------------------------------------------------------------------

@@ -143,6 +143,41 @@ public final class SequenceTask implements Task {
     }
 
     /**
+     * Report the aggregated outcome for this sequence.
+     *
+     * <p>Semantics:</p>
+     * <ul>
+     *   <li>While the sequence is still running (before {@link #isComplete()}
+     *       returns {@code true}), this returns {@link TaskOutcome#NOT_DONE}.</li>
+     *   <li>Once all children have completed, if <b>any</b> child reports
+     *       {@link TaskOutcome#TIMEOUT}, this returns {@link TaskOutcome#TIMEOUT}.</li>
+     *   <li>Otherwise this returns {@link TaskOutcome#SUCCESS}, regardless of
+     *       whether individual children report {@link TaskOutcome#SUCCESS} or
+     *       {@link TaskOutcome#UNKNOWN}.</li>
+     * </ul>
+     *
+     * <p>This behavior is designed so that higher-level code (for example,
+     * {@code Tasks.branchOnOutcome(...)}) can treat a sequence as
+     * "timed out" if any of its children timed out.</p>
+     */
+    @Override
+    public TaskOutcome getOutcome() {
+        // While the sequence is still running, report NOT_DONE.
+        if (!isComplete()) {
+            return TaskOutcome.NOT_DONE;
+        }
+
+        // Once complete, propagate TIMEOUT if any child timed out; otherwise SUCCESS.
+        for (int i = 0; i < tasks.size(); i++) {
+            TaskOutcome child = tasks.get(i).getOutcome();
+            if (child == TaskOutcome.TIMEOUT) {
+                return TaskOutcome.TIMEOUT;
+            }
+        }
+        return TaskOutcome.SUCCESS;
+    }
+
+    /**
      * @return the current child task, or {@code null} if there is none.
      */
     public Task getCurrentTask() {

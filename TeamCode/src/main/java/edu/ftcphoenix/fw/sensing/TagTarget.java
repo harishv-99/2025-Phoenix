@@ -54,24 +54,13 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  *     // 2) Drive with TagAim (uses scoringTarget's bearing).
  *     DriveSignal cmd = driveWithAim.get(clock);
  *     drivebase.drive(cmd);
- *     drivebase.update(clock);
  *
- *     // 3) Shooter velocity based on the SAME observation.
- *     AprilTagObservation obs = scoringTarget.last();
- *     if (obs.hasTarget) {
- *         double distanceIn = obs.rangeInches;
- *         double targetVel = shooterTable.interpolate(distanceIn);
- *         shooterPlant.setTarget(targetVel);
- *     } else {
- *         shooterPlant.setTarget(0.0);
- *     }
- *
- *     // 4) Optional debug.
- *     scoringTarget.debugDump(debugSink, "tags.scoring");
+ *     // 3) Use scoringTarget.hasTarget(), bearingRad(), rangeInches()
+ *     //    for shooter decisions, telemetry, etc.
  * }
  * }</pre>
  *
- * <h2>Lifecycle</h2>
+ * <h2>Design notes</h2>
  * <ul>
  *   <li>Create a {@code TagTarget} once at init time.</li>
  *   <li>Call {@link #update()} exactly once per control loop.</li>
@@ -120,7 +109,7 @@ public final class TagTarget {
     }
 
     /**
-     * Update the tracked observation from the underlying sensor.
+     * Update the tracked target using the underlying sensor.
      *
      * <p>
      * This should be called exactly once per control loop, <b>before</b> any
@@ -155,17 +144,21 @@ public final class TagTarget {
     }
 
     /**
-     * Whether there is currently a fresh tag that matches this tracker's
-     * ID set and freshness constraint.
+     * Whether there is a currently valid target.
      *
-     * @return {@code true} if {@link #last()} has {@code hasTarget == true}
+     * <p>
+     * This is a convenience wrapper around {@link AprilTagObservation#hasTarget}
+     * on {@link #last()} and the configured maximum age.
+     * </p>
+     *
+     * @return {@code true} if the latest observation is recent enough and has a target
      */
     public boolean hasTarget() {
         return lastObs.hasTarget;
     }
 
     /**
-     * Bearing from robot forward to the tracked tag, in radians.
+     * Bearing from robot to the tracked tag, in radians.
      *
      * <p>
      * Only meaningful when {@link #hasTarget()} is {@code true}. When there
@@ -177,6 +170,39 @@ public final class TagTarget {
      */
     public double bearingRad() {
         return lastObs.bearingRad;
+    }
+
+    /**
+     * Test whether the current target bearing is within the given angular tolerance.
+     *
+     * <p>
+     * This is a small convenience helper that combines {@link #hasTarget()} and
+     * {@link #bearingRad()} into a single check. It is a natural building block
+     * for "aim ready" decisions in higher-level code.
+     * </p>
+     *
+     * <p>Semantics:</p>
+     * <ul>
+     *   <li>If {@link #hasTarget()} is {@code false}, this always returns {@code false}.</li>
+     *   <li>If {@code toleranceRad} is negative, this method throws an
+     *       {@link IllegalArgumentException}.</li>
+     *   <li>Otherwise this returns {@code true} when the absolute bearing is
+     *       less than or equal to {@code toleranceRad}.</li>
+     * </ul>
+     *
+     * @param toleranceRad non-negative angular tolerance in radians
+     * @return {@code true} if there is a target and its bearing is within the
+     *         specified tolerance
+     * @throws IllegalArgumentException if {@code toleranceRad} is negative
+     */
+    public boolean isBearingWithin(double toleranceRad) {
+        if (toleranceRad < 0.0) {
+            throw new IllegalArgumentException("toleranceRad must be non-negative");
+        }
+        if (!lastObs.hasTarget) {
+            return false;
+        }
+        return Math.abs(lastObs.bearingRad) <= toleranceRad;
     }
 
     /**
@@ -282,5 +308,41 @@ public final class TagTarget {
         dbg.addData(p + ".obs.bearingRad", o.bearingRad);
         dbg.addData(p + ".obs.rangeInches", o.rangeInches);
         dbg.addData(p + ".obs.ageSec", o.ageSec);
+    }
+
+    /**
+     * Extended debug helper that also reports whether the current bearing is
+     * within a specified angular tolerance.
+     *
+     * <p>
+     * This is a thin convenience wrapper around
+     * {@link #debugDump(DebugSink, String)} and
+     * {@link #isBearingWithin(double)}. It is intended for debugging
+     * higher-level "aim ready" logic that uses the same tolerance value.
+     * </p>
+     *
+     * @param dbg          debug sink to write to; if {@code null}, this method does nothing
+     * @param prefix       key prefix to use; if {@code null} or empty, {@code "tagTarget"}
+     *                     is used as the default prefix
+     * @param toleranceRad angular tolerance in radians; negative values are treated
+     *                     as invalid and reported as not within tolerance
+     */
+    public void debugDump(DebugSink dbg, String prefix, double toleranceRad) {
+        if (dbg == null) {
+            return;
+        }
+
+        // First emit the standard dump so callers get the full picture.
+        debugDump(dbg, prefix);
+
+        String p = (prefix == null || prefix.isEmpty()) ? "tagTarget" : prefix;
+
+        // Emit aim-related information derived from the current observation.
+        dbg.addData(p + ".aim.toleranceRad", toleranceRad);
+        if (toleranceRad < 0.0) {
+            dbg.addData(p + ".aim.withinTolerance", false);
+        } else {
+            dbg.addData(p + ".aim.withinTolerance", isBearingWithin(toleranceRad));
+        }
     }
 }

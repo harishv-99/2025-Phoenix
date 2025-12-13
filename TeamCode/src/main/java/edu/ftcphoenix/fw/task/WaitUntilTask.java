@@ -7,7 +7,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
  * A {@link Task} that runs until a condition becomes true, optionally
- * with a timeout and timeout callback.
+ * with an optional timeout.
  *
  * <p>Typical usage:
  * <pre>{@code
@@ -17,10 +17,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * runner.enqueue(new WaitUntilTask(() -> sensorReady()));
  *
  * // Or: wait until ready, but give up after 2 seconds
- * runner.enqueue(new WaitUntilTask(
- *         () -> sensorReady(),
- *         2.0,
- *         () -> telemetry.addLine("Timed out waiting for sensor")));
+ * runner.enqueue(new WaitUntilTask(() -> sensorReady(), 2.0));
  * }</pre>
  *
  * <p>Behavior:</p>
@@ -31,7 +28,8 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *       <li>If it returns {@code true}, the task completes successfully.</li>
  *       <li>Otherwise, if a finite timeout is configured and elapsed time
  *           reaches the timeout, the task completes with {@link #isTimedOut()}
- *           returning {@code true} and the timeout callback (if any) is run.</li>
+ *           returning {@code true} and {@link #getOutcome()} returning
+ *           {@link TaskOutcome#TIMEOUT}.</li>
  *     </ul>
  *   </li>
  *   <li>{@link #isComplete()} returns {@code true} once either the condition
@@ -42,7 +40,6 @@ public final class WaitUntilTask implements Task {
 
     private final BooleanSupplier condition;
     private final double timeoutSec;
-    private final Runnable onTimeout;
 
     private boolean finished = false;
     private boolean timedOut = false;
@@ -54,37 +51,22 @@ public final class WaitUntilTask implements Task {
      * @param condition condition to wait for; task completes when this returns true
      */
     public WaitUntilTask(BooleanSupplier condition) {
-        this(condition, Double.POSITIVE_INFINITY, null);
+        this(condition, Double.POSITIVE_INFINITY);
     }
 
     /**
-     * Create a wait-until task with a timeout but no timeout callback.
+     * Create a wait-until task with a timeout.
      *
      * @param condition  condition to wait for; task completes when this returns true,
      *                   or when {@code timeoutSec} elapses
      * @param timeoutSec timeout in seconds; must be &gt;= 0.0
      */
     public WaitUntilTask(BooleanSupplier condition, double timeoutSec) {
-        this(condition, timeoutSec, null);
-    }
-
-    /**
-     * Create a wait-until task with a timeout and timeout callback.
-     *
-     * @param condition  condition to wait for; task completes when this returns true,
-     *                   or when {@code timeoutSec} elapses
-     * @param timeoutSec timeout in seconds; must be &gt;= 0.0 (0 means "check once
-     *                   and immediately timeout if condition is false")
-     * @param onTimeout  callback invoked exactly once if the task completes due to
-     *                   timeout (may be {@code null})
-     */
-    public WaitUntilTask(BooleanSupplier condition, double timeoutSec, Runnable onTimeout) {
         this.condition = Objects.requireNonNull(condition, "condition is required");
         if (timeoutSec < 0.0) {
             throw new IllegalArgumentException("timeoutSec must be >= 0, got " + timeoutSec);
         }
         this.timeoutSec = timeoutSec;
-        this.onTimeout = onTimeout;
     }
 
     @Override
@@ -112,15 +94,20 @@ public final class WaitUntilTask implements Task {
         if (elapsedSec >= timeoutSec) {
             finished = true;
             timedOut = true;
-            if (onTimeout != null) {
-                onTimeout.run();
-            }
         }
     }
 
     @Override
     public boolean isComplete() {
         return finished;
+    }
+
+    @Override
+    public TaskOutcome getOutcome() {
+        if (!finished) {
+            return TaskOutcome.NOT_DONE;
+        }
+        return timedOut ? TaskOutcome.TIMEOUT : TaskOutcome.SUCCESS;
     }
 
     /**

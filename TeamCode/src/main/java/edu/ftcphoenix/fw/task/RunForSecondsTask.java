@@ -86,19 +86,20 @@ public final class RunForSecondsTask implements Task {
     public void start(LoopClock clock) {
         if (started) {
             // TaskRunner should not call start() twice on the same instance,
-            // but be defensive just in case.
+            // but guard defensively.
             return;
         }
+
         started = true;
-        remainingSec = durationSec;
         finished = false;
+        remainingSec = durationSec;
 
         if (onStart != null) {
             onStart.run();
         }
 
-        // Edge case: zero-duration task finishes immediately.
-        if (durationSec == 0.0) {
+        // If duration is zero, finish immediately.
+        if (remainingSec <= 0.0) {
             if (onFinish != null) {
                 onFinish.run();
             }
@@ -128,6 +129,14 @@ public final class RunForSecondsTask implements Task {
     @Override
     public boolean isComplete() {
         return finished;
+    }
+
+    @Override
+    public TaskOutcome getOutcome() {
+        if (!finished) {
+            return TaskOutcome.NOT_DONE;
+        }
+        return TaskOutcome.SUCCESS;
     }
 
     /**

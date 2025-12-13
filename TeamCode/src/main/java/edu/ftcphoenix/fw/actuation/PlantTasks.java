@@ -162,6 +162,39 @@ public final class PlantTasks {
                 .build();
     }
 
+    /**
+     * Create a {@link Task} that:
+     * <ol>
+     *   <li>Sets the plant's target once at start.</li>
+     *   <li>Finishes when {@link Plant#atSetpoint()} becomes {@code true}.</li>
+     *   <li>Then sets the plant's target once to {@code finalTarget} as a
+     *       follow-up.</li>
+     * </ol>
+     *
+     * <p>This is the no-timeout variant of
+     * {@link #moveToThen(Plant, double, double, double)}. The task will wait
+     * indefinitely for {@link Plant#atSetpoint()} to become {@code true}. If
+     * you want to guard against a stuck mechanism, use the overload that accepts
+     * {@code timeoutSec} instead.</p>
+     *
+     * @param plant       plant to command (must be feedback-capable)
+     * @param target      target setpoint
+     * @param finalTarget target value to apply once the initial setpoint is
+     *                    reached
+     * @return a {@link Task} that moves to the setpoint and then sets
+     *         {@code finalTarget}
+     */
+    public static Task moveToThen(final Plant plant,
+                                  final double target,
+                                  final double finalTarget) {
+        Objects.requireNonNull(plant, "plant is required");
+        ensureFeedbackPlantForMove(plant, "moveToThen(plant, target, finalTarget)");
+        return configureTask(plant, target)
+                .waitForSetpoint()
+                .then(finalTarget)
+                .build();
+    }
+
     private static void ensureFeedbackPlantForMove(Plant plant, String methodName) {
         if (!plant.hasFeedback()) {
             throw new IllegalStateException(
