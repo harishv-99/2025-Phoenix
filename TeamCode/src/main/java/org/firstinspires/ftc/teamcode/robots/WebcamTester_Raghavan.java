@@ -46,9 +46,9 @@ public class WebcamTester_Raghavan extends LinearOpMode {
         // Add the AprilTag processor.
         myVisionPortalBuilder.addProcessor(myAprilTagProcessor);
         // Set the camera resolution.
-        myVisionPortalBuilder.setCameraResolution(new Size(1280, 800));
+        myVisionPortalBuilder.setCameraResolution(new Size(1280, 720));
         // Set the stream format.
-        myVisionPortalBuilder.setStreamFormat(VisionPortal.StreamFormat.MJPEG);
+        myVisionPortalBuilder.setStreamFormat(VisionPortal.StreamFormat.YUY2);
         // Set whether the VisionPortal should automatically start streaming
         // when you issue a .build() call on this VisionPortal.Builder object.
         myVisionPortalBuilder.setAutoStartStreamOnBuild(true);
