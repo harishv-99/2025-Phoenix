@@ -24,8 +24,8 @@ public class RobotConfig {
         public static final boolean invertMotorShooterLeft = false;
         public static final String nameMotorShooterRight = "shooterRight";
         public static final boolean invertMotorShooterRight = false;
-        public static final double velocityMin = 1000;
-        public static final double velocityMax = 2800;
+        public static final double velocityMin = 1500;
+        public static final double velocityMax = 1900;
         public static final double velocityIncrement = 50;
 
         public static final double targetPusherBack = 0.5;

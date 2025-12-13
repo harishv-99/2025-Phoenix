@@ -55,6 +55,7 @@ public final class PhoenixRobot {
     private DriveSource driveWithAim;
     private AprilTagSensor tagSensor;
     private TagTarget scoringTarget;
+    private TagAim.Config aimConfig;
 
 
     // ----------------------------------------------------------------------
@@ -103,13 +104,15 @@ public final class PhoenixRobot {
         scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, 0.5);
 
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
-        TagAim.Config aimConfig = TagAim.Config.defaults();
-        aimConfig.kp = 1;
-        aimConfig.deadbandRad = Math.toRadians(0.25);
+        aimConfig = TagAim.Config.defaults();
+        aimConfig.kp = 2;
+        aimConfig.maxOmega = 0.5;
+        aimConfig.deadbandRad = Math.toRadians(.5);
         driveWithAim = TagAim.teleOpAim(
                 stickDrive,
                 gamepads.p2().leftBumper(),
-                scoringTarget
+                scoringTarget,
+                aimConfig
         );
 
         telemetry.addLine("Phoenix TeleOp with AutoAim");
@@ -135,10 +138,17 @@ public final class PhoenixRobot {
                 () -> taskRunnerTeleOp.enqueue(shooter.instantStartTransfer(Shooter.TransferDirection.BACKWARD)),
                 () -> taskRunnerTeleOp.enqueue(shooter.instantStopTransfer()));
 
+        bindings.whileHeld(gamepads.p2().leftBumper(),
+                () -> {
+            AprilTagObservation obs = scoringTarget.last();
+            if (obs.hasTarget) {
+                taskRunnerTeleOp.enqueue(shooter.instantSetVelocityByDist(obs.rangeInches));
+            }
+                });
 
         bindings.toggle(gamepads.p2().rightBumper(),
                 (isOn) -> {
-            if(isOn) {
+            if (isOn) {
                 taskRunnerTeleOp.enqueue(shooter.instantStartShooter());
             }
 
@@ -192,11 +202,14 @@ public final class PhoenixRobot {
 
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
-        driveWithAim.debugDump(dbg, "driveWAim");
+//        driveWithAim.debugDump(dbg, "driveWAim");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
+            if (Math.abs(obs.bearingRad) <= (aimConfig.deadbandRad * 5))
+                telemetry.addLine(">>> AIMED <<<");
             telemetry.addData("id", obs.id);
             telemetry.addData("dist", obs.rangeInches);
+            telemetry.addData("bearing", Math.toDegrees(obs.bearingRad));
         }
 
         telemetry.update();

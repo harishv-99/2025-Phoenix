@@ -83,8 +83,23 @@ public class Shooter {
         velocity = RobotConfig.Shooter.velocityMin;
     }
 
+    public Task instantSetVelocityByDist(double distance) {
+        double velForDist = SHOOTER_VELOCITY_TABLE.interpolate(distance);
+        this.velocity = MathUtil.clamp(velForDist,
+                RobotConfig.Shooter.velocityMin,
+                RobotConfig.Shooter.velocityMax);
+
+        if (isShooterOn) {
+            return instantStartShooter();
+        }
+
+        return Tasks.noop();
+    }
+
     public Task instantIncreaseVelocity() {
         velocity += RobotConfig.Shooter.velocityIncrement;
+        velocity = Math.floor(velocity / RobotConfig.Shooter.velocityIncrement) *
+                RobotConfig.Shooter.velocityIncrement;
         velocity = MathUtil.clamp(velocity,
                 RobotConfig.Shooter.velocityMin,
                 RobotConfig.Shooter.velocityMax);
@@ -98,6 +113,8 @@ public class Shooter {
 
     public Task instantDecreaseVelocity() {
         velocity -= RobotConfig.Shooter.velocityIncrement;
+        velocity = Math.ceil(velocity / RobotConfig.Shooter.velocityIncrement) *
+                RobotConfig.Shooter.velocityIncrement;
         velocity = MathUtil.clamp(velocity,
                 RobotConfig.Shooter.velocityMin,
                 RobotConfig.Shooter.velocityMax);
