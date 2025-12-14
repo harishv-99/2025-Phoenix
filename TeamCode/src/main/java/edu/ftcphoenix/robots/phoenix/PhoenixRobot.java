@@ -54,6 +54,7 @@ public final class PhoenixRobot {
     private DriveSource driveWithAim;
     private AprilTagSensor tagSensor;
     private TagTarget scoringTarget;
+    private TagAim.Config aimConfig;
 
 
     // ----------------------------------------------------------------------
@@ -135,10 +136,17 @@ public final class PhoenixRobot {
                 () -> taskRunnerTeleOp.enqueue(shooter.instantStartTransfer(Shooter.TransferDirection.BACKWARD)),
                 () -> taskRunnerTeleOp.enqueue(shooter.instantStopTransfer()));
 
+        bindings.whileHeld(gamepads.p2().leftBumper(),
+                () -> {
+            AprilTagObservation obs = scoringTarget.last();
+            if (obs.hasTarget) {
+                taskRunnerTeleOp.enqueue(shooter.instantSetVelocityByDist(obs.cameraRangeInches()));
+            }
+                });
 
         bindings.toggle(gamepads.p2().rightBumper(),
                 (isOn) -> {
-            if(isOn) {
+            if (isOn) {
                 taskRunnerTeleOp.enqueue(shooter.instantStartShooter());
             }
 
@@ -192,11 +200,15 @@ public final class PhoenixRobot {
 
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
-        driveWithAim.debugDump(dbg, "driveWAim");
+//        driveWithAim.debugDump(dbg, "driveWAim");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
+            if (Math.abs(obs.cameraBearingRad()) <= (aimConfig.deadbandRad * 5))
+                telemetry.addLine(">>> AIMED <<<");
             telemetry.addData("id", obs.id);
             telemetry.addData("dist", obs.cameraRangeInches());
+            telemetry.addData("dist", obs.cameraRangeInches());
+            telemetry.addData("bearing", Math.toDegrees(obs.cameraBearingRad()));
         }
 
         telemetry.update();
