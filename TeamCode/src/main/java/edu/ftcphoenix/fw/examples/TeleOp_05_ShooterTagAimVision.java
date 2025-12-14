@@ -43,7 +43,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *     <ul>
  *       <li>Use an {@link AprilTagSensor} created by
  *           {@link FtcVision#aprilTags}.</li>
- *       <li>Read {@link AprilTagObservation#rangeInches}.</li>
+ *       <li>Read {@link AprilTagObservation#cameraRangeInches()}.</li>
  *       <li>Use an {@link InterpolatingTable1D} to map
  *           {@code distance → shooter velocity} (native units).</li>
  *     </ul>
@@ -222,13 +222,13 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         // Vision-based shooter target decision
         AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
-        lastTagRangeInches = obs.rangeInches;
-        lastTagBearingRad = obs.bearingRad;
+        lastTagRangeInches = obs.cameraRangeInches();
+        lastTagBearingRad = obs.cameraBearingRad();
         lastTagAgeSec = obs.ageSec;
         lastTagId = obs.id;
 
         if (shooterEnabled && obs.hasTarget) {
-            double targetVel = SHOOTER_VELOCITY_TABLE.interpolate(obs.rangeInches);
+            double targetVel = SHOOTER_VELOCITY_TABLE.interpolate(obs.cameraRangeInches());
             lastShooterTargetVel = targetVel;
             shooter.setTarget(targetVel);
         } else {

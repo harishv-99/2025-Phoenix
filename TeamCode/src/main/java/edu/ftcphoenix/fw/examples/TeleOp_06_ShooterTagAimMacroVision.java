@@ -316,8 +316,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         // ------------------------------------------------------------------
         AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
-        lastTagRangeInches = obs.rangeInches;
-        lastTagBearingRad = obs.bearingRad;
+        lastTagRangeInches = obs.cameraRangeInches();
+        lastTagBearingRad = obs.cameraBearingRad();
         lastTagAgeSec = obs.ageSec;
         lastTagId = obs.id;
 
@@ -370,9 +370,9 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
             return;
         }
 
-        double shooterTargetVel = SHOOTER_VELOCITY_TABLE.interpolate(obs.rangeInches);
+        double shooterTargetVel = SHOOTER_VELOCITY_TABLE.interpolate(obs.cameraRangeInches());
         lastShooterMacroTargetVel = shooterTargetVel;
-        lastMacroStatus = "shoot1: range=" + obs.rangeInches;
+        lastMacroStatus = "shoot1: range=" + obs.cameraRangeInches();
 
         Task macro = buildShootOneBallMacro(shooterTargetVel);
         macroRunner.clear();

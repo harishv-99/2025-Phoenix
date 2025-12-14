@@ -20,6 +20,17 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  * bearing?"</em>
  * </p>
  *
+ * <h2>Frame &amp; sign conventions</h2>
+ * <p>
+ * This class reports bearing/range derived from {@link AprilTagObservation#pCameraToTag}
+ * (i.e., in the <b>camera frame</b>, using Phoenix framing: +X forward, +Y left, +Z up).
+ * </p>
+ * <ul>
+ *   <li>{@code bearingRad &gt; 0} means the tag appears to the <b>left</b>.</li>
+ *   <li>{@code bearingRad &lt; 0} means the tag appears to the <b>right</b>.</li>
+ *   <li>{@code rangeInches} is planar range in the camera X/Y plane.</li>
+ * </ul>
+ *
  * <h2>Typical usage</h2>
  *
  * <pre>{@code
@@ -39,15 +50,13 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  *         baseDrive,
  *         pads.p1().leftBumper(),  // hold to aim
  *         bearingSource,
- *         controller               // your TagAimController instance
+ *         controller
  * );
  *
- * // In your loop():
- * public void loop() {
- *     clock.update(getRuntime());
- *     double dtSec = clock.dtSec();
- *
- *     // 1) Update inputs and tags once per loop.
+ * // In loop():
+ * while (opModeIsActive()) {
+ *     // 1) Update inputs/sensors.
+ *     clock.update();
  *     gamepads.update(dtSec);
  *     scoringTarget.update();
  *
@@ -78,7 +87,7 @@ public final class TagTarget {
 
     // Last observation returned by the sensor for this ID set + age constraint.
     // Initialized to "no target" with effectively infinite age to signal
-    // "never updated" until the first call to update().
+    // that update() hasn't been called yet.
     private AprilTagObservation lastObs =
             AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
 
@@ -93,10 +102,7 @@ public final class TagTarget {
      * @throws IllegalArgumentException if {@code idsOfInterest} is empty
      * @throws IllegalArgumentException if {@code maxAgeSec} is negative
      */
-    public TagTarget(AprilTagSensor sensor,
-                     Set<Integer> idsOfInterest,
-                     double maxAgeSec) {
-
+    public TagTarget(AprilTagSensor sensor, Set<Integer> idsOfInterest, double maxAgeSec) {
         this.sensor = Objects.requireNonNull(sensor, "sensor is required");
         this.idsOfInterest = Objects.requireNonNull(idsOfInterest, "idsOfInterest is required");
         if (idsOfInterest.isEmpty()) {
@@ -131,9 +137,9 @@ public final class TagTarget {
      *
      * <p>
      * This will always return a non-null {@link AprilTagObservation}. When
-     * {@link AprilTagObservation#hasTarget} is {@code false}, the other fields
-     * (ID, bearing, range) are not meaningful but {@link AprilTagObservation#ageSec}
-     * can still be useful for debugging.
+     * {@link AprilTagObservation#hasTarget} is {@code false}, the ID and pose
+     * are not meaningful, but {@link AprilTagObservation#ageSec} can still be
+     * useful for debugging.
      * </p>
      *
      * @return last observation returned by {@link #update()}, or an initial
@@ -144,42 +150,39 @@ public final class TagTarget {
     }
 
     /**
-     * Whether there is a currently valid target.
+     * Whether the tracker currently has a valid target.
      *
      * <p>
-     * This is a convenience wrapper around {@link AprilTagObservation#hasTarget}
-     * on {@link #last()} and the configured maximum age.
+     * This is equivalent to {@code last().hasTarget}, but provided as a small
+     * convenience.
      * </p>
      *
-     * @return {@code true} if the latest observation is recent enough and has a target
+     * @return {@code true} if the latest observation has a target (and met the age constraint)
      */
     public boolean hasTarget() {
         return lastObs.hasTarget;
     }
 
     /**
-     * Bearing from robot to the tracked tag, in radians.
+     * Current horizontal bearing to the tracked tag, in radians.
      *
      * <p>
-     * Only meaningful when {@link #hasTarget()} is {@code true}. When there
-     * is no target, this returns the last bearing reported by the sensor
-     * (which may be stale); callers should always guard on {@link #hasTarget()}.
+     * Only meaningful when {@link #hasTarget()} is {@code true}. Callers should
+     * always guard on {@link #hasTarget()}.
      * </p>
      *
-     * @return bearing in radians
+     * <p>
+     * Sign convention: positive means the tag is to the left of the camera forward axis.
+     * </p>
+     *
+     * @return bearing in radians (positive = left)
      */
     public double bearingRad() {
-        return lastObs.bearingRad;
+        return lastObs.cameraBearingRad();
     }
 
     /**
      * Test whether the current target bearing is within the given angular tolerance.
-     *
-     * <p>
-     * This is a small convenience helper that combines {@link #hasTarget()} and
-     * {@link #bearingRad()} into a single check. It is a natural building block
-     * for "aim ready" decisions in higher-level code.
-     * </p>
      *
      * <p>Semantics:</p>
      * <ul>
@@ -192,7 +195,7 @@ public final class TagTarget {
      *
      * @param toleranceRad non-negative angular tolerance in radians
      * @return {@code true} if there is a target and its bearing is within the
-     *         specified tolerance
+     * specified tolerance
      * @throws IllegalArgumentException if {@code toleranceRad} is negative
      */
     public boolean isBearingWithin(double toleranceRad) {
@@ -202,22 +205,29 @@ public final class TagTarget {
         if (!lastObs.hasTarget) {
             return false;
         }
-        return Math.abs(lastObs.bearingRad) <= toleranceRad;
+        return Math.abs(lastObs.cameraBearingRad()) <= toleranceRad;
     }
 
     /**
-     * Distance from robot to the tracked tag, in inches.
+     * Planar range to the tracked tag, in inches, derived from the camera-frame pose.
      *
      * <p>
-     * Only meaningful when {@link #hasTarget()} is {@code true}. When there
-     * is no target, this returns the last range reported by the sensor
-     * (which may be stale); callers should always guard on {@link #hasTarget()}.
+     * This is the distance in the camera X/Y plane (forward/left). If you want 3D line-of-sight
+     * range, use {@code last().cameraRangeInches()}.
      * </p>
      *
-     * @return range in inches
+     * <p>
+     * Only meaningful when {@link #hasTarget()} is {@code true}. Callers should
+     * always guard on {@link #hasTarget()}.
+     * </p>
+     *
+     * @return planar range in inches (camera X/Y plane)
      */
     public double rangeInches() {
-        return lastObs.rangeInches;
+        // Planar distance in the camera X/Y plane (forward/left).
+        double f = lastObs.cameraForwardInches();
+        double l = lastObs.cameraLeftInches();
+        return Math.sqrt(f * f + l * l);
     }
 
     /**
@@ -247,28 +257,13 @@ public final class TagTarget {
      * Convenience helper: interpret the current observation as a
      * {@link BearingSource.BearingSample}.
      *
-     * <p>
-     * This is useful when wiring {@code TagTarget} into existing aiming code
-     * that expects a {@link BearingSource}, for example:
-     * </p>
-     *
-     * <pre>{@code
-     * BearingSource bearingSource = clock -> scoringTarget.toBearingSample();
-     * DriveSource driveWithAim = TagAim.teleOpAim(
-     *         baseDrive,
-     *         aimButton,
-     *         bearingSource,
-     *         controller  // TagAimController
-     * );
-     * }</pre>
-     *
      * @return a bearing sample representing the current observation
      */
     public BearingSource.BearingSample toBearingSample() {
         if (!lastObs.hasTarget) {
             return new BearingSource.BearingSample(false, 0.0);
         }
-        return new BearingSource.BearingSample(true, lastObs.bearingRad);
+        return new BearingSource.BearingSample(true, lastObs.cameraBearingRad());
     }
 
     /**
@@ -305,9 +300,15 @@ public final class TagTarget {
         AprilTagObservation o = lastObs;
         dbg.addData(p + ".obs.hasTarget", o.hasTarget);
         dbg.addData(p + ".obs.id", o.id);
-        dbg.addData(p + ".obs.bearingRad", o.bearingRad);
-        dbg.addData(p + ".obs.rangeInches", o.rangeInches);
         dbg.addData(p + ".obs.ageSec", o.ageSec);
+
+        // Derived (camera-frame) targeting helpers.
+        dbg.addData(p + ".obs.cameraForwardInches", o.cameraForwardInches());
+        dbg.addData(p + ".obs.cameraLeftInches", o.cameraLeftInches());
+        dbg.addData(p + ".obs.cameraUpInches", o.cameraUpInches());
+        dbg.addData(p + ".obs.cameraBearingRad", o.cameraBearingRad());
+        dbg.addData(p + ".obs.cameraRangeInches", o.cameraRangeInches());
+        dbg.addData(p + ".obs.cameraPlanarRangeInches", rangeInches());
     }
 
     /**
@@ -317,8 +318,7 @@ public final class TagTarget {
      * <p>
      * This is a thin convenience wrapper around
      * {@link #debugDump(DebugSink, String)} and
-     * {@link #isBearingWithin(double)}. It is intended for debugging
-     * higher-level "aim ready" logic that uses the same tolerance value.
+     * {@link #isBearingWithin(double)}.
      * </p>
      *
      * @param dbg          debug sink to write to; if {@code null}, this method does nothing
@@ -337,7 +337,6 @@ public final class TagTarget {
 
         String p = (prefix == null || prefix.isEmpty()) ? "tagTarget" : prefix;
 
-        // Emit aim-related information derived from the current observation.
         dbg.addData(p + ".aim.toleranceRad", toleranceRad);
         if (toleranceRad < 0.0) {
             dbg.addData(p + ".aim.withinTolerance", false);

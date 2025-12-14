@@ -38,9 +38,9 @@ import java.util.Set;
  *   <li>Look at the <em>most recent</em> camera frame that has any detections.</li>
  *   <li>Filter detections by the requested ID set, if provided.</li>
  *   <li>Among the remaining detections, choose the one with the smallest
- *       {@link AprilTagObservation#rangeInches} (closest tag).</li>
+ *       {@link AprilTagObservation#cameraRangeInches()} (closest tag).</li>
  *   <li>Construct an {@link AprilTagObservation} using the chosen detection's
- *       ID, bearing, range, and frame age.</li>
+ *       ID, camera-frame pose, and frame age (bearing/range are derived from the pose).</li>
  * </ol>
  *
  * <p>This behavior gives predictable results for common use-cases:
@@ -56,7 +56,7 @@ import java.util.Set;
  * AprilTagObservation obs = sensor.bestAny(0.3);
  * if (obs.hasTarget) {
  *     telemetry.addData("Tag ID", obs.id);
- *     telemetry.addData("Range (in)", obs.rangeInches);
+ *     telemetry.addData("Range (in)", obs.cameraRangeInches());
  * }
  * }</pre>
  *
@@ -67,7 +67,7 @@ import java.util.Set;
  * AprilTagObservation obs = sensor.best(scoringTags, 0.5);
  * if (obs.hasTarget) {
  *     // Shooter logic: map range (inches) to flywheel RPM.
- *     double distanceInches = obs.rangeInches;
+ *     double distanceInches = obs.cameraRangeInches();
  * }
  * }</pre>
  */

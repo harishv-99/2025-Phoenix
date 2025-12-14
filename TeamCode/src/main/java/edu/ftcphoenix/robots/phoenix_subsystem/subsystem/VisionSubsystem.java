@@ -67,9 +67,9 @@ public final class VisionSubsystem implements Subsystem {
         // Optional debugging; safe to comment out later.
         if (lastObs != null && lastObs.hasTarget) {
             dbg.addData("Vision/tagId", lastObs.id);
-            dbg.addData("Vision/rangeIn", "%.1f", lastObs.rangeInches);
+            dbg.addData("Vision/rangeIn", "%.1f", lastObs.cameraRangeInches());
             dbg.addData("Vision/bearingDeg", "%.1f",
-                    Math.toDegrees(lastObs.bearingRad));
+                    Math.toDegrees(lastObs.cameraBearingRad()));
         } else {
             dbg.addLine("Vision: no scoring tag visible");
         }

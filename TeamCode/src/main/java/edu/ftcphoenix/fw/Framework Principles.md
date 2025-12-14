@@ -244,6 +244,64 @@ Advanced users can call `.velocity(tolerance)` or `.position(tolerance)` to
 control the error bands directly. The defaults are meant to be “good enough”
 for most mechanisms without forcing students to tune every value up front.
 
+### 3.4 Nomenclature and coordinate conventions
+
+Phoenix is designed so you can read robot code quickly and still know:
+**what frame a value is in**, **what units it uses**, and **what sign it means**.
+When in doubt, follow these rules.
+
+#### Frame must appear in the name
+
+If a value depends on a coordinate frame, the frame name must be in the identifier.
+
+Examples:
+
+* `fieldRobotPose`, `fieldRobotTargetPose` – robot poses expressed in the **field** frame.
+* `robotDriveSignal` – a drive command expressed in the **robot** frame.
+* `cameraBearingRad`, `cameraForwardInches`, `cameraLeftInches` – values expressed in the **camera** frame.
+
+Avoid ambiguous names like `pose`, `targetPose`, `x`, `y`, `heading` when the frame is not obvious.
+
+#### Transform naming: `pFromToTo`
+
+For rigid transforms (`Pose2d` / `Pose3d`) that represent relationships between frames, prefer:
+
+* `pCameraToTag` (camera → tag)
+* `pRobotToCamera` (robot → camera)
+* `pFieldToRobot` (field → robot)
+
+Rule of thumb: if you see `pAtoB.then(pBtoC)`, the result should be `pAtoC`.
+
+#### Units must appear in the name
+
+Suffix numeric values with units (especially in configs and controller math):
+
+* `Inches`, `Rad`, `Deg`, `Sec`, `PerSec`, `PerSec2`
+
+Examples:
+
+* `headingRad`, `omegaRadPerSec`
+* `maxSpeedInchesPerSec`, `timeoutSec`
+
+#### Signs are part of the contract
+
+Phoenix uses a consistent right‑handed convention:
+
+* **Axes:** +X forward, +Y left, +Z up
+* **Yaw/heading:** rotation about +Z; turning left is **positive** (CCW)
+* **DriveSignal (robot‑centric):**
+
+    * `axial > 0` = forward
+    * `lateral > 0` = left
+    * `omega > 0` = CCW (turn left)
+* **Tag bearing:** `bearingRad > 0` means the target is to the **left**
+
+#### Boundary rule: convert “driver intuition” at the edges
+
+If something needs to feel natural for the driver (e.g., stick right means strafe right),
+apply that sign conversion **only at the input boundary** (for example, `GamepadDriveSource`).
+Controllers, tasks, and geometry should stay in the framework conventions with no hidden sign flips.
+
 ---
 
 ## 4. Recommended usage patterns
@@ -287,8 +345,8 @@ Instead of:
 ```java
 // DO NOT DO THIS
 while (!shooterReady()) {
-    // spin here
-}
+        // spin here
+        }
 ```
 
 we write:

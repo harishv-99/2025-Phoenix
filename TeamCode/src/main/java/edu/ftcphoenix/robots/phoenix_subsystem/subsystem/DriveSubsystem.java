@@ -6,13 +6,12 @@ import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.GamepadDriveSourceConfig;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.robot.Subsystem;
 import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw2.drive.hw.rev.MecanumDrive;
 
 /**
  * P1 drive subsystem: mecanum + TagAim.
@@ -42,7 +41,7 @@ public final class DriveSubsystem implements Subsystem {
                           VisionSubsystem vision) {
 
         // Configure drive behavior (can stay default for this older example).
-        MecanumConfig driveCfg = MecanumConfig.defaults();
+        MecanumDrivebase.Config driveCfg = MecanumDrivebase.Config.defaults();
 
         // Match old builder semantics:
         //   .invertRightSide().invertFrontLeft()
@@ -57,7 +56,7 @@ public final class DriveSubsystem implements Subsystem {
         );
 
         // Stick drive with custom slow-mode scale.
-        GamepadDriveSourceConfig stickCfg = GamepadDriveSourceConfig.defaults();
+        GamepadDriveSource.Config stickCfg = GamepadDriveSource.Config.defaults();
         DriveSource sticks = GamepadDriveSource.teleOpMecanum(
                 gamepads,
                 stickCfg,

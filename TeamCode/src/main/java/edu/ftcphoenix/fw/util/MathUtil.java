@@ -4,7 +4,8 @@ package edu.ftcphoenix.fw.util;
  * Small collection of math helpers commonly used in robotics code.
  *
  * <p>This class is intentionally minimal. The goal is to centralize a few
- * patterns that appear throughout the framework (clamping, deadband) so that:
+ * patterns that appear throughout the framework (clamping, deadband, angle wrapping)
+ * so that:</p>
  *
  * <ul>
  *   <li>Behavior is consistent everywhere.</li>
@@ -141,5 +142,35 @@ public final class MathUtil {
             return 0.0;
         }
         return value;
+    }
+
+    /**
+     * Normalize an angle in radians into the range [-π, +π].
+     *
+     * <p>This is the canonical "wrap heading" helper used by controllers and pose logic.
+     * A common pattern is:</p>
+     *
+     * <pre>{@code
+     * double error = MathUtil.wrapToPi(targetHeading - currentHeading);
+     * }</pre>
+     *
+     * <p>Implementation notes:</p>
+     * <ul>
+     *   <li>Equivalent angles are wrapped to a canonical representative.</li>
+     *   <li>{@code +π} is allowed; {@code -π} is mapped to {@code +π} by the chosen interval rules.</li>
+     *   <li>{@code NaN} propagates naturally.</li>
+     * </ul>
+     *
+     * @param angleRad angle in radians (any real value)
+     * @return equivalent angle in radians, wrapped to [-π, +π]
+     */
+    public static double wrapToPi(double angleRad) {
+        double a = angleRad % (2.0 * Math.PI);
+        if (a <= -Math.PI) {
+            a += 2.0 * Math.PI;
+        } else if (a > Math.PI) {
+            a -= 2.0 * Math.PI;
+        }
+        return a;
     }
 }

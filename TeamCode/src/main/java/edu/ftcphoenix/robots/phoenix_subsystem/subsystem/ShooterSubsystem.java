@@ -176,7 +176,7 @@ public final class ShooterSubsystem implements Subsystem {
             return 0.0;
         }
 
-        double rangeIn = obs.rangeInches;
+        double rangeIn = obs.cameraRangeInches();
         double target = rangeToVelocity.interpolate(rangeIn);
 
         return target;

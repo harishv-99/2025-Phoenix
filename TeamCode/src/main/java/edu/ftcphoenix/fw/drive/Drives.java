@@ -30,7 +30,7 @@ import edu.ftcphoenix.fw.hal.PowerOutput;
  *   </li>
  *   <li>Applies a sensible default inversion pattern (typically right side
  *       inverted).</li>
- *   <li>Uses {@link MecanumConfig#defaults()} for all drive tuning.</li>
+ *   <li>Uses {@link MecanumDrivebase.Config#defaults()} for all drive tuning.</li>
  * </ul>
  *
  * <p>If the robot does not drive correctly with this default setup, teams
@@ -50,7 +50,7 @@ import edu.ftcphoenix.fw.hal.PowerOutput;
  * <p>More advanced teams can:</p>
  *
  * <ul>
- *   <li>Pass a custom {@link MecanumConfig} to enable rate limiting or other
+ *   <li>Pass a custom {@link MecanumDrivebase.Config} to enable rate limiting or other
  *       tuning options.</li>
  *   <li>Use the overloads that accept custom motor names if they do not
  *       follow the standard naming convention.</li>
@@ -99,7 +99,7 @@ public final class Drives {
 
     /**
      * Create a mecanum drivebase using the <b>standard motor names</b> and a
-     * typical inversion pattern, with {@link MecanumConfig#defaults()}.
+     * typical inversion pattern, with {@link MecanumDrivebase.Config#defaults()}.
      *
      * <ul>
      *   <li>{@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}:  not inverted</li>
@@ -120,13 +120,13 @@ public final class Drives {
                 true,   // frontRightMotor inverted?
                 false,  // backLeftMotor inverted?
                 true,   // backRightMotor inverted?
-                MecanumConfig.defaults());
+                MecanumDrivebase.Config.defaults());
     }
 
     /**
      * Create a mecanum drivebase using the <b>standard motor names</b>,
      * but with explicit inversion flags for each motor, and
-     * {@link MecanumConfig#defaults()}.
+     * {@link MecanumDrivebase.Config#defaults()}.
      *
      * <p>This is the simplest way for students to "flip" motors while
      * still following the standard naming convention.</p>
@@ -147,12 +147,12 @@ public final class Drives {
                 invertFrontRight,
                 invertBackLeft,
                 invertBackRight,
-                MecanumConfig.defaults());
+                MecanumDrivebase.Config.defaults());
     }
 
     /**
      * Create a mecanum drivebase with <b>custom motor names</b> and inversion,
-     * using {@link MecanumConfig#defaults()}.
+     * using {@link MecanumDrivebase.Config#defaults()}.
      *
      * <p>Use this overload if your motor names do not match the standard
      * {@link #DEFAULT_FRONT_LEFT_MOTOR_NAME},
@@ -170,22 +170,22 @@ public final class Drives {
                 frName, frInverted,
                 blName, blInverted,
                 brName, brInverted,
-                MecanumConfig.defaults());
+                MecanumDrivebase.Config.defaults());
     }
 
     // ------------------------------------------------------------------
-    // Overloads that accept a custom MecanumConfig (for rate limiting, etc.)
+    // Overloads that accept a custom MecanumDrivebase.Config (rate limiting, etc.)
     // ------------------------------------------------------------------
 
     /**
      * Create a mecanum drivebase using standard names, default inversion,
-     * and a custom {@link MecanumConfig}.
+     * and a custom {@link MecanumDrivebase.Config}.
      *
      * <p>Use this when you want to adjust things like rate limiting but are
      * happy with the default motor naming convention.</p>
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
-                                           MecanumConfig config) {
+                                           MecanumDrivebase.Config config) {
         return mecanum(hw,
                 false,  // frontLeftMotor inverted?
                 true,   // frontRightMotor inverted?
@@ -196,7 +196,7 @@ public final class Drives {
 
     /**
      * Create a mecanum drivebase using standard names, explicit inversion
-     * flags, and a custom {@link MecanumConfig}.
+     * flags, and a custom {@link MecanumDrivebase.Config}.
      *
      * <p>This is the "flip a few booleans and tweak rate limiting" entrypoint
      * for students whose robots don't behave with the defaults.</p>
@@ -206,7 +206,7 @@ public final class Drives {
                                            boolean invertFrontRight,
                                            boolean invertBackLeft,
                                            boolean invertBackRight,
-                                           MecanumConfig config) {
+                                           MecanumDrivebase.Config config) {
         return mecanum(hw,
                 DEFAULT_FRONT_LEFT_MOTOR_NAME, invertFrontLeft,
                 DEFAULT_FRONT_RIGHT_MOTOR_NAME, invertFrontRight,
@@ -219,7 +219,7 @@ public final class Drives {
      * Create a mecanum drivebase with custom names, inversion, and config.
      *
      * <p>This is the most flexible overload; advanced teams can use it to
-     * plug in any combination of hardware naming and {@link MecanumConfig}
+     * plug in any combination of hardware naming and {@link MecanumDrivebase.Config}
      * tuning.</p>
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
@@ -227,13 +227,13 @@ public final class Drives {
                                            String frName, boolean frInverted,
                                            String blName, boolean blInverted,
                                            String brName, boolean brInverted,
-                                           MecanumConfig config) {
+                                           MecanumDrivebase.Config config) {
         PowerOutput fl = FtcHardware.motorPower(hw, flName, flInverted);
         PowerOutput fr = FtcHardware.motorPower(hw, frName, frInverted);
         PowerOutput bl = FtcHardware.motorPower(hw, blName, blInverted);
         PowerOutput br = FtcHardware.motorPower(hw, brName, brInverted);
 
-        MecanumConfig cfg = (config != null) ? config : MecanumConfig.defaults();
+        MecanumDrivebase.Config cfg = (config != null) ? config : MecanumDrivebase.Config.defaults();
         return new MecanumDrivebase(fl, fr, bl, br, cfg);
     }
 

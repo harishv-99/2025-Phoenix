@@ -9,78 +9,48 @@ import edu.ftcphoenix.fw.adapters.ftc.FtcVision;
 /**
  * High-level helpers for working with AprilTags in robot code.
  *
- * <p>This class plays a similar role to {@code Drives} and {@code FtcPlants}:
- * it provides a small number of static factory methods that hide the FTC SDK
- * details and return framework-friendly interfaces.</p>
+ * <p>This class plays a similar role to {@code Drives} and the plant factories in
+ * {@code Actuators}: it provides a small number of static factory methods that hide the
+ * FTC SDK details and return framework-friendly interfaces.</p>
  *
  * <h2>Beginner usage</h2>
  *
- * <p>The typical pattern in a TeleOp or autonomous OpMode is:</p>
- *
  * <pre>{@code
- * public final class TeleOpWithTags extends PhoenixTeleOpBase {
+ * public class MyTeleOp extends OpMode {
  *     private AprilTagSensor tags;
  *
  *     @Override
- *     protected void onInitRobot() {
+ *     public void init() {
  *         // Wire up AprilTags using a named webcam from the hardware map.
  *         tags = Tags.aprilTags(hardwareMap, "Webcam 1");
  *     }
  *
  *     @Override
- *     protected void loopRobot(double dtSec) {
+ *     public void loop() {
+ *         // Get the closest tag in this set, if the camera frame is no older than 0.3 sec.
  *         AprilTagObservation obs = tags.best(Set.of(1, 2, 3), 0.3);
  *         if (obs.hasTarget) {
  *             telemetry.addData("Tag ID", obs.id);
- *             telemetry.addData("Range (in)", obs.rangeInches);
- *             telemetry.addData("Bearing (deg)", Math.toDegrees(obs.bearingRad));
- *         } else {
- *             telemetry.addLine("No tag in view");
+ *             telemetry.addData("Range (in)", obs.cameraRangeInches());
+ *             telemetry.addData("Bearing (deg)", Math.toDegrees(obs.cameraBearingRad()));
+ *             // Note: bearing > 0 means the tag is to the LEFT of the camera forward axis.
  *         }
  *     }
  * }
  * }</pre>
- *
- * <p>Robot code never needs to interact directly with {@code VisionPortal} or
- * {@code AprilTagProcessor}. All FTC-specific vision details are handled by
- * the {@link FtcVision} adapter.</p>
- *
- * <h2>Design notes</h2>
- *
- * <ul>
- *   <li>This class is intentionally small and opinionated for the common case:
- *       one webcam, current-game tag library, inches for distance, radians
- *       for angles.</li>
- *   <li>More advanced teams who want custom VisionPortal options (resolution,
- *       multiple processors, etc.) can either:
- *     <ul>
- *       <li>Call {@link FtcVision#aprilTags(HardwareMap, String)} directly
- *           from their robot code, or</li>
- *       <li>Fork or extend {@link FtcVision} while still returning an
- *           {@link AprilTagSensor}.</li>
- *     </ul>
- *   </li>
- *   <li>Keeping this helper small makes it easy for new students to discover
- *       and understand: "Tags.aprilTags(...) gives me a sensor I can query
- *       for ID, distance, and bearing."</li>
- * </ul>
  */
 public final class Tags {
 
     private Tags() {
-        // utility holder; not instantiable
+        // Static factory only.
     }
 
     /**
-     * Create an {@link AprilTagSensor} using a named FTC webcam and a default
-     * configuration suitable for most robots.
+     * Create an {@link AprilTagSensor} backed by the FTC SDK AprilTag pipeline, using a webcam.
      *
-     * <p>This is the recommended entry point for teams that simply want to
-     * read AprilTag ID, distance, and bearing from a single camera.</p>
-     *
-     * <p>Internally this delegates to
-     * {@link FtcVision#aprilTags(HardwareMap, String)} and returns the
-     * resulting {@link AprilTagSensor}.</p>
+     * <p>The returned sensor reports observations in <b>Phoenix framing</b>:
+     * +X forward, +Y left, +Z up. Bearing and range are derived from the observation's
+     * {@code pCameraToTag} pose.</p>
      *
      * @param hw         hardware map from the current OpMode
      * @param cameraName hardware configuration name of the webcam

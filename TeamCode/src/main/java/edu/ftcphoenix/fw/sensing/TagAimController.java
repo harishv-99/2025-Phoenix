@@ -12,48 +12,44 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * <h2>Role</h2>
  * <p>{@code TagAimController} is responsible for the <em>control law</em> part of aiming:
  * given a {@link BearingSample} (from a {@link BearingSource}) and loop timing
- * information ({@link LoopClock}), it computes an angular velocity command
- * {@code omega} that tries to drive the bearing to zero.
+ * information ({@link LoopClock}), it computes an angular command {@code omega}
+ * that tries to drive the bearing to zero (target centered).</p>
  *
  * <h2>Sign conventions</h2>
  * <p>
- * Typical {@link BearingSource} implementations (for example those built from
+ * Typical {@link BearingSource} implementations (including those derived from
  * {@link edu.ftcphoenix.fw.sensing.AprilTagObservation}) use a math-style
  * convention where:
  * </p>
  * <ul>
  *   <li>{@code bearingRad = 0} means the target is directly in front.</li>
- *   <li>{@code bearingRad &gt; 0} means the target appears to the <b>left</b>
+ *   <li>{@code bearingRad > 0} means the target appears to the <b>left</b>
  *       (counter-clockwise from forward).</li>
- *   <li>{@code bearingRad &lt; 0} means the target appears to the <b>right</b>
+ *   <li>{@code bearingRad < 0} means the target appears to the <b>right</b>
  *       (clockwise from forward).</li>
  * </ul>
  *
  * <p>
- * {@code TagAimController} produces an angular velocity command {@code omega}
- * intended to be used as {@link edu.ftcphoenix.fw.drive.DriveSignal#omega},
- * which in Phoenix follows:
+ * {@code TagAimController} produces an {@code omega} intended to be used as
+ * {@link edu.ftcphoenix.fw.drive.DriveSignal#omega}, which in Phoenix follows:
  * </p>
  * <ul>
- *   <li>{@code omega &gt; 0} &rarr; rotate <b>clockwise</b> (turn right).</li>
- *   <li>{@code omega &lt; 0} &rarr; rotate <b>counter-clockwise</b> (turn left).</li>
+ *   <li>{@code omega > 0} &rarr; rotate <b>counter-clockwise</b> (turn left).</li>
+ *   <li>{@code omega < 0} &rarr; rotate <b>clockwise</b> (turn right).</li>
  * </ul>
  *
  * <p>
- * To reconcile these, the controller internally uses
- * {@code error = -bearingRad}, so that:
+ * With these conventions, the correct steering behavior is:
  * </p>
  * <ul>
- *   <li>Target left (positive bearing) &rarr; negative error &rarr; {@code omega &lt; 0}
- *       &rarr; robot turns left toward the target.</li>
- *   <li>Target right (negative bearing) &rarr; positive error &rarr; {@code omega &gt; 0}
- *       &rarr; robot turns right toward the target.</li>
+ *   <li>Target left (positive bearing) &rarr; command positive omega (turn left).</li>
+ *   <li>Target right (negative bearing) &rarr; command negative omega (turn right).</li>
  * </ul>
  *
  * <p>It does <strong>not</strong> know or care how the bearing was measured
  * (AprilTags, other vision targets, synthetic sources, etc.). That wiring is
  * handled elsewhere (for example, by {@code TagAim} helpers or
- * {@link edu.ftcphoenix.fw.drive.source.TagAimDriveSource}).
+ * {@link edu.ftcphoenix.fw.drive.source.TagAimDriveSource}).</p>
  *
  * <h2>Typical usage</h2>
  *
@@ -64,7 +60,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  * TagAimController aim = new TagAimController(
  *         pid,
  *         Math.toRadians(1.0),                 // deadband: 1 degree
- *         0.8,                                 // max omega
+ *         0.8,                                 // max |omega| (command units)
  *         TagAimController.LossPolicy.ZERO_OUTPUT_RESET_I
  * );
  *
@@ -162,7 +158,7 @@ public final class TagAimController {
      *
      * <p>High-level behavior:</p>
      * <ul>
-     *   <li>If {@code !sample.hasTarget}, apply the configured
+     *   <li>If {@code sample == null} or {@code !sample.hasTarget}, apply the configured
      *       {@link LossPolicy} and return the resulting {@code lastOmega}.</li>
      *   <li>If {@code |bearing| < deadbandRad}, treat as on-target:
      *     <ul>
@@ -172,9 +168,7 @@ public final class TagAimController {
      *   </li>
      *   <li>Otherwise:
      *     <ul>
-     *       <li>Compute {@code error = -bearingRad} (bearing&gt;0 means tag left,
-     *           but positive omega turns right; we negate so tag-left => omega&lt;0
-     *           (turn left)).</li>
+     *       <li>Use {@code error = bearingRad} (desired bearing is 0).</li>
      *       <li>Call {@link PidController#update(double, double)} with
      *           {@code (error, clock.dtSec())}.</li>
      *       <li>Clamp the result to {@code [-maxOmega, +maxOmega]}.</li>
@@ -184,8 +178,8 @@ public final class TagAimController {
      * </ul>
      *
      * @param clock  loop timing source (for dt); must not be null
-     * @param sample latest bearing sample; must not be null
-     * @return commanded turn rate omega, in [-maxOmega, +maxOmega]
+     * @param sample latest bearing sample (may be null)
+     * @return commanded omega in [-maxOmega, +maxOmega] (Phoenix: + is CCW / turn left)
      */
     public double update(LoopClock clock, BearingSample sample) {
         if (sample == null) {
@@ -201,16 +195,16 @@ public final class TagAimController {
             return lastOmega;
         }
 
-        // bearing>0 (tag left) -> error<0 -> omega<0 (turn left under DriveSignal convention)
-        double error = -sample.bearingRad; // we want bearing → 0
+        // Desired bearing is 0. With Phoenix conventions, bearing>0 (target left) -> omega>0 (turn left).
+        double errorRad = sample.bearingRad;
 
-        // Inside deadband: treat as on-target; no turn command.
-        if (Math.abs(error) < deadbandRad) {
+        // Inside deadband: treat as on-target; no turn command and no PID update.
+        if (Math.abs(errorRad) < deadbandRad) {
             lastOmega = 0.0;
             return lastOmega;
         }
 
-        double raw = pid.update(error, dtSec);
+        double raw = pid.update(errorRad, dtSec);
         lastOmega = MathUtil.clamp(raw, -maxOmega, maxOmega);
         return lastOmega;
     }

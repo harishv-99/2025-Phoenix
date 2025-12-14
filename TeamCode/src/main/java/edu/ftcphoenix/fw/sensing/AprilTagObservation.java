@@ -1,216 +1,233 @@
 package edu.ftcphoenix.fw.sensing;
 
+import edu.ftcphoenix.fw.geom.Pose3d;
+
 /**
- * Immutable snapshot of a single AprilTag observation in robot-centric
- * coordinates.
+ * Immutable snapshot of a single AprilTag observation (sensor measurement), expressed in
+ * <b>Phoenix framing</b>.
  *
- * <p>This value type deliberately decouples robot code from the FTC vision
- * APIs. It contains the information most robots commonly need:
+ * <h2>Principle: core framework uses Phoenix framing only</h2>
+ * <p>
+ * All core Phoenix framework types (outside {@code edu.ftcphoenix.fw.adapters.*}) operate only in
+ * the Phoenix pose convention:
+ * </p>
  * <ul>
- *   <li>Selecting a tag by ID from a set of IDs.</li>
- *   <li>Reading the distance to that tag (for shooter control, etc.).</li>
- *   <li>Reading the bearing to that tag (for aiming or alignment).</li>
+ *   <li><b>+X</b> forward</li>
+ *   <li><b>+Y</b> left</li>
+ *   <li><b>+Z</b> up</li>
  * </ul>
+ *
+ * <p>
+ * Any FTC-SDK-specific coordinate conventions must be converted inside the FTC adapter layer
+ * before constructing this object.
  * </p>
  *
- * <h2>Coordinate conventions</h2>
+ * <h2>Phoenix pose naming convention</h2>
+ * <p>
+ * Whenever a variable or accessor represents a pose/transform, Phoenix code uses:
+ * </p>
+ * <pre>
+ * pFromFrameToToFrame
+ * </pre>
  *
+ * <p>Examples:</p>
  * <ul>
- *   <li><strong>Bearing:</strong> {@link #bearingRad} is the angle from the
- *       robot's forward direction to the tag, in radians.</li>
- *   <li>0 radians means "directly in front of the robot".</li>
- *   <li>Positive angles are counter-clockwise (tag appears to the left).</li>
- *   <li>Negative angles are clockwise (tag appears to the right).</li>
- *   <li><strong>Range:</strong> {@link #rangeInches} is the straight-line
- *       distance from the robot to the tag center, in <b>inches</b>.</li>
+ *   <li>{@code pRobotToCamera}: camera pose expressed in the robot frame</li>
+ *   <li>{@code pCameraToTag}: tag pose expressed in the camera frame</li>
+ *   <li>{@code pFieldToRobot}: robot pose expressed in the field frame</li>
  * </ul>
  *
- * <p>On the FTC side, the AprilTag library exposes an {@code ftcPose} with
- * fields such as {@code range} and {@code bearing}. The FTC adapter in this
- * framework reads those values, verifies that pose metadata is available, and
- * converts them into the normalized units used here (radians for bearing,
- * inches for range).</p>
+ * <h2>Component naming convention (non-pose values derived from a pose)</h2>
+ * <p>
+ * For a component derived from a pose's translation, Phoenix uses:
+ * </p>
+ * <pre>
+ * &lt;frame&gt;&lt;Direction&gt;&lt;Unit&gt;()
+ * </pre>
  *
- * <h2>Freshness and age</h2>
- *
- * <p>The {@link #ageSec} field reports how many seconds have elapsed since the
- * camera frame this observation came from. Callers typically:</p>
- *
+ * <p>Examples:</p>
  * <ul>
- *   <li>Choose a maximum acceptable age (for example, 0.3&nbsp;s).</li>
- *   <li>Ask an {@link AprilTagSensor} for the "best" observation that is not
- *       older than that age.</li>
- *   <li>Treat observations where {@link #hasTarget} is {@code false} as
- *       "no usable tag available right now".</li>
+ *   <li>{@code cameraForwardInches()} is the +X (forward) component of {@code pCameraToTag}.</li>
+ *   <li>{@code robotLeftInches()} would be the +Y (left) component of a {@code pRobotToSomething} pose.</li>
  * </ul>
  *
- * <h2>Typical usage</h2>
- *
- * <p>To pick a tag from a set of IDs and use its distance and bearing:</p>
- *
- * <pre>{@code
- * AprilTagObservation obs = sensor.best(Set.of(1, 2, 3), 0.5);
- * if (obs.hasTarget) {
- *     // ID-based logic
- *     int id = obs.id;
- *
- *     // Shooter: map range (inches) to flywheel velocity
- *     double rangeIn = obs.rangeInches;
- *
- *     // Aiming: use bearing (radians) with a PID to generate turn command
- *     double bearingRad = obs.bearingRad;
- * }
- * }</pre>
- *
- * <h2>Moving in front of a tag (advanced)</h2>
- *
- * <p>This framework is optimized for simple usage, but it also supports
- * more advanced behaviors such as moving to a specific offset in front of
- * a tag. The helper methods {@link #forwardInches()} and
- * {@link #lateralInches()} decompose the observation into robot-centric
- * X/Y components:</p>
- *
+ * <h2>Phoenix camera frame (for pCameraToTag)</h2>
+ * <p>
+ * Phoenix defines the camera frame using the same axis convention as all Phoenix frames:
+ * </p>
  * <ul>
- *   <li>{@link #forwardInches()} &approx; distance along robot-forward axis.</li>
- *   <li>{@link #lateralInches()} &approx; distance left/right of robot forward.</li>
+ *   <li><b>+X</b> forward (out of the lens)</li>
+ *   <li><b>+Y</b> left</li>
+ *   <li><b>+Z</b> up</li>
  * </ul>
  *
- * <p>These can be combined with your drive and PID logic to build "drive to
- * N inches in front of tag" behaviors later, without changing this type.</p>
+ * <h2>Derived aiming helpers</h2>
+ * <p>
+ * Bearing and range are derived from {@link #pCameraToTag} and are not stored separately to avoid
+ * redundancy and drift.
+ * </p>
  */
 public final class AprilTagObservation {
 
     /**
-     * Whether this observation represents a valid tag.
-     *
-     * <p>If {@code hasTarget} is {@code false}, the other fields are undefined
-     * and should be ignored.</p>
+     * True if this observation represents a real detected tag.
      */
     public final boolean hasTarget;
 
     /**
-     * AprilTag ID from the field layout.
+     * AprilTag numeric ID code.
      *
-     * <p>Only meaningful when {@link #hasTarget} is {@code true}. When
-     * {@code hasTarget} is {@code false}, this value is set to -1.</p>
+     * <p>Only meaningful when {@link #hasTarget} is true. When {@link #hasTarget} is false, this is -1.</p>
      */
     public final int id;
 
     /**
-     * Bearing from robot forward to tag, in radians.
-     *
-     * <p>Only meaningful when {@link #hasTarget} is {@code true}. See the
-     * class-level documentation for the coordinate convention.</p>
-     */
-    public final double bearingRad;
-
-    /**
-     * Straight-line range from robot to tag, in inches.
-     *
-     * <p>Only meaningful when {@link #hasTarget} is {@code true}. This is
-     * directly usable for:
-     * <ul>
-     *   <li>distance-based shooter control (mapping range to flywheel RPM),</li>
-     *   <li>driving to a desired standoff distance from the tag,</li>
-     *   <li>coarse positioning relative to a goal or landmark.</li>
-     * </ul>
-     * The FTC adapter keeps this value in inches to match how many teams
-     * measure and tune their robots.</p>
-     */
-    public final double rangeInches;
-
-    /**
      * Age of this observation in seconds.
      *
-     * <p>Specifically, this is the elapsed time between the camera frame that
-     * produced this observation and the moment the observation was created.
-     * Higher-level code decides what counts as "too old" for a given behavior.</p>
+     * <p>This is the elapsed time between the camera frame that produced this observation and
+     * the moment the observation was created.</p>
      */
     public final double ageSec;
 
+    /**
+     * Tag pose expressed in the Phoenix camera frame: {@code pCameraToTag}.
+     *
+     * <p>Non-null when {@link #hasTarget} is true.</p>
+     */
+    public final Pose3d pCameraToTag;
+
+    /**
+     * Optional robot pose expressed in the Phoenix field frame: {@code pFieldToRobot}.
+     *
+     * <p>If present, this is a field-centric pose measurement source (6DOF). For example, an FTC
+     * adapter may populate this from SDK robotPose after converting into Phoenix framing.</p>
+     */
+    public final Pose3d pFieldToRobot;
+
     private AprilTagObservation(boolean hasTarget,
                                 int id,
-                                double bearingRad,
-                                double rangeInches,
-                                double ageSec) {
+                                double ageSec,
+                                Pose3d pCameraToTag,
+                                Pose3d pFieldToRobot) {
         this.hasTarget = hasTarget;
         this.id = id;
-        this.bearingRad = bearingRad;
-        this.rangeInches = rangeInches;
         this.ageSec = ageSec;
+        this.pCameraToTag = pCameraToTag;
+        this.pFieldToRobot = pFieldToRobot;
     }
 
     /**
-     * Create an observation representing "no tag available".
-     *
-     * <p>This is typically returned by {@link AprilTagSensor} when there is no
-     * visible tag that meets the caller's ID and freshness criteria. The
-     * {@link #ageSec} value can still be useful for logging or debugging.</p>
+     * Create an observation representing "no target".
      *
      * @param ageSec how long ago the last camera frame was, in seconds
-     * @return an observation with {@link #hasTarget} set to {@code false}
      */
     public static AprilTagObservation noTarget(double ageSec) {
-        return new AprilTagObservation(false, -1, 0.0, 0.0, ageSec);
+        return new AprilTagObservation(false, -1, ageSec, null, null);
     }
 
     /**
-     * Create an observation representing a single detected tag.
+     * Create an observation representing a detected tag, expressed in Phoenix framing.
      *
-     * @param id          AprilTag ID from the field layout
-     * @param bearingRad  bearing from robot forward to the tag, in radians
-     * @param rangeInches distance from robot to the tag, in inches
-     * @param ageSec      age of the underlying camera frame, in seconds
-     * @return an observation with {@link #hasTarget} set to {@code true}
+     * @param id               AprilTag ID
+     * @param pCameraToTagPose tag pose in Phoenix camera frame (non-null)
+     * @param ageSec           age of the underlying camera frame (seconds)
+     */
+    public static AprilTagObservation target(int id, Pose3d pCameraToTagPose, double ageSec) {
+        if (pCameraToTagPose == null) {
+            throw new IllegalArgumentException("pCameraToTagPose must be non-null when hasTarget is true");
+        }
+        return new AprilTagObservation(true, id, ageSec, pCameraToTagPose, null);
+    }
+
+    /**
+     * Create an observation representing a detected tag with an additional field-centric robot pose
+     * measurement.
+     *
+     * @param id                AprilTag ID
+     * @param pCameraToTagPose  tag pose in Phoenix camera frame (non-null)
+     * @param pFieldToRobotPose robot pose in Phoenix field frame (non-null)
+     * @param ageSec            age of the underlying camera frame (seconds)
      */
     public static AprilTagObservation target(int id,
-                                             double bearingRad,
-                                             double rangeInches,
+                                             Pose3d pCameraToTagPose,
+                                             Pose3d pFieldToRobotPose,
                                              double ageSec) {
-        return new AprilTagObservation(true, id, bearingRad, rangeInches, ageSec);
+        if (pCameraToTagPose == null) {
+            throw new IllegalArgumentException("pCameraToTagPose must be non-null when hasTarget is true");
+        }
+        if (pFieldToRobotPose == null) {
+            throw new IllegalArgumentException("pFieldToRobotPose must be non-null when provided");
+        }
+        return new AprilTagObservation(true, id, ageSec, pCameraToTagPose, pFieldToRobotPose);
     }
 
     /**
-     * Convenience helper to test whether this observation is considered
-     * "fresh enough" for a given behavior.
+     * Returns true if this observation contains a {@link #pFieldToRobot} measurement.
+     */
+    public boolean hasPFieldToRobot() {
+        return hasTarget && pFieldToRobot != null;
+    }
+
+    /**
+     * Convenience helper to test whether this observation is considered "fresh enough".
      *
      * @param maxAgeSec maximum acceptable age in seconds
-     * @return {@code true} if this observation has a target and
-     * {@link #ageSec} is less than or equal to {@code maxAgeSec}
+     * @return true if this observation has a target and {@link #ageSec} is <= maxAgeSec
      */
     public boolean isFresh(double maxAgeSec) {
         return hasTarget && ageSec <= maxAgeSec;
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Components derived from pCameraToTag (Phoenix camera frame)
+    // ---------------------------------------------------------------------------------------------
+
     /**
-     * Robot-forward component of the tag position, in inches.
-     *
-     * <p>This is the distance along the robot's forward axis to the tag
-     * (approximately {@code rangeInches * cos(bearingRad)}). If
-     * {@link #hasTarget} is {@code false}, this returns 0.</p>
-     *
-     * <p>Advanced behaviors can use this value to build "drive to N inches in
-     * front of the tag" logic without needing to perform their own trigonometry.</p>
+     * Tag forward component in the Phoenix camera frame (+X forward), in inches.
      */
-    public double forwardInches() {
-        if (!hasTarget) return 0.0;
-        return rangeInches * Math.cos(bearingRad);
+    public double cameraForwardInches() {
+        return hasTarget ? pCameraToTag.xInches : 0.0;
     }
 
     /**
-     * Robot-lateral component of the tag position, in inches.
-     *
-     * <p>This is the distance left/right from the robot's forward axis to the
-     * tag (approximately {@code rangeInches * Math.sin(bearingRad)}). Positive
-     * values mean the tag is to the left; negative values mean the tag is to
-     * the right. If {@link #hasTarget} is {@code false}, this returns 0.</p>
-     *
-     * <p>Advanced holonomic drive logic can use this value for strafing to get
-     * directly in front of a tag.</p>
+     * Tag left component in the Phoenix camera frame (+Y left), in inches.
      */
-    public double lateralInches() {
-        if (!hasTarget) return 0.0;
-        return rangeInches * Math.sin(bearingRad);
+    public double cameraLeftInches() {
+        return hasTarget ? pCameraToTag.yInches : 0.0;
+    }
+
+    /**
+     * Tag up component in the Phoenix camera frame (+Z up), in inches.
+     */
+    public double cameraUpInches() {
+        return hasTarget ? pCameraToTag.zInches : 0.0;
+    }
+
+    /**
+     * Horizontal bearing from camera forward (+X) to the tag center, in radians.
+     *
+     * <p>Derived from {@link #pCameraToTag} using Phoenix sign convention: positive = left.</p>
+     */
+    public double cameraBearingRad() {
+        if (!hasTarget) {
+            return 0.0;
+        }
+        return Math.atan2(cameraLeftInches(), cameraForwardInches());
+    }
+
+    /**
+     * 3D line-of-sight distance from camera origin to the tag center, in inches.
+     *
+     * <p>Derived from {@link #pCameraToTag} translation components.</p>
+     */
+    public double cameraRangeInches() {
+        if (!hasTarget) {
+            return 0.0;
+        }
+        double f = cameraForwardInches();
+        double l = cameraLeftInches();
+        double u = cameraUpInches();
+        return Math.sqrt(f * f + l * l + u * u);
     }
 
     @Override
@@ -220,9 +237,10 @@ public final class AprilTagObservation {
         }
         return "AprilTagObservation{"
                 + "id=" + id
-                + ", bearingRad=" + bearingRad
-                + ", rangeInches=" + rangeInches
                 + ", ageSec=" + ageSec
+                + ", cameraBearingRad=" + cameraBearingRad()
+                + ", cameraRangeInches=" + cameraRangeInches()
+                + ", hasPFieldToRobot=" + (pFieldToRobot != null)
                 + '}';
     }
 }

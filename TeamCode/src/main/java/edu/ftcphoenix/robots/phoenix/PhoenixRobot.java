@@ -15,7 +15,6 @@ import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
@@ -83,7 +82,7 @@ public final class PhoenixRobot {
     public void initTeleOp() {
 
         // --- Create mechanisms ---
-        MecanumConfig mecanumConfig = MecanumConfig.defaults();
+        MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
         mecanumConfig.maxLateralRatePerSec = 0.01;
         drivebase = Drives.mecanum(hardwareMap,
                 RobotConfig.DriveTrain.invertMotorFrontLeft,
@@ -109,7 +108,8 @@ public final class PhoenixRobot {
         driveWithAim = TagAim.teleOpAim(
                 stickDrive,
                 gamepads.p2().leftBumper(),
-                scoringTarget
+                scoringTarget,
+                aimConfig
         );
 
         telemetry.addLine("Phoenix TeleOp with AutoAim");
@@ -196,7 +196,7 @@ public final class PhoenixRobot {
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
             telemetry.addData("id", obs.id);
-            telemetry.addData("dist", obs.rangeInches);
+            telemetry.addData("dist", obs.cameraRangeInches());
         }
 
         telemetry.update();

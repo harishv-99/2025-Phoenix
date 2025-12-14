@@ -50,26 +50,38 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * </ul>
  *
  * <p>
- * The maintained sign conventions are those of {@link DriveSignal}:
+ * The maintained sign conventions are those of {@link DriveSignal} (Phoenix pose conventions):
  * </p>
  *
  * <ul>
- *   <li>{@code axial &gt; 0} &rarr; drive forward</li>
- *   <li>{@code lateral &gt; 0} &rarr; strafe right</li>
- *   <li>{@code omega &gt; 0} &rarr; rotate clockwise (turn right, viewed from above)</li>
+ *   <li>{@code axial > 0} &rarr; drive forward</li>
+ *   <li>{@code lateral > 0} &rarr; strafe left</li>
+ *   <li>{@code omega > 0} &rarr; rotate counter-clockwise (turn left, viewed from above)</li>
  * </ul>
  *
  * <p>
- * {@link TagAimController} is responsible for choosing {@code omega} so that
- * the robot turns toward the target (e.g., tag left &rarr; {@code omega &lt; 0}
- * turn left; tag right &rarr; {@code omega &gt; 0} turn right).
+ * Typical {@link BearingSource} implementations use:
  * </p>
+ *
+ * <ul>
+ *   <li>{@code bearingRad > 0} &rarr; target appears to the left</li>
+ *   <li>{@code bearingRad < 0} &rarr; target appears to the right</li>
+ * </ul>
+ *
+ * <p>
+ * With Phoenix conventions, the correct steering behavior is:
+ * </p>
+ *
+ * <ul>
+ *   <li>Target left (positive bearing) &rarr; {@code omega > 0} (turn left)</li>
+ *   <li>Target right (negative bearing) &rarr; {@code omega < 0} (turn right)</li>
+ * </ul>
+ *
+ * <p>{@link TagAimController} is responsible for choosing {@code omega} to achieve that behavior.</p>
  *
  * <h2>Typical usage</h2>
  *
  * <pre>{@code
- * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
- *
  * // Base driver control (sticks) for mecanum drive.
  * DriveSource baseDrive = GamepadDriveSource.teleOpMecanumStandard(pads);
  *
@@ -90,10 +102,9 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * );
  *
  * // In your loop:
- * clock.update(getRuntime());
  * DriveSignal signal = aimedDrive.get(clock).clamped();
+ * drivebase.update(clock);   // update dt used for rate limiting (if enabled)
  * drivebase.drive(signal);
- * drivebase.update(clock);
  * }</pre>
  */
 public final class TagAimDriveSource implements DriveSource {
@@ -161,8 +172,8 @@ public final class TagAimDriveSource implements DriveSource {
      *
      * <p>
      * The omega used when aiming is the controller's output and follows the
-     * {@link DriveSignal} convention: {@code omega &gt; 0} rotates clockwise,
-     * {@code omega &lt; 0} rotates counter-clockwise.
+     * {@link DriveSignal} convention: {@code omega > 0} rotates CCW (turn left),
+     * {@code omega < 0} rotates CW (turn right).
      * </p>
      */
     @Override

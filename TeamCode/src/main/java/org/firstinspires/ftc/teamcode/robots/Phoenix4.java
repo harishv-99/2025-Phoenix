@@ -11,7 +11,6 @@ import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.MecanumConfig;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
@@ -150,7 +149,7 @@ public final class Phoenix4 extends OpMode {
         //   - Uses default motor names (frontLeftMotor, frontRightMotor, ...).
         //   - Applies a standard inversion pattern.
         //   - Uses the default MecanumConfig.
-        MecanumConfig mecanumConfig = MecanumConfig.defaults();
+        MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
         drivebase = Drives.mecanum(hardwareMap,
                 RobotConfig.DriveTrain.invertMotorFrontLeft,
                 RobotConfig.DriveTrain.invertMotorFrontRight,

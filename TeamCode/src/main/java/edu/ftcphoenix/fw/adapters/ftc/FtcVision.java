@@ -7,90 +7,154 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Position;
+import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.geom.Pose3d;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
+import edu.ftcphoenix.fw.sensing.CameraMountConfig;
 
 /**
- * FTC-specific adapter that wires the SDK {@link VisionPortal} and
- * {@link AprilTagProcessor} into the framework's {@link AprilTagSensor}.
+ * FTC-specific vision adapter for AprilTag sensing.
  *
- * <h2>Layering</h2>
+ * <p>This class wires up a {@link VisionPortal} and {@link AprilTagProcessor}
+ * (defaulting to the current game's tag library), and exposes a framework-level
+ * {@link AprilTagSensor} API so robot code can read tag observations without
+ * depending on FTC vision classes.</p>
+ *
+ * <h2>Frames &amp; conversions</h2>
+ *
+ * <p>FTC AprilTag detection pose values are reported in the FTC detection pose reference frame
+ * (documented in {@link FtcFrames}). Phoenix core code uses the Phoenix framing convention, so
+ * this adapter converts FTC poses into Phoenix poses using {@link FtcFrames} before constructing
+ * {@link AprilTagObservation}.</p>
+ *
+ * <h2>Range / bearing</h2>
+ *
+ * <p>Phoenix does not store redundant scalar bearing/range in {@link AprilTagObservation}.
+ * Instead, robot code uses derived helpers:</p>
  *
  * <ul>
- *   <li>Robot code should depend only on {@link AprilTagSensor} and
- *       {@link AprilTagObservation}.</li>
- *   <li>This class is the only place where Phoenix knows about FTC
- *       vision classes.</li>
- *   <li>Higher-level helpers (for example, a {@code Tags} utility in
- *       {@code fw.sensing}) can delegate to this adapter.</li>
+ *   <li>{@link AprilTagObservation#cameraBearingRad()}</li>
+ *   <li>{@link AprilTagObservation#cameraRangeInches()}</li>
  * </ul>
  *
- * <h2>Usage (beginner path)</h2>
+ * <h2>Camera mount / SDK robotPose</h2>
  *
- * <pre>{@code
- * // In your robot container or TeleOp init:
- * AprilTagSensor tags = FtcVision.aprilTags(hardwareMap, "Webcam 1");
+ * <p>If you provide {@link Config#cameraMount}, this adapter applies the camera extrinsics to the FTC
+ * {@link AprilTagProcessor.Builder} via {@link AprilTagProcessor.Builder#setCameraPose(Position, YawPitchRollAngles)}.
+ * This enables FTC to compute per-detection robot pose when the SDK has sufficient metadata.</p>
  *
- * // In your loop:
- * AprilTagObservation obs = tags.best(Set.of(1, 2, 3), 0.3); // tags 1/2/3, max age 0.3 s
- *
- * if (obs.hasTarget) {
- *     telemetry.addData("Tag", obs.id);
- *     telemetry.addData("Range (in)", obs.rangeInches);
- *     telemetry.addData("Bearing (deg)", Math.toDegrees(obs.bearingRad));
- * } else {
- *     telemetry.addLine("No tag in range");
- * }
- * }</pre>
- *
- * <p>Advanced teams who want to customize the VisionPortal / processor
- * can either fork this class or add another adapter that still returns
- * an {@link AprilTagSensor}.</p>
+ * <p><b>Important:</b> FTC uses a separate camera-axes convention for {@code setCameraPose} (see
+ * {@link FtcFrames} “Localization camera axes”). This adapter converts the Phoenix camera mount pose
+ * into that convention before passing it to the SDK.</p>
  */
 public final class FtcVision {
 
+    /**
+     * Nano-seconds per second, used when converting FTC's
+     * {@link AprilTagDetection#frameAcquisitionNanoTime} into seconds.
+     */
     private static final double NANOS_PER_SECOND = 1_000_000_000.0;
 
-    private FtcVision() {
-        // utility holder
+    /**
+     * Default camera resolution if none is provided.
+     */
+    private static final Size DEFAULT_RESOLUTION = new Size(640, 480);
+
+    /**
+     * Configuration for {@link #aprilTags(HardwareMap, String, Config)}.
+     */
+    public static final class Config {
+
+        /**
+         * Camera streaming resolution. If {@code null}, defaults to 640x480.
+         */
+        public Size cameraResolution = DEFAULT_RESOLUTION;
+
+        /**
+         * Camera mount extrinsics (robot-frame camera pose).
+         *
+         * <p>If set, it is converted and applied to the FTC {@link AprilTagProcessor.Builder} via
+         * {@link AprilTagProcessor.Builder#setCameraPose(Position, YawPitchRollAngles)} to enable
+         * FTC SDK robot-pose estimation when supported.</p>
+         */
+        public CameraMountConfig cameraMount = null;
+
+        /**
+         * Optional pitch offset (radians) applied when converting {@link #cameraMount} into
+         * the FTC {@link YawPitchRollAngles} used by {@code setCameraPose}.
+         *
+         * <p>Default is {@code 0}. Keep this at 0 unless you have a specific FTC sample or
+         * measurement that indicates an offset is required for your configuration.</p>
+         */
+        public double sdkPitchRadOffset = 0.0;
+
+        /**
+         * Convenience helper to attach a camera mount without call-site boilerplate.
+         *
+         * @param mount camera mount (may be {@code null} to clear)
+         * @return this config for chaining
+         */
+        public Config useCameraMount(CameraMountConfig mount) {
+            this.cameraMount = mount;
+            return this;
+        }
+
+        /**
+         * Convenience helper to set camera resolution.
+         *
+         * @param resolution requested resolution (may be {@code null} to use default)
+         * @return this config for chaining
+         */
+        public Config useCameraResolution(Size resolution) {
+            this.cameraResolution = resolution;
+            return this;
+        }
     }
 
     /**
-     * Create an {@link AprilTagSensor} using a named FTC webcam and
-     * a default configuration suitable for most teams.
+     * Create a basic AprilTag sensor using a webcam and the official game tag
+     * layout from {@link AprilTagGameDatabase#getCurrentGameTagLibrary()}.
      *
-     * <p>Defaults:</p>
+     * <p>This overload uses default configuration. See
+     * {@link #aprilTags(HardwareMap, String, Config)} for customization.</p>
      *
-     * <ul>
-     *   <li>Camera: {@link WebcamName} looked up from {@link HardwareMap}.</li>
-     *   <li>Tag library: {@link AprilTagGameDatabase#getCurrentGameTagLibrary()}.</li>
-     *   <li>Output units: distance in inches, angles in radians
-     *       (for {@link AprilTagObservation#rangeInches} and
-     *       {@link AprilTagObservation#bearingRad}).</li>
-     *   <li>Camera resolution: 640x480 (a common calibrated resolution).</li>
-     * </ul>
-     *
-     * <p>The returned sensor owns the {@link VisionPortal} and keeps it
-     * open for the lifetime of the OpMode. There is no explicit close
-     * API in {@link AprilTagSensor}; the portal will be reclaimed when
-     * the OpMode finishes.</p>
-     *
-     * @param hw         hardware map from the OpMode
+     * @param hw         robot {@link HardwareMap}
      * @param cameraName hardware configuration name of the webcam
      * @return a ready-to-use {@link AprilTagSensor}
      */
     public static AprilTagSensor aprilTags(HardwareMap hw, String cameraName) {
+        return aprilTags(hw, cameraName, new Config());
+    }
+
+    /**
+     * Create an AprilTag sensor using a webcam and the official game tag layout.
+     *
+     * <p>The returned {@link AprilTagSensor} instance performs ID filtering
+     * and age checks, and converts FTC's pose information into Phoenix framing
+     * using {@link FtcFrames}.</p>
+     *
+     * @param hw         robot {@link HardwareMap}
+     * @param cameraName hardware configuration name of the webcam
+     * @param cfg        configuration options (must not be {@code null})
+     * @return a ready-to-use {@link AprilTagSensor}
+     */
+    public static AprilTagSensor aprilTags(HardwareMap hw, String cameraName, Config cfg) {
         Objects.requireNonNull(hw, "hardwareMap is required");
         Objects.requireNonNull(cameraName, "cameraName is required");
+        Objects.requireNonNull(cfg, "cfg is required");
 
         WebcamName webcam = hw.get(WebcamName.class, cameraName);
 
@@ -99,13 +163,19 @@ public final class FtcVision {
                 .setTagLibrary(AprilTagGameDatabase.getCurrentGameTagLibrary())
                 .setOutputUnits(DistanceUnit.INCH, AngleUnit.RADIANS);
 
+        // Optional: apply Phoenix camera extrinsics so FTC can compute robotPose.
+        if (cfg.cameraMount != null) {
+            applyCameraMountToAprilTagProcessor(tagBuilder, cfg.cameraMount, cfg.sdkPitchRadOffset);
+        }
+
         AprilTagProcessor processor = tagBuilder.build();
 
         // Wire the processor into a VisionPortal using the webcam.
+        Size resolution = (cfg.cameraResolution != null) ? cfg.cameraResolution : DEFAULT_RESOLUTION;
         VisionPortal.Builder portalBuilder = new VisionPortal.Builder()
                 .setCamera(webcam)
                 .addProcessor(processor)
-                .setCameraResolution(new Size(640, 480));
+                .setCameraResolution(resolution);
 
         VisionPortal portal = portalBuilder.build();
 
@@ -113,17 +183,68 @@ public final class FtcVision {
     }
 
     /**
+     * Apply a Phoenix {@link CameraMountConfig} to an FTC {@link AprilTagProcessor.Builder}.
+     *
+     * <p>This overload uses {@code sdkPitchRadOffset = 0}.</p>
+     */
+    public static void applyCameraMountToAprilTagProcessor(
+            AprilTagProcessor.Builder builder,
+            CameraMountConfig mount
+    ) {
+        applyCameraMountToAprilTagProcessor(builder, mount, 0.0);
+    }
+
+    /**
+     * Apply a Phoenix {@link CameraMountConfig} to an FTC {@link AprilTagProcessor.Builder}.
+     *
+     * <p>This converts the mount pose from Phoenix framing into the FTC AprilTag Localization
+     * “camera axes” convention (see {@link FtcFrames}) before passing it to
+     * {@link AprilTagProcessor.Builder#setCameraPose(Position, YawPitchRollAngles)}.</p>
+     *
+     * @param builder           FTC AprilTag processor builder (non-null)
+     * @param mount             Phoenix camera mount (robot frame) (non-null)
+     * @param sdkPitchRadOffset optional pitch offset (radians) to apply after conversion
+     */
+    public static void applyCameraMountToAprilTagProcessor(
+            AprilTagProcessor.Builder builder,
+            CameraMountConfig mount,
+            double sdkPitchRadOffset
+    ) {
+        Objects.requireNonNull(builder, "builder");
+        Objects.requireNonNull(mount, "mount");
+
+        // Convert robot->camera pose from Phoenix framing to FTC localization camera axes.
+        Pose3d pRobotToCamera = mount.robotToCameraPose();
+        Pose3d ftcLocCamPose = FtcFrames.toFtcLocalizationCameraAxesFromPhoenix(pRobotToCamera);
+
+        Position pos = new Position(
+                DistanceUnit.INCH,
+                ftcLocCamPose.xInches,
+                ftcLocCamPose.yInches,
+                ftcLocCamPose.zInches,
+                0
+        );
+
+        YawPitchRollAngles ypr = new YawPitchRollAngles(
+                AngleUnit.RADIANS,
+                ftcLocCamPose.yawRad,
+                ftcLocCamPose.pitchRad + sdkPitchRadOffset,
+                ftcLocCamPose.rollRad,
+                0
+        );
+
+        builder.setCameraPose(pos, ypr);
+    }
+
+    /**
      * Internal implementation of {@link AprilTagSensor} backed by a
      * {@link VisionPortal} and {@link AprilTagProcessor}.
-     *
-     * <p>This class is package-visible so tests or advanced helpers can
-     * use it without exposing FTC vision types beyond the adapters
-     * package.</p>
      */
     static final class PortalAprilTagSensor implements AprilTagSensor {
 
         @SuppressWarnings("unused")
         private final VisionPortal portal;   // kept for lifecycle; not directly used yet
+
         private final AprilTagProcessor processor;
 
         PortalAprilTagSensor(VisionPortal portal, AprilTagProcessor processor) {
@@ -139,23 +260,77 @@ public final class FtcVision {
         @Override
         public AprilTagObservation best(Set<Integer> idsOfInterest, double maxAgeSec) {
             Objects.requireNonNull(idsOfInterest, "idsOfInterest");
+            if (idsOfInterest.isEmpty()) {
+                return AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
+            }
             return selectBest(idsOfInterest, maxAgeSec);
         }
 
+        @Override
+        public AprilTagObservation best(int id, double maxAgeSec) {
+            return best(Collections.singleton(id), maxAgeSec);
+        }
+
+        @Override
+        public boolean hasFreshAny(double maxAgeSec) {
+            AprilTagObservation obs = bestAny(maxAgeSec);
+            return obs.isFresh(maxAgeSec);
+        }
+
+        @Override
+        public boolean hasFresh(Set<Integer> idsOfInterest, double maxAgeSec) {
+            AprilTagObservation obs = best(idsOfInterest, maxAgeSec);
+            return obs.isFresh(maxAgeSec);
+        }
+
+        @Override
+        public boolean hasFresh(int id, double maxAgeSec) {
+            AprilTagObservation obs = best(id, maxAgeSec);
+            return obs.isFresh(maxAgeSec);
+        }
+
         /**
-         * Core selection logic shared by {@link #bestAny(double)} and
-         * {@link #best(Set, double)}.
+         * Framework-style debug dump (optional helper; not part of {@link AprilTagSensor}).
          *
-         * <p>Policy:</p>
+         * @param dbg       debug sink (may be {@code null})
+         * @param prefix    key prefix (may be {@code null} or empty)
+         * @param maxAgeSec freshness window used for the shown "bestAny"
+         */
+        public void debugDump(DebugSink dbg, String prefix, double maxAgeSec) {
+            if (dbg == null) {
+                return;
+            }
+            String p = (prefix == null || prefix.isEmpty()) ? "ftcVision.tags" : prefix;
+
+            List<AprilTagDetection> detections = processor.getDetections();
+            int n = (detections == null) ? 0 : detections.size();
+
+            dbg.addLine(p + ": PortalAprilTagSensor");
+            dbg.addData(p + ".detections.count", n);
+            dbg.addData(p + ".maxAgeSec", maxAgeSec);
+
+            AprilTagObservation obs = bestAny(maxAgeSec);
+            dbg.addData(p + ".bestAny.hasTarget", obs.hasTarget);
+            dbg.addData(p + ".bestAny.id", obs.id);
+            dbg.addData(p + ".bestAny.ageSec", obs.ageSec);
+            dbg.addData(p + ".bestAny.cameraBearingRad", obs.cameraBearingRad());
+            dbg.addData(p + ".bestAny.cameraRangeInches", obs.cameraRangeInches());
+        }
+
+        /**
+         * Core selection logic shared by the {@code best*} methods.
          *
+         * <p>This method:</p>
          * <ol>
-         *   <li>Start from the latest detections from {@link AprilTagProcessor}.</li>
-         *   <li>Optionally filter by {@code idsOrNull}.</li>
-         *   <li>Ignore detections without metadata or pose.</li>
-         *   <li>Reject detections older than {@code maxAgeSec} using
+         *   <li>Fetches the current list of detections from the processor.</li>
+         *   <li>If there are no detections, returns {@link AprilTagObservation#noTarget(double)}.</li>
+         *   <li>Computes the age of each detection based on {@link System#nanoTime()} and
          *       {@link AprilTagDetection#frameAcquisitionNanoTime}.</li>
-         *   <li>Among remaining detections, choose the one with the
-         *       smallest range (closest tag).</li>
+         *   <li>Rejects any detection older than {@code maxAgeSec}.</li>
+         *   <li>Optionally filters by {@code idsOrNull}.</li>
+         *   <li>Ignores detections without pose data.</li>
+         *   <li>Among remaining detections, chooses the one with the smallest range
+         *       (closest tag in 3D line-of-sight distance).</li>
          * </ol>
          *
          * @param idsOrNull set of IDs to accept, or {@code null} for "any"
@@ -163,7 +338,6 @@ public final class FtcVision {
          */
         private AprilTagObservation selectBest(Set<Integer> idsOrNull, double maxAgeSec) {
             if (maxAgeSec < 0.0) {
-                // Negative max ages are not meaningful; treat as "no target acceptable".
                 return AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
             }
 
@@ -175,6 +349,7 @@ public final class FtcVision {
             long nowNanos = System.nanoTime();
 
             AprilTagDetection bestDet = null;
+            Pose3d bestPCameraToTag = null;
             double bestRangeInches = Double.POSITIVE_INFINITY;
             double bestAgeSec = Double.POSITIVE_INFINITY;
 
@@ -184,47 +359,59 @@ public final class FtcVision {
                 }
 
                 if (idsOrNull != null && !idsOrNull.contains(det.id)) {
-                    // Caller is only interested in specific IDs.
                     continue;
                 }
 
-                // To use pose data (range/bearing) we must have metadata and ftcPose.
-                if (det.metadata == null || det.ftcPose == null) {
+                // We need pose values to build pCameraToTag.
+                if (det.ftcPose == null) {
                     continue;
                 }
 
-                // Compute age of this frame based on acquisition time.
                 long frameTime = det.frameAcquisitionNanoTime;
                 double ageSec = (frameTime == 0L)
                         ? 0.0
                         : (nowNanos - frameTime) / NANOS_PER_SECOND;
 
                 if (ageSec > maxAgeSec) {
-                    // Too old for caller's freshness requirement.
                     continue;
                 }
 
-                double rangeInches = det.ftcPose.range; // already configured as inches
-                if (rangeInches < bestRangeInches) {
-                    bestRangeInches = rangeInches;
+                // Convert FTC detection pose -> Phoenix pCameraToTag.
+                Pose3d ftcCamToTag = new Pose3d(
+                        det.ftcPose.x,
+                        det.ftcPose.y,
+                        det.ftcPose.z,
+                        det.ftcPose.yaw,
+                        det.ftcPose.pitch,
+                        det.ftcPose.roll
+                );
+
+                Pose3d pCameraToTag = FtcFrames.toPhoenixFromFtcDetectionFrame(ftcCamToTag);
+
+                // Choose the closest (3D range). We compute from pCameraToTag to avoid relying on
+                // any additional FTC convenience fields.
+                double r = Math.sqrt(
+                        pCameraToTag.xInches * pCameraToTag.xInches
+                                + pCameraToTag.yInches * pCameraToTag.yInches
+                                + pCameraToTag.zInches * pCameraToTag.zInches
+                );
+
+                if (r < bestRangeInches) {
+                    bestRangeInches = r;
                     bestDet = det;
                     bestAgeSec = ageSec;
+                    bestPCameraToTag = pCameraToTag;
                 }
             }
 
-            if (bestDet == null) {
-                // Either no tags matched IDs, or none were fresh enough.
+            if (bestDet == null || bestPCameraToTag == null) {
                 return AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
             }
 
-            double bearingRad = bestDet.ftcPose.bearing; // radians via setOutputUnits
-
-            return AprilTagObservation.target(
-                    bestDet.id,
-                    bearingRad,
-                    bestRangeInches,
-                    bestAgeSec
-            );
+            // NOTE: We do not currently populate pFieldToRobot here; that requires an additional
+            // frame audit of FTC robotPose semantics for the current SDK. Keeping this adapter
+            // strictly correct for pCameraToTag is the priority.
+            return AprilTagObservation.target(bestDet.id, bestPCameraToTag, bestAgeSec);
         }
     }
 }
