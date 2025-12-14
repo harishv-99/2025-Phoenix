@@ -20,6 +20,8 @@ import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
+import edu.ftcphoenix.fw.sensing.CameraMountConfig;
+import edu.ftcphoenix.fw.sensing.CameraMountLogic;
 import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.util.InterpolatingTable1D;
@@ -41,8 +43,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   </li>
  *   <li><b>Shooter velocity from AprilTag distance</b>:
  *     <ul>
- *       <li>Use an {@link AprilTagSensor} created by
- *           {@link FtcVision#aprilTags}.</li>
+ *       <li>Use an {@link AprilTagSensor} created by {@link FtcVision#aprilTags}.</li>
  *       <li>Read {@link AprilTagObservation#cameraRangeInches()}.</li>
  *       <li>Use an {@link InterpolatingTable1D} to map
  *           {@code distance → shooter velocity} (native units).</li>
@@ -50,9 +51,11 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   </li>
  * </ol>
  *
- * <p>This is very close to a real in-season setup:
- * FTC vision → {@link AprilTagSensor} → {@link AprilTagObservation} → drive
- * (TagAim) + shooter (interpolation table).</p>
+ * <h2>Camera offset note</h2>
+ * <p>
+ * This example uses {@link CameraMountConfig} so TagAim aims the <b>robot center</b>
+ * at the tag even if the camera is not mounted at the robot center.
+ * </p>
  */
 @TeleOp(name = "FW Ex 05: Shooter TagAim Vision", group = "Framework Examples")
 @Disabled
@@ -62,14 +65,6 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
     // Calibration: distance (inches) → shooter velocity (native units)
     // ----------------------------------------------------------------------
 
-    /**
-     * Example shooter velocity table. Teams should tune these numbers for
-     * their actual robot.
-     *
-     * <p>x: distance in inches. y: shooter velocity in native units
-     * (e.g., ticks/sec). The table clamps outside the range and linearly
-     * interpolates between points.</p>
-     */
     private static final InterpolatingTable1D SHOOTER_VELOCITY_TABLE =
             InterpolatingTable1D.ofSortedPairs(
                     // Example calibration data (distanceInches, velocityNative):
@@ -84,10 +79,6 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
     // Tag age constraint
     // ----------------------------------------------------------------------
 
-    /**
-     * Maximum age (seconds) for a tag observation to be considered valid for
-     * shooter distance and aiming.
-     */
     private static final double MAX_TAG_AGE_SEC = 0.5;
 
     // ----------------------------------------------------------------------
@@ -125,8 +116,9 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
     private DriveSource driveWithAim;
 
     private AprilTagSensor tagSensor;
-
     private TagTarget scoringTarget;
+
+    private CameraMountConfig cameraMount;
 
     private Plant shooter;
 
@@ -137,15 +129,12 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
     // For telemetry about the last tag observation used for shooter control.
     private boolean lastHasTarget = false;
     private double lastTagRangeInches = 0.0;
-    private double lastTagBearingRad = 0.0;
+    private double lastCameraBearingRad = 0.0;
+    private double lastRobotBearingRad = 0.0;
     private double lastTagAgeSec = 0.0;
     private int lastTagId = -1;
 
     private double lastShooterTargetVel = 0.0;
-
-    // ----------------------------------------------------------------------
-    // OpMode lifecycle
-    // ----------------------------------------------------------------------
 
     @Override
     public void init() {
@@ -159,18 +148,33 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // 3) Tag sensor: real FTC VisionPortal + AprilTagProcessor adapter.
         //
-        // NOTE: Replace "Webcam 1" with your actual camera name in the
-        // Robot Configuration.
+        // NOTE: Replace "Webcam 1" with your actual camera name in the Robot Configuration.
         tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
 
         // Track scoring tags with a freshness window.
         scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
 
+        // 3b) Camera mount: robot→camera extrinsics (Phoenix axes: +X forward, +Y left, +Z up).
+        //
+        // IMPORTANT: Update these values for your robot.
+        // Example: camera is 6" forward, 3" to the RIGHT (so y = -3), 8" up, facing forward.
+        cameraMount = CameraMountConfig.of(
+                /*xInches=*/6.0,
+                /*yInches=*/-3.0,
+                /*zInches=*/8.0,
+                /*yawRad=*/0.0,
+                /*pitchRad=*/0.0,
+                /*rollRad=*/0.0
+        );
+
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
+        //
+        // This overload uses cameraMount so the ROBOT CENTER faces the tag, not just the camera.
         driveWithAim = TagAim.teleOpAim(
                 baseDrive,
                 gamepads.p1().leftBumper(),
-                scoringTarget
+                scoringTarget,
+                cameraMount
         );
 
         // 4) Shooter wiring using Actuators.
@@ -196,6 +200,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         telemetry.addLine("FW Example 05: Shooter TagAim Vision");
         telemetry.addLine("Drive: mecanum + TagAim (hold LB to auto-aim)");
         telemetry.addLine("Shooter: A = toggle on/off");
+        telemetry.addLine("TagAim: mount-aware (robot center aims at tag)");
         telemetry.update();
     }
 
@@ -223,7 +228,10 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
         lastTagRangeInches = obs.cameraRangeInches();
-        lastTagBearingRad = obs.cameraBearingRad();
+        lastCameraBearingRad = obs.cameraBearingRad();
+        lastRobotBearingRad = obs.hasTarget
+                ? CameraMountLogic.robotBearingRad(obs, cameraMount)
+                : 0.0;
         lastTagAgeSec = obs.ageSec;
         lastTagId = obs.id;
 
@@ -260,7 +268,8 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
                 .addData("hasTarget", lastHasTarget)
                 .addData("id", lastTagId)
                 .addData("rangeIn", lastTagRangeInches)
-                .addData("bearingRad", lastTagBearingRad)
+                .addData("cameraBearingRad", lastCameraBearingRad)
+                .addData("robotBearingRad", lastRobotBearingRad)
                 .addData("ageSec", lastTagAgeSec);
 
         telemetry.addLine("Shooter")

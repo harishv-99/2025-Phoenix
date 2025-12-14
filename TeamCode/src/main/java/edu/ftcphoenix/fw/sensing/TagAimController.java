@@ -4,272 +4,186 @@ import edu.ftcphoenix.fw.core.PidController;
 import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
 import edu.ftcphoenix.fw.util.LoopClock;
-import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
- * Controller that turns a target bearing measurement into a turn command (omega).
+ * Controller that converts a target bearing measurement into a turn-rate command (omega).
  *
- * <h2>Role</h2>
- * <p>{@code TagAimController} is responsible for the <em>control law</em> part of aiming:
- * given a {@link BearingSample} (from a {@link BearingSource}) and loop timing
- * information ({@link LoopClock}), it computes an angular command {@code omega}
- * that tries to drive the bearing to zero (target centered).</p>
- *
- * <h2>Sign conventions</h2>
+ * <h2>Purpose</h2>
  * <p>
- * Typical {@link BearingSource} implementations (including those derived from
- * {@link edu.ftcphoenix.fw.sensing.AprilTagObservation}) use a math-style
- * convention where:
+ * TagAim uses a {@link BearingSource} to provide a bearing measurement (radians) to a target.
+ * This controller turns that bearing into an omega command to rotate the robot until bearing → 0.
  * </p>
+ *
+ * <h2>Sign conventions (contract)</h2>
  * <ul>
- *   <li>{@code bearingRad = 0} means the target is directly in front.</li>
- *   <li>{@code bearingRad > 0} means the target appears to the <b>left</b>
- *       (counter-clockwise from forward).</li>
- *   <li>{@code bearingRad < 0} means the target appears to the <b>right</b>
- *       (clockwise from forward).</li>
+ *   <li>Bearing: {@code bearingRad > 0} means the target is to the <b>left</b> of the forward axis.</li>
+ *   <li>DriveSignal: {@code omega > 0} means rotate <b>CCW</b> (turn left).</li>
  * </ul>
  *
  * <p>
- * {@code TagAimController} produces an {@code omega} intended to be used as
- * {@link edu.ftcphoenix.fw.drive.DriveSignal#omega}, which in Phoenix follows:
+ * Therefore, when {@code bearingRad > 0}, the correct behavior is generally to output
+ * {@code omega > 0} so the robot turns left to reduce the error.
  * </p>
- * <ul>
- *   <li>{@code omega > 0} &rarr; rotate <b>counter-clockwise</b> (turn left).</li>
- *   <li>{@code omega < 0} &rarr; rotate <b>clockwise</b> (turn right).</li>
- * </ul>
  *
+ * <h2>Camera-centric vs robot-centric bearing</h2>
  * <p>
- * With these conventions, the correct steering behavior is:
+ * This class does not care how bearing is produced. Your {@link BearingSource} may be:
  * </p>
  * <ul>
- *   <li>Target left (positive bearing) &rarr; command positive omega (turn left).</li>
- *   <li>Target right (negative bearing) &rarr; command negative omega (turn right).</li>
+ *   <li><b>Camera-centric</b> (camera forward axis faces target), e.g. {@link TagTarget#toBearingSample()}.</li>
+ *   <li><b>Robot-centric</b> (robot center faces target) using {@link CameraMountConfig} via
+ *       {@link CameraMountLogic} or {@link TagTarget#toRobotBearingSample(CameraMountConfig)}.</li>
  * </ul>
  *
- * <p>It does <strong>not</strong> know or care how the bearing was measured
- * (AprilTags, other vision targets, synthetic sources, etc.). That wiring is
- * handled elsewhere (for example, by {@code TagAim} helpers or
- * {@link edu.ftcphoenix.fw.drive.source.TagAimDriveSource}).</p>
- *
- * <h2>Typical usage</h2>
- *
- * <pre>{@code
- * BearingSource bearing = ...;  // e.g., built from AprilTagSensor
- * PidController pid = ...;     // your PID implementation/config
- *
- * TagAimController aim = new TagAimController(
- *         pid,
- *         Math.toRadians(1.0),                 // deadband: 1 degree
- *         0.8,                                 // max |omega| (command units)
- *         TagAimController.LossPolicy.ZERO_OUTPUT_RESET_I
- * );
- *
- * // In your TeleOp or Auto loop:
- * BearingSource.BearingSample sample = bearing.sample(clock);
- * double omega = aim.update(clock, sample);
- * }</pre>
+ * <h2>Deadband and loss behavior</h2>
+ * <ul>
+ *   <li>If {@code |bearing| <= deadbandRad}, the output is 0 and the PID is not updated.</li>
+ *   <li>If the target is lost, behavior is controlled by {@link LossPolicy}.</li>
+ * </ul>
  */
 public final class TagAimController {
 
     /**
-     * Policy for what to do when the target is not visible (lost).
+     * Policy for what to do when {@link BearingSample#hasTarget} is false.
      */
     public enum LossPolicy {
         /**
-         * Set output omega to zero and reset the PID integral state.
-         *
-         * <p>
-         * This is the safest default for most robots: when vision loses the
-         * target, aiming immediately stops and any accumulated integral term
-         * is cleared so that it does not cause a large jump when the target
-         * reappears.
-         * </p>
+         * Output 0 omega and reset PID state (recommended default).
          */
         ZERO_OUTPUT_RESET_I,
 
         /**
-         * Hold the last computed omega and prevent further integral accumulation.
-         *
-         * <p>
-         * Useful when you want aiming to coast briefly through short vision
-         * dropouts, but do not want integral windup during the loss. While the
-         * target is lost, {@link #update(LoopClock, BearingSample)} does not
-         * call {@link PidController#update(double, double)}, so no further
-         * integral or derivative updates occur.
-         * </p>
+         * Output 0 omega but keep PID state unchanged.
          */
-        HOLD_LAST_NO_I,
+        ZERO_OUTPUT_HOLD_STATE,
 
         /**
-         * Set output omega to zero, but do not reset the PID.
+         * Keep returning the last omega output while target is lost.
          *
-         * <p>
-         * Can be useful if you expect the same target to reappear quickly and
-         * you want to keep accumulated integral state. During the loss window,
-         * output is zero, but the PID state is preserved for when the target
-         * comes back.
-         * </p>
+         * <p>Use with care; this can cause the robot to keep spinning if the target drops out.</p>
          */
-        ZERO_NO_RESET
+        HOLD_LAST_OUTPUT
     }
 
     private final PidController pid;
     private final double deadbandRad;
-    private final double maxOmega;
+    private final double maxOmegaAbs;
     private final LossPolicy lossPolicy;
 
+    // Debug / introspection
+    private boolean lastHasTarget = false;
+    private double lastBearingRad = 0.0;
     private double lastOmega = 0.0;
+    private double lastDtSec = 0.0;
 
     /**
-     * Construct a tag aim controller.
+     * Construct a TagAimController.
      *
-     * @param pid         PID implementation used to turn bearing error into omega
-     * @param deadbandRad deadband around zero bearing (in radians) where no output is produced
-     * @param maxOmega    absolute maximum omega command (output is clamped to [-maxOmega, +maxOmega])
-     * @param lossPolicy  policy to apply when no target is visible
+     * @param pid         PID controller that maps bearing error → omega (must not be null)
+     * @param deadbandRad deadband in radians (must be >= 0)
+     * @param maxOmegaAbs absolute maximum omega output (must be >= 0)
+     * @param lossPolicy  behavior when target is lost (if null, defaults to {@link LossPolicy#ZERO_OUTPUT_RESET_I})
      */
     public TagAimController(PidController pid,
                             double deadbandRad,
-                            double maxOmega,
+                            double maxOmegaAbs,
                             LossPolicy lossPolicy) {
         if (pid == null) {
-            throw new IllegalArgumentException("PidController is required");
+            throw new IllegalArgumentException("pid is required");
         }
-        if (lossPolicy == null) {
-            lossPolicy = LossPolicy.ZERO_OUTPUT_RESET_I;
-        }
-
-        // Interpret deadband and maxOmega as magnitudes.
         if (deadbandRad < 0.0) {
-            deadbandRad = -deadbandRad;
+            throw new IllegalArgumentException("deadbandRad must be >= 0");
         }
-        if (maxOmega < 0.0) {
-            maxOmega = -maxOmega;
+        if (maxOmegaAbs < 0.0) {
+            throw new IllegalArgumentException("maxOmegaAbs must be >= 0");
         }
 
         this.pid = pid;
         this.deadbandRad = deadbandRad;
-        this.maxOmega = maxOmega;
-        this.lossPolicy = lossPolicy;
+        this.maxOmegaAbs = maxOmegaAbs;
+        this.lossPolicy = (lossPolicy != null) ? lossPolicy : LossPolicy.ZERO_OUTPUT_RESET_I;
     }
 
     /**
-     * Update the controller given the latest bearing sample and loop timing.
+     * Update the controller using the latest bearing measurement.
      *
-     * <p>High-level behavior:</p>
-     * <ul>
-     *   <li>If {@code sample == null} or {@code !sample.hasTarget}, apply the configured
-     *       {@link LossPolicy} and return the resulting {@code lastOmega}.</li>
-     *   <li>If {@code |bearing| < deadbandRad}, treat as on-target:
-     *     <ul>
-     *       <li>Set {@code lastOmega = 0}.</li>
-     *       <li>Do <em>not</em> update the PID (no further integral/d-state).</li>
-     *     </ul>
-     *   </li>
-     *   <li>Otherwise:
-     *     <ul>
-     *       <li>Use {@code error = bearingRad} (desired bearing is 0).</li>
-     *       <li>Call {@link PidController#update(double, double)} with
-     *           {@code (error, clock.dtSec())}.</li>
-     *       <li>Clamp the result to {@code [-maxOmega, +maxOmega]}.</li>
-     *       <li>Store and return the clamped value as {@code lastOmega}.</li>
-     *     </ul>
-     *   </li>
-     * </ul>
+     * <p>
+     * Error definition: desired bearing is 0, so {@code error = sample.bearingRad}.
+     * With the framework conventions, positive error should typically produce positive omega
+     * (turn left) to reduce the error.
+     * </p>
      *
-     * @param clock  loop timing source (for dt); must not be null
-     * @param sample latest bearing sample (may be null)
-     * @return commanded omega in [-maxOmega, +maxOmega] (Phoenix: + is CCW / turn left)
+     * @param clock  loop clock (used for dtSec)
+     * @param sample bearing measurement (may be null; treated as no-target)
+     * @return omega command (CCW-positive), clamped to {@code [-maxOmegaAbs, +maxOmegaAbs]}
      */
     public double update(LoopClock clock, BearingSample sample) {
-        if (sample == null) {
-            // Treat "no sample" as equivalent to "no target".
-            handleLoss();
-            return lastOmega;
+        if (clock == null) {
+            throw new IllegalArgumentException("clock is required");
         }
 
         double dtSec = clock.dtSec();
+        lastDtSec = dtSec;
 
-        if (!sample.hasTarget) {
-            handleLoss();
-            return lastOmega;
+        if (sample == null || !sample.hasTarget) {
+            lastHasTarget = false;
+            lastBearingRad = 0.0;
+
+            switch (lossPolicy) {
+                case HOLD_LAST_OUTPUT:
+                    return lastOmega;
+
+                case ZERO_OUTPUT_HOLD_STATE:
+                    lastOmega = 0.0;
+                    return 0.0;
+
+                case ZERO_OUTPUT_RESET_I:
+                default:
+                    pid.reset();
+                    lastOmega = 0.0;
+                    return 0.0;
+            }
         }
 
-        // Desired bearing is 0. With Phoenix conventions, bearing>0 (target left) -> omega>0 (turn left).
-        double errorRad = sample.bearingRad;
+        lastHasTarget = true;
+        lastBearingRad = sample.bearingRad;
 
-        // Inside deadband: treat as on-target; no turn command and no PID update.
-        if (Math.abs(errorRad) < deadbandRad) {
+        // Deadband: do not update PID state, output zero.
+        if (Math.abs(sample.bearingRad) <= deadbandRad) {
             lastOmega = 0.0;
-            return lastOmega;
+            return 0.0;
         }
 
-        double raw = pid.update(errorRad, dtSec);
-        lastOmega = MathUtil.clamp(raw, -maxOmega, maxOmega);
-        return lastOmega;
-    }
+        // Bearing error is the bearing itself (desired = 0).
+        double omega = pid.update(sample.bearingRad, dtSec);
 
-    private void handleLoss() {
-        switch (lossPolicy) {
-            case ZERO_OUTPUT_RESET_I:
-                lastOmega = 0.0;
-                pid.reset();
-                break;
-
-            case HOLD_LAST_NO_I:
-                // Keep lastOmega; do not touch PID state here.
-                // Callers may choose to reset separately if desired.
-                break;
-
-            case ZERO_NO_RESET:
-                // Zero output but keep PID state.
-                lastOmega = 0.0;
-                break;
-
-            default:
-                // Defensive default: behave like ZERO_OUTPUT_RESET_I.
-                lastOmega = 0.0;
-                pid.reset();
-                break;
+        // Clamp to max magnitude.
+        if (omega > maxOmegaAbs) {
+            omega = maxOmegaAbs;
+        } else if (omega < -maxOmegaAbs) {
+            omega = -maxOmegaAbs;
         }
+
+        lastOmega = omega;
+        return omega;
     }
 
     /**
-     * Last commanded omega value.
+     * Reset controller state (delegates to {@link PidController#reset()} and clears debug state).
+     */
+    public void reset() {
+        pid.reset();
+        lastHasTarget = false;
+        lastBearingRad = 0.0;
+        lastOmega = 0.0;
+        lastDtSec = 0.0;
+    }
+
+    /**
+     * Dump controller state to a debug sink.
      *
-     * <p>This can be useful for logging or for advanced logic that wants to
-     * inspect the most recent controller output.</p>
-     */
-    public double getLastOmega() {
-        return lastOmega;
-    }
-
-    /**
-     * @return configured deadband (radians).
-     */
-    public double getDeadbandRad() {
-        return deadbandRad;
-    }
-
-    /**
-     * @return configured maximum omega magnitude.
-     */
-    public double getMaxOmega() {
-        return maxOmega;
-    }
-
-    /**
-     * @return configured loss policy.
-     */
-    public LossPolicy getLossPolicy() {
-        return lossPolicy;
-    }
-
-    /**
-     * Dump controller configuration and last omega to the provided {@link DebugSink}.
-     *
-     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
-     * @param prefix base key prefix, e.g. "tagAim"
+     * @param dbg    debug sink; if null, does nothing
+     * @param prefix key prefix; if null/empty, {@code "tagAimCtrl"} is used
      */
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
@@ -278,14 +192,29 @@ public final class TagAimController {
         String p = (prefix == null || prefix.isEmpty()) ? "tagAimCtrl" : prefix;
 
         dbg.addLine(p + ": TagAimController");
+        dbg.addData(p + ".hasTarget", lastHasTarget);
+        dbg.addData(p + ".bearingRad", lastBearingRad);
+        dbg.addData(p + ".omega", lastOmega);
+        dbg.addData(p + ".dtSec", lastDtSec);
 
-        // Static configuration.
         dbg.addData(p + ".deadbandRad", deadbandRad);
-        dbg.addData(p + ".maxOmega", maxOmega);
-        dbg.addData(p + ".lossPolicy", lossPolicy.name());
-        dbg.addData(p + ".pid.class", pid.getClass().getSimpleName());
+        dbg.addData(p + ".maxOmegaAbs", maxOmegaAbs);
+        dbg.addData(p + ".lossPolicy", lossPolicy.toString());
+    }
 
-        // Dynamic state.
-        dbg.addData(p + ".lastOmega", lastOmega);
+    public double deadbandRad() {
+        return deadbandRad;
+    }
+
+    public double maxOmegaAbs() {
+        return maxOmegaAbs;
+    }
+
+    public LossPolicy lossPolicy() {
+        return lossPolicy;
+    }
+
+    public double lastOmega() {
+        return lastOmega;
     }
 }

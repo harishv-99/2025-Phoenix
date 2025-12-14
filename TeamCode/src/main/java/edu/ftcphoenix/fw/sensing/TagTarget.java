@@ -4,31 +4,39 @@ import java.util.Objects;
 import java.util.Set;
 
 import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
 
 /**
  * Tracks the "best" AprilTag target across loops for a specific set of IDs.
  *
  * <h2>Role</h2>
  * <p>
- * {@code TagTarget} is a small helper that wraps an {@link AprilTagSensor} and
- * remembers the latest {@link AprilTagObservation} that matches a given set of
- * tag IDs and a freshness constraint. It is intended to be the single place in
- * your robot code that answers:
+ * {@code TagTarget} wraps an {@link AprilTagSensor} and remembers the latest
+ * {@link AprilTagObservation} that matches a set of tag IDs and a freshness constraint.
  * </p>
+ *
  * <p>
- * <em>"Which tag are we currently tracking, and what is its distance and
- * bearing?"</em>
+ * It is intended to be the single place in your robot code that answers:
  * </p>
+ *
+ * <ul>
+ *   <li>Which tag are we currently tracking?</li>
+ *   <li>How old is the observation?</li>
+ *   <li>What is the bearing and range to the tag?</li>
+ * </ul>
  *
  * <h2>Frame &amp; sign conventions</h2>
  * <p>
- * This class reports bearing/range derived from {@link AprilTagObservation#pCameraToTag}
- * (i.e., in the <b>camera frame</b>, using Phoenix framing: +X forward, +Y left, +Z up).
+ * {@link AprilTagObservation} stores {@code pCameraToTag} (camera→tag) in Phoenix framing:
+ * +X forward, +Y left, +Z up.
  * </p>
+ *
  * <ul>
- *   <li>{@code bearingRad &gt; 0} means the tag appears to the <b>left</b>.</li>
- *   <li>{@code bearingRad &lt; 0} means the tag appears to the <b>right</b>.</li>
- *   <li>{@code rangeInches} is planar range in the camera X/Y plane.</li>
+ *   <li><b>Camera-centric bearing</b> is computed from {@code pCameraToTag} as
+ *       {@code atan2(left, forward)} in the camera frame:
+ *       {@code bearingRad > 0} means the tag is to the <b>left</b>.</li>
+ *   <li><b>Robot-centric bearing</b> (optional) accounts for camera offset using
+ *       {@link CameraMountConfig} so the <b>robot center</b> faces the tag.</li>
  * </ul>
  *
  * <h2>Typical usage</h2>
@@ -36,48 +44,15 @@ import edu.ftcphoenix.fw.debug.DebugSink;
  * <pre>{@code
  * // Wiring in init():
  * AprilTagSensor tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
- * Set<Integer> scoringTags = Set.of(1, 2, 3);
- *
- * // Track scoring tags with a 0.5s freshness window.
- * TagTarget scoringTarget = new TagTarget(tagSensor, scoringTags, 0.5);
- *
- * // Create a BearingSource view for TagAim.
- * BearingSource bearingSource = clock -> scoringTarget.toBearingSample();
- *
- * // Build a controller once (not shown here; see TagAimController docs),
- * // then wire TagAim using the advanced overload:
- * DriveSource driveWithAim = TagAim.teleOpAim(
- *         baseDrive,
- *         pads.p1().leftBumper(),  // hold to aim
- *         bearingSource,
- *         controller
- * );
+ * TagTarget target = new TagTarget(tagSensor, Set.of(1, 2, 3), 0.5);
  *
  * // In loop():
- * while (opModeIsActive()) {
- *     // 1) Update inputs/sensors.
- *     clock.update();
- *     gamepads.update(dtSec);
- *     scoringTarget.update();
- *
- *     // 2) Drive with TagAim (uses scoringTarget's bearing).
- *     DriveSignal cmd = driveWithAim.get(clock);
- *     drivebase.drive(cmd);
- *
- *     // 3) Use scoringTarget.hasTarget(), bearingRad(), rangeInches()
- *     //    for shooter decisions, telemetry, etc.
+ * target.update();
+ * if (target.hasTarget()) {
+ *     double cameraBearing = target.bearingRad();
+ *     double rangeLosInches = target.lineOfSightRangeInches();
  * }
  * }</pre>
- *
- * <h2>Design notes</h2>
- * <ul>
- *   <li>Create a {@code TagTarget} once at init time.</li>
- *   <li>Call {@link #update()} exactly once per control loop.</li>
- *   <li>After {@code update()}, read {@link #last()}, {@link #hasTarget()},
- *       {@link #bearingRad()}, or {@link #rangeInches()} as needed.</li>
- *   <li>The same tracked observation can be used for aiming, shooter control,
- *       and debugging so all three features agree on "which tag" is in use.</li>
- * </ul>
  */
 public final class TagTarget {
 
@@ -86,8 +61,6 @@ public final class TagTarget {
     private final double maxAgeSec;
 
     // Last observation returned by the sensor for this ID set + age constraint.
-    // Initialized to "no target" with effectively infinite age to signal
-    // that update() hasn't been called yet.
     private AprilTagObservation lastObs =
             AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
 
@@ -118,14 +91,8 @@ public final class TagTarget {
      * Update the tracked target using the underlying sensor.
      *
      * <p>
-     * This should be called exactly once per control loop, <b>before</b> any
-     * code that reads {@link #last()}, {@link #hasTarget()},
-     * {@link #bearingRad()}, or {@link #rangeInches()}.
-     * </p>
-     *
-     * <p>
-     * Internally this simply calls {@link AprilTagSensor#best(Set, double)}
-     * with the configured ID set and {@code maxAgeSec}, and stores the result.
+     * Call this exactly once per control loop, before reading {@link #last()},
+     * {@link #hasTarget()}, {@link #bearingRad()}, etc.
      * </p>
      */
     public void update() {
@@ -134,13 +101,6 @@ public final class TagTarget {
 
     /**
      * Latest observation from this tracker.
-     *
-     * <p>
-     * This will always return a non-null {@link AprilTagObservation}. When
-     * {@link AprilTagObservation#hasTarget} is {@code false}, the ID and pose
-     * are not meaningful, but {@link AprilTagObservation#ageSec} can still be
-     * useful for debugging.
-     * </p>
      *
      * @return last observation returned by {@link #update()}, or an initial
      * "no target" observation if {@link #update()} has not yet been called
@@ -152,11 +112,6 @@ public final class TagTarget {
     /**
      * Whether the tracker currently has a valid target.
      *
-     * <p>
-     * This is equivalent to {@code last().hasTarget}, but provided as a small
-     * convenience.
-     * </p>
-     *
      * @return {@code true} if the latest observation has a target (and met the age constraint)
      */
     public boolean hasTarget() {
@@ -164,39 +119,55 @@ public final class TagTarget {
     }
 
     /**
-     * Current horizontal bearing to the tracked tag, in radians.
+     * Camera-centric horizontal bearing to the tracked tag, in radians.
      *
      * <p>
-     * Only meaningful when {@link #hasTarget()} is {@code true}. Callers should
-     * always guard on {@link #hasTarget()}.
+     * This bearing is relative to the camera forward axis (derived from {@code pCameraToTag}).
+     * If your camera is offset and you want the <b>robot center</b> to face the tag,
+     * use {@link #robotBearingRad(CameraMountConfig)}.
      * </p>
      *
-     * <p>
-     * Sign convention: positive means the tag is to the left of the camera forward axis.
-     * </p>
-     *
-     * @return bearing in radians (positive = left)
+     * @return bearing in radians (positive = left/CCW). Only meaningful when {@link #hasTarget()} is true.
      */
     public double bearingRad() {
         return lastObs.cameraBearingRad();
     }
 
     /**
-     * Test whether the current target bearing is within the given angular tolerance.
+     * Convenience alias for {@link #bearingRad()}.
+     *
+     * <p>Spells out that this is camera-centric bearing.</p>
+     */
+    public double cameraBearingRad() {
+        return bearingRad();
+    }
+
+    /**
+     * Robot-centric bearing to the tracked tag, accounting for camera mount offset.
+     *
+     * <p>
+     * This computes robot-centric bearing by applying the mount extrinsics:
+     * {@code pRobotToTag = pRobotToCamera.then(pCameraToTag)}, then computing
+     * {@code atan2(left, forward)} in the robot frame.
+     * </p>
+     *
+     * @param cameraMount robot→camera extrinsics; must not be null
+     * @return robot-centric bearing (positive = left/CCW). Returns 0 if {@link #hasTarget()} is false.
+     */
+    public double robotBearingRad(CameraMountConfig cameraMount) {
+        Objects.requireNonNull(cameraMount, "cameraMount is required");
+        return CameraMountLogic.robotBearingRad(lastObs, cameraMount);
+    }
+
+    /**
+     * Test whether the current camera-centric bearing is within the given angular tolerance.
      *
      * <p>Semantics:</p>
      * <ul>
-     *   <li>If {@link #hasTarget()} is {@code false}, this always returns {@code false}.</li>
-     *   <li>If {@code toleranceRad} is negative, this method throws an
-     *       {@link IllegalArgumentException}.</li>
-     *   <li>Otherwise this returns {@code true} when the absolute bearing is
-     *       less than or equal to {@code toleranceRad}.</li>
+     *   <li>If {@link #hasTarget()} is {@code false}, this returns {@code false}.</li>
+     *   <li>If {@code toleranceRad} is negative, throws {@link IllegalArgumentException}.</li>
+     *   <li>Otherwise returns {@code true} when {@code |bearing| <= toleranceRad}.</li>
      * </ul>
-     *
-     * @param toleranceRad non-negative angular tolerance in radians
-     * @return {@code true} if there is a target and its bearing is within the
-     * specified tolerance
-     * @throws IllegalArgumentException if {@code toleranceRad} is negative
      */
     public boolean isBearingWithin(double toleranceRad) {
         if (toleranceRad < 0.0) {
@@ -209,31 +180,50 @@ public final class TagTarget {
     }
 
     /**
-     * Planar range to the tracked tag, in inches, derived from the camera-frame pose.
+     * Test whether the current robot-centric bearing is within the given angular tolerance.
+     *
+     * @param cameraMount  robot→camera extrinsics; must not be null
+     * @param toleranceRad non-negative tolerance in radians
+     * @return {@code true} if there is a target and {@code |robotBearing| <= toleranceRad}
+     */
+    public boolean isRobotBearingWithin(CameraMountConfig cameraMount, double toleranceRad) {
+        Objects.requireNonNull(cameraMount, "cameraMount is required");
+        if (toleranceRad < 0.0) {
+            throw new IllegalArgumentException("toleranceRad must be non-negative");
+        }
+        if (!lastObs.hasTarget) {
+            return false;
+        }
+        return Math.abs(CameraMountLogic.robotBearingRad(lastObs, cameraMount)) <= toleranceRad;
+    }
+
+    /**
+     * Planar range to the tracked tag, in inches, using the camera X/Y plane (forward/left).
      *
      * <p>
-     * This is the distance in the camera X/Y plane (forward/left). If you want 3D line-of-sight
-     * range, use {@code last().cameraRangeInches()}.
+     * This is the distance in the camera X/Y plane (forward/left). For 3D line-of-sight range,
+     * use {@link #lineOfSightRangeInches()}.
      * </p>
      *
-     * <p>
-     * Only meaningful when {@link #hasTarget()} is {@code true}. Callers should
-     * always guard on {@link #hasTarget()}.
-     * </p>
-     *
-     * @return planar range in inches (camera X/Y plane)
+     * @return planar range in inches (camera X/Y plane). Only meaningful when {@link #hasTarget()} is true.
      */
     public double rangeInches() {
-        // Planar distance in the camera X/Y plane (forward/left).
         double f = lastObs.cameraForwardInches();
         double l = lastObs.cameraLeftInches();
         return Math.sqrt(f * f + l * l);
     }
 
     /**
-     * Maximum acceptable tag age in seconds for this tracker.
+     * 3D line-of-sight range from the camera to the tag, in inches.
      *
-     * @return configured maximum age
+     * @return 3D range in inches. Only meaningful when {@link #hasTarget()} is true.
+     */
+    public double lineOfSightRangeInches() {
+        return lastObs.cameraRangeInches();
+    }
+
+    /**
+     * Maximum acceptable tag age in seconds for this tracker.
      */
     public double maxAgeSec() {
         return maxAgeSec;
@@ -242,46 +232,38 @@ public final class TagTarget {
     /**
      * IDs this tracker is currently considering.
      *
-     * <p>
-     * The returned set is the same instance that was passed to the constructor;
-     * callers should treat it as read-only.
-     * </p>
-     *
-     * @return ID set passed to the constructor (not a defensive copy)
+     * <p>The returned set is the same instance passed to the constructor; treat it as read-only.</p>
      */
     public Set<Integer> idsOfInterest() {
         return idsOfInterest;
     }
 
     /**
-     * Convenience helper: interpret the current observation as a
-     * {@link BearingSource.BearingSample}.
-     *
-     * @return a bearing sample representing the current observation
+     * Convert the current observation into a {@link BearingSample} using camera-centric bearing.
      */
-    public BearingSource.BearingSample toBearingSample() {
+    public BearingSample toBearingSample() {
         if (!lastObs.hasTarget) {
-            return new BearingSource.BearingSample(false, 0.0);
+            return new BearingSample(false, 0.0);
         }
-        return new BearingSource.BearingSample(true, lastObs.cameraBearingRad());
+        return new BearingSample(true, lastObs.cameraBearingRad());
+    }
+
+    /**
+     * Convert the current observation into a {@link BearingSample} using robot-centric bearing.
+     *
+     * @param cameraMount robot→camera extrinsics; must not be null
+     * @return bearing sample (hasTarget + robotBearingRad)
+     */
+    public BearingSample toRobotBearingSample(CameraMountConfig cameraMount) {
+        Objects.requireNonNull(cameraMount, "cameraMount is required");
+        return CameraMountLogic.robotBearingSample(lastObs, cameraMount);
     }
 
     /**
      * Emit debug information about this tracker and its last observation.
      *
-     * <p>
-     * This follows the framework-wide {@code debugDump} pattern: it uses
-     * {@link DebugSink} with a configurable key prefix and is defensive
-     * against {@code null}.
-     * </p>
-     *
-     * <pre>{@code
-     * tagTarget.debugDump(debugSink, "tags.scoring");
-     * }</pre>
-     *
-     * @param dbg    debug sink to write to; if {@code null}, this method does nothing
-     * @param prefix key prefix to use; if {@code null} or empty, {@code "tagTarget"}
-     *               is used as the default prefix
+     * @param dbg    debug sink to write to; if {@code null}, does nothing
+     * @param prefix key prefix to use; if {@code null} or empty, {@code "tagTarget"} is used
      */
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
@@ -291,57 +273,44 @@ public final class TagTarget {
 
         dbg.addLine(p + ": TagTarget");
 
-        // Static configuration.
         dbg.addData(p + ".ids", idsOfInterest.toString());
         dbg.addData(p + ".maxAgeSec", maxAgeSec);
         dbg.addData(p + ".sensor.class", sensor.getClass().getSimpleName());
 
-        // Dynamic state – last observation.
         AprilTagObservation o = lastObs;
         dbg.addData(p + ".obs.hasTarget", o.hasTarget);
         dbg.addData(p + ".obs.id", o.id);
         dbg.addData(p + ".obs.ageSec", o.ageSec);
 
-        // Derived (camera-frame) targeting helpers.
         dbg.addData(p + ".obs.cameraForwardInches", o.cameraForwardInches());
         dbg.addData(p + ".obs.cameraLeftInches", o.cameraLeftInches());
         dbg.addData(p + ".obs.cameraUpInches", o.cameraUpInches());
+
         dbg.addData(p + ".obs.cameraBearingRad", o.cameraBearingRad());
         dbg.addData(p + ".obs.cameraRangeInches", o.cameraRangeInches());
         dbg.addData(p + ".obs.cameraPlanarRangeInches", rangeInches());
     }
 
     /**
-     * Extended debug helper that also reports whether the current bearing is
-     * within a specified angular tolerance.
+     * Debug dump that also includes robot-centric bearing (mount-aware).
      *
-     * <p>
-     * This is a thin convenience wrapper around
-     * {@link #debugDump(DebugSink, String)} and
-     * {@link #isBearingWithin(double)}.
-     * </p>
-     *
-     * @param dbg          debug sink to write to; if {@code null}, this method does nothing
-     * @param prefix       key prefix to use; if {@code null} or empty, {@code "tagTarget"}
-     *                     is used as the default prefix
-     * @param toleranceRad angular tolerance in radians; negative values are treated
-     *                     as invalid and reported as not within tolerance
+     * @param dbg         debug sink to write to; if {@code null}, does nothing
+     * @param prefix      key prefix to use; if {@code null} or empty, {@code "tagTarget"} is used
+     * @param cameraMount robot→camera extrinsics; must not be null
      */
-    public void debugDump(DebugSink dbg, String prefix, double toleranceRad) {
+    public void debugDump(DebugSink dbg, String prefix, CameraMountConfig cameraMount) {
         if (dbg == null) {
             return;
         }
+        Objects.requireNonNull(cameraMount, "cameraMount is required");
 
-        // First emit the standard dump so callers get the full picture.
         debugDump(dbg, prefix);
 
         String p = (prefix == null || prefix.isEmpty()) ? "tagTarget" : prefix;
-
-        dbg.addData(p + ".aim.toleranceRad", toleranceRad);
-        if (toleranceRad < 0.0) {
-            dbg.addData(p + ".aim.withinTolerance", false);
+        if (lastObs.hasTarget) {
+            dbg.addData(p + ".obs.robotBearingRad", CameraMountLogic.robotBearingRad(lastObs, cameraMount));
         } else {
-            dbg.addData(p + ".aim.withinTolerance", isBearingWithin(toleranceRad));
+            dbg.addData(p + ".obs.robotBearingRad", 0.0);
         }
     }
 }

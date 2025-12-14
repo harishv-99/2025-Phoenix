@@ -21,6 +21,7 @@ import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
+import edu.ftcphoenix.fw.sensing.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.task.TaskRunner;
@@ -52,6 +53,7 @@ public final class PhoenixRobot {
     private MecanumDrivebase drivebase;
     private DriveSource stickDrive;
     private DriveSource driveWithAim;
+    private CameraMountConfig cameraMountConfig;
     private AprilTagSensor tagSensor;
     private TagTarget scoringTarget;
     private TagAim.Config aimConfig;
@@ -97,19 +99,28 @@ public final class PhoenixRobot {
         stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
         // ---
+        cameraMountConfig = CameraMountConfig.of(
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+        );
         tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
 
         // Track scoring tags with a freshness window.
         scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, 0.5);
 
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
-        TagAim.Config aimConfig = TagAim.Config.defaults();
+        aimConfig = TagAim.Config.defaults();
         aimConfig.kp = 1;
         aimConfig.deadbandRad = Math.toRadians(0.25);
         driveWithAim = TagAim.teleOpAim(
                 stickDrive,
                 gamepads.p2().leftBumper(),
                 scoringTarget,
+                cameraMountConfig,
                 aimConfig
         );
 
@@ -203,7 +214,7 @@ public final class PhoenixRobot {
 //        driveWithAim.debugDump(dbg, "driveWAim");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
-            if (Math.abs(obs.cameraBearingRad()) <= (aimConfig.deadbandRad * 5))
+            if (Math.abs(scoringTarget.robotBearingRad(cameraMountConfig)) <= (aimConfig.deadbandRad * 5))
                 telemetry.addLine(">>> AIMED <<<");
             telemetry.addData("id", obs.id);
             telemetry.addData("dist", obs.cameraRangeInches());

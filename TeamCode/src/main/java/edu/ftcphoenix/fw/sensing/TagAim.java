@@ -23,54 +23,31 @@ import edu.ftcphoenix.fw.task.WaitUntilTask;
  *       of an existing {@link DriveSource} while an aim button is held.</li>
  * </ul>
  *
- * <p>Typical TeleOp usage with {@link TagTarget}:</p>
+ * <h2>Camera offset note (why CameraMountConfig matters)</h2>
+ * <p>
+ * A {@link TagTarget} reports bearing derived from {@link AprilTagObservation#pCameraToTag}
+ * (i.e., bearing relative to the <b>camera</b> forward axis). If the camera is offset from the
+ * robot center, “camera faces the tag” is not always the same as “robot center faces the tag”.
+ * </p>
  *
- * <pre>{@code
- * // In init():
- * AprilTagSensor tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
- * Set<Integer> scoringTags = Set.of(1, 2, 3);
- *
- * // Track the "best" scoring tag each loop.
- * TagTarget scoringTarget = new TagTarget(tagSensor, scoringTags, 0.5);
- *
- * // Map driver sticks to mecanum drive.
- * DriveSource sticks = GamepadDriveSource.teleOpMecanumStandard(gamepads);
- *
- * // Wrap with TagAim: hold left bumper to auto-aim toward the tracked tag.
- * DriveSource drive = TagAim.teleOpAim(
- *         sticks,
- *         gamepads.p1().leftBumper(),
- *         scoringTarget
- * );
- *
- * // In your loop():
- * scoringTarget.update();                 // once per loop
- * DriveSignal cmd = drive.get(clock);     // TagAimDriveSource handles omega
- * drivebase.drive(cmd);
- * drivebase.update(clock);
- * }</pre>
- *
- * <p>Under the hood it:</p>
- * <ul>
- *   <li>Reads the current bearing from a {@link TagTarget} (or generic {@link BearingSource}).</li>
- *   <li>Uses a {@link TagAimController} to turn bearing into omega.</li>
- *   <li>Preserves the original {@link DriveSource} so that when the aim
- *       button is held, {@code omega} is overridden to aim at the tag,
- *       but axial/lateral still come from the driver.</li>
- * </ul>
+ * <p>
+ * To aim the <b>robot center</b> at the tag, use the overloads that accept a
+ * {@link CameraMountConfig}. These compute robot-centric bearing by applying the mount extrinsics
+ * (robot→camera) to the camera measurement (camera→tag), producing robot→tag, then taking
+ * {@code atan2(left, forward)} in the robot frame.
+ * </p>
  *
  * <h2>Usage levels</h2>
  * <ul>
- *   <li><b>Beginner:</b> create a {@link TagTarget} and call
+ *   <li><b>Beginner (camera-centric):</b> create a {@link TagTarget} and call
  *       {@link #teleOpAim(DriveSource, Button, TagTarget)}.</li>
- *   <li><b>Tunable:</b> provide a {@link Config} to
- *       {@link #teleOpAim(DriveSource, Button, TagTarget, Config)} to adjust
- *       gain, deadband, maximum omega, or lost-target behavior.</li>
- *   <li><b>Advanced:</b> build your own {@link BearingSource} and
- *       {@link TagAimController}, then call
- *       {@link #teleOpAim(DriveSource, Button, BearingSource, TagAimController)}.
- *       You can also use {@link #controllerFromConfig(Config)} directly to
- *       build a controller for autonomous code.</li>
+ *   <li><b>Beginner (robot-centric):</b> create a {@link TagTarget} and pass your
+ *       {@link CameraMountConfig} via
+ *       {@link #teleOpAim(DriveSource, Button, TagTarget, CameraMountConfig)}.</li>
+ *   <li><b>Tunable:</b> provide a {@link Config} to adjust gain, deadband, maximum omega, or
+ *       lost-target behavior.</li>
+ *   <li><b>Advanced:</b> build your own {@link BearingSource} and {@link TagAimController}, then call
+ *       {@link #teleOpAim(DriveSource, Button, BearingSource, TagAimController)}.</li>
  * </ul>
  */
 public final class TagAim {
@@ -167,11 +144,6 @@ public final class TagAim {
         /**
          * Create a shallow copy of this configuration.
          *
-         * <p>
-         * Useful when you want to start from a base config, tweak a few fields,
-         * and keep the original unchanged.
-         * </p>
-         *
          * @return a new {@link Config} with the same field values
          */
         public Config copy() {
@@ -185,31 +157,15 @@ public final class TagAim {
     }
 
     // ------------------------------------------------------------------------
-    // Beginner / tunable TeleOp API: TagTarget
+    // Beginner / tunable TeleOp API: TagTarget (camera-centric)
     // ------------------------------------------------------------------------
 
     /**
      * TeleOp helper: wrap an existing drive source with tag-based auto-aim,
-     * using a {@link TagTarget}.
+     * using a {@link TagTarget}'s <b>camera-centric</b> bearing.
      *
-     * <p>This overload is intended for most teams. It:</p>
-     *
-     * <ul>
-     *   <li>Uses {@link TagTarget#toBearingSample()} to read the current bearing.</li>
-     *   <li>Uses a reasonable default {@link TagAimController} built from
-     *       {@link Config#defaults()}.</li>
-     *   <li>Returns a {@link DriveSource} that:
-     *     <ul>
-     *       <li>Forwards the base drive command when {@code aimButton} is not pressed.</li>
-     *       <li>Overrides only omega while {@code aimButton} is pressed.</li>
-     *     </ul>
-     *   </li>
-     * </ul>
-     *
-     * @param baseDrive existing drive source (e.g., stick mapping)
-     * @param aimButton button that enables aiming while pressed
-     * @param target    tag target providing the current observation
-     * @return a new {@link DriveSource} that adds aiming behavior on top of {@code baseDrive}
+     * <p>If your camera is offset and you want the <b>robot center</b> to face the tag,
+     * use {@link #teleOpAim(DriveSource, Button, TagTarget, CameraMountConfig)} instead.</p>
      */
     public static DriveSource teleOpAim(
             DriveSource baseDrive,
@@ -220,22 +176,8 @@ public final class TagAim {
     }
 
     /**
-     * TeleOp helper: same as
-     * {@link #teleOpAim(DriveSource, Button, TagTarget)} but with an explicit
-     * {@link Config} to override the defaults.
-     *
-     * <p>
-     * This is useful when you want the convenience of the beginner API
-     * (automatic {@link TagTarget} wiring) but need to tune parameters such as
-     * proportional gain, deadband, maximum omega, or lost-target behavior.
-     * </p>
-     *
-     * @param baseDrive existing drive source (e.g., stick mapping)
-     * @param aimButton button that enables aiming while pressed
-     * @param target    tag target providing the current observation; must not be null
-     * @param config    configuration for aiming; if {@code null},
-     *                  {@link Config#defaults()} is used
-     * @return a new {@link DriveSource} that adds aiming behavior on top of {@code baseDrive}
+     * TeleOp helper (camera-centric): same as {@link #teleOpAim(DriveSource, Button, TagTarget)}
+     * but with explicit {@link Config}.
      */
     public static DriveSource teleOpAim(
             DriveSource baseDrive,
@@ -256,36 +198,75 @@ public final class TagAim {
     }
 
     // ------------------------------------------------------------------------
+    // Beginner / tunable TeleOp API: TagTarget + CameraMountConfig (robot-centric)
+    // ------------------------------------------------------------------------
+
+    /**
+     * TeleOp helper: wrap an existing drive source with tag-based auto-aim,
+     * using a {@link TagTarget} but computing <b>robot-centric</b> bearing by applying
+     * {@link CameraMountConfig} (camera extrinsics).
+     *
+     * <p>This aims the <b>robot center</b> at the tag even if the camera is offset.</p>
+     *
+     * @param baseDrive   existing drive source (e.g., stick mapping)
+     * @param aimButton   button that enables aiming while pressed
+     * @param target      tag target providing the current observation
+     * @param cameraMount robot→camera extrinsics (mount config)
+     * @return a new {@link DriveSource} that adds robot-centric aiming behavior on top of {@code baseDrive}
+     */
+    public static DriveSource teleOpAim(
+            DriveSource baseDrive,
+            Button aimButton,
+            TagTarget target,
+            CameraMountConfig cameraMount) {
+
+        return teleOpAim(baseDrive, aimButton, target, cameraMount, Config.defaults());
+    }
+
+    /**
+     * TeleOp helper (robot-centric): same as
+     * {@link #teleOpAim(DriveSource, Button, TagTarget, CameraMountConfig)} but with an explicit
+     * {@link Config} to override the defaults.
+     *
+     * @param baseDrive   existing drive source (e.g., stick mapping)
+     * @param aimButton   button that enables aiming while pressed
+     * @param target      tag target providing the current observation; must not be null
+     * @param cameraMount robot→camera extrinsics (mount config); must not be null
+     * @param config      configuration for aiming; if {@code null}, {@link Config#defaults()} is used
+     * @return a new {@link DriveSource} that adds robot-centric aiming behavior on top of {@code baseDrive}
+     */
+    public static DriveSource teleOpAim(
+            DriveSource baseDrive,
+            Button aimButton,
+            TagTarget target,
+            CameraMountConfig cameraMount,
+            Config config) {
+
+        Objects.requireNonNull(target, "target must not be null");
+        Objects.requireNonNull(cameraMount, "cameraMount must not be null");
+
+        Config cfg = (config != null) ? config : Config.defaults();
+
+        // Robot-centric bearing derived from mount + observation pose:
+        // pRobotToTag = pRobotToCamera.then(pCameraToTag)
+        BearingSource bearing = clock ->
+                CameraMountLogic.robotBearingSample(target.last(), cameraMount);
+
+        TagAimController controller = controllerFromConfig(cfg);
+
+        return teleOpAim(baseDrive, aimButton, bearing, controller);
+    }
+
+    // ------------------------------------------------------------------------
     // Aim readiness helpers: tasks that wait for alignment
     // ------------------------------------------------------------------------
 
     /**
      * Create a {@link Task} that waits until the given {@link TagTarget}'s
-     * bearing is within a specified angular tolerance.
+     * <b>camera-centric</b> bearing is within a specified angular tolerance.
      *
-     * <p>This is a thin convenience wrapper around
-     * {@link TagTarget#isBearingWithin(double)} and {@link WaitUntilTask} that
-     * lets you express "wait until aim is good" as a reusable task. It
-     * performs no drive control by itself; it only watches the target state.
-     * </p>
-     *
-     * <p>Semantics:</p>
-     * <ul>
-     *   <li>If {@link TagTarget#hasTarget()} is {@code false}, the condition is
-     *       treated as not satisfied.</li>
-     *   <li>The task completes successfully when
-     *       {@code target.isBearingWithin(toleranceRad)} first returns
-     *       {@code true}.</li>
-     *   <li>There is no timeout; if the condition never becomes true, this task
-     *       can run indefinitely. If you want a timeout, use the overload that
-     *       accepts {@code timeoutSec}.</li>
-     * </ul>
-     *
-     * @param target       tag target to observe; must not be {@code null}
-     * @param toleranceRad non-negative angular tolerance in radians
-     * @return a {@link Task} that reports {@link edu.ftcphoenix.fw.task.TaskOutcome#SUCCESS}
-     *         when the aim is within tolerance
-     * @throws IllegalArgumentException if {@code toleranceRad} is negative
+     * <p>If you are using camera-mount-aware aiming (robot-centric), prefer
+     * {@link #waitForAim(TagTarget, CameraMountConfig, double)}.</p>
      */
     public static Task waitForAim(TagTarget target, double toleranceRad) {
         Objects.requireNonNull(target, "target is required");
@@ -298,33 +279,8 @@ public final class TagAim {
 
     /**
      * Create a {@link Task} that waits until the given {@link TagTarget}'s
-     * bearing is within a specified angular tolerance, but gives up if it
-     * takes longer than {@code timeoutSec}.
-     *
-     * <p>Outcome semantics:</p>
-     * <ul>
-     *   <li>If the aim enters the tolerance band before the timeout, the task
-     *       completes with {@link edu.ftcphoenix.fw.task.TaskOutcome#SUCCESS}.</li>
-     *   <li>If {@code timeoutSec} elapses first, the task completes with
-     *       {@link edu.ftcphoenix.fw.task.TaskOutcome#TIMEOUT}.</li>
-     * </ul>
-     *
-     * <p>Typical usage in a shooter macro:</p>
-     * <pre>{@code
-     * Task waitForAim = TagAim.waitForAim(scoringTarget,
-     *                                     aimConfig.deadbandRad,
-     *                                     1.0 /* timeout in seconds *\/);
-     * }</pre>
-     *
-     * @param target       tag target to observe; must not be {@code null}
-     * @param toleranceRad non-negative angular tolerance in radians
-     * @param timeoutSec   timeout in seconds; must be {@code >= 0.0}.
-     *                     A value of {@code 0.0} means "fail immediately unless
-     *                     we are already within tolerance".
-     * @return a {@link Task} that reports {@link edu.ftcphoenix.fw.task.TaskOutcome#SUCCESS}
-     *         when the aim is within tolerance, or
-     *         {@link edu.ftcphoenix.fw.task.TaskOutcome#TIMEOUT} if the timeout elapses
-     * @throws IllegalArgumentException if {@code toleranceRad} or {@code timeoutSec} is negative
+     * <b>camera-centric</b> bearing is within a specified angular tolerance, but
+     * gives up if it takes longer than {@code timeoutSec}.
      */
     public static Task waitForAim(TagTarget target,
                                   double toleranceRad,
@@ -343,6 +299,65 @@ public final class TagAim {
         );
     }
 
+    /**
+     * Create a {@link Task} that waits until the tracked tag is within tolerance using
+     * <b>robot-centric</b> bearing computed from {@link CameraMountConfig}.
+     *
+     * <p>Semantics:</p>
+     * <ul>
+     *   <li>If {@link TagTarget#hasTarget()} is {@code false}, the condition is treated as not satisfied.</li>
+     *   <li>Completes successfully when {@code |robotBearing| <= toleranceRad}.</li>
+     *   <li>No timeout.</li>
+     * </ul>
+     */
+    public static Task waitForAim(TagTarget target,
+                                  CameraMountConfig cameraMount,
+                                  double toleranceRad) {
+
+        Objects.requireNonNull(target, "target is required");
+        Objects.requireNonNull(cameraMount, "cameraMount is required");
+        if (toleranceRad < 0.0) {
+            throw new IllegalArgumentException("toleranceRad must be >= 0, got " + toleranceRad);
+        }
+
+        return new WaitUntilTask(() -> {
+            AprilTagObservation obs = target.last();
+            if (obs == null || !obs.hasTarget) {
+                return false;
+            }
+            double robotBearing = CameraMountLogic.robotBearingRad(obs, cameraMount);
+            return Math.abs(robotBearing) <= toleranceRad;
+        });
+    }
+
+    /**
+     * Create a {@link Task} that waits until the tracked tag is within tolerance using
+     * <b>robot-centric</b> bearing computed from {@link CameraMountConfig}, with a timeout.
+     */
+    public static Task waitForAim(TagTarget target,
+                                  CameraMountConfig cameraMount,
+                                  double toleranceRad,
+                                  double timeoutSec) {
+
+        Objects.requireNonNull(target, "target is required");
+        Objects.requireNonNull(cameraMount, "cameraMount is required");
+        if (toleranceRad < 0.0) {
+            throw new IllegalArgumentException("toleranceRad must be >= 0, got " + toleranceRad);
+        }
+        if (timeoutSec < 0.0) {
+            throw new IllegalArgumentException("timeoutSec must be >= 0, got " + timeoutSec);
+        }
+
+        return new WaitUntilTask(() -> {
+            AprilTagObservation obs = target.last();
+            if (obs == null || !obs.hasTarget) {
+                return false;
+            }
+            double robotBearing = CameraMountLogic.robotBearingRad(obs, cameraMount);
+            return Math.abs(robotBearing) <= toleranceRad;
+        }, timeoutSec);
+    }
+
     // ------------------------------------------------------------------------
     // Advanced API: generic bearing source + controller
     // ------------------------------------------------------------------------
@@ -350,34 +365,6 @@ public final class TagAim {
     /**
      * TeleOp helper: wrap an existing drive source with generic bearing-based
      * auto-aim.
-     *
-     * <p>This overload lets advanced users customize:</p>
-     * <ul>
-     *   <li>Where bearing information comes from ({@link BearingSource}).</li>
-     *   <li>How bearing is converted into omega ({@link TagAimController}).</li>
-     * </ul>
-     *
-     * <p>Behavior:</p>
-     * <ul>
-     *   <li>On each call to {@link DriveSource#get(edu.ftcphoenix.fw.util.LoopClock)}:
-     *     <ul>
-     *       <li>Compute the base command from {@code baseDrive}.</li>
-     *       <li>If {@code aimButton} is not pressed, return base unchanged.</li>
-     *       <li>Otherwise:
-     *         <ul>
-     *           <li>Sample bearing via
-     *               {@link BearingSource#sample(edu.ftcphoenix.fw.util.LoopClock)}.</li>
-     *           <li>Call
-     *               {@link TagAimController#update(edu.ftcphoenix.fw.util.LoopClock,
-     *               edu.ftcphoenix.fw.sensing.BearingSource.BearingSample)}
-     *               to get omega.</li>
-     *           <li>Return a new command that keeps base axial/lateral but uses
-     *               the aiming omega.</li>
-     *         </ul>
-     *       </li>
-     *     </ul>
-     *   </li>
-     * </ul>
      *
      * @param baseDrive  existing drive source (e.g., sticks, planner)
      * @param aimButton  button that enables aiming while pressed
@@ -391,8 +378,7 @@ public final class TagAim {
             BearingSource bearing,
             TagAimController controller) {
 
-        // Delegate to the reusable TagAimDriveSource so we don't duplicate logic
-        // and we get debugDump() support for free.
+        // Delegate to the reusable TagAimDriveSource so we don't duplicate logic.
         return new TagAimDriveSource(baseDrive, aimButton, bearing, controller);
     }
 
@@ -402,13 +388,6 @@ public final class TagAim {
 
     /**
      * Build a {@link TagAimController} from a {@link Config}.
-     *
-     * <p>
-     * This is a general-purpose helper: it is used by the TeleOp helpers, and
-     * can also be used directly in autonomous code that wants to control
-     * {@code omega} from tag bearing without going through
-     * {@link TagAimDriveSource}.
-     * </p>
      *
      * @param cfg configuration; if {@code null}, {@link Config#defaults()} is used
      * @return a new {@link TagAimController} instance

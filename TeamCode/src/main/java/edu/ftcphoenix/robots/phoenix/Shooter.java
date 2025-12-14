@@ -170,4 +170,10 @@ public class Shooter {
     public Task instantStopTransfer() {
         return PlantTasks.setInstant(plantTransfer, 0);
     }
+
+    public void stop() {
+        plantPusher.stop();
+        plantShooter.stop();
+        plantTransfer.stop();
+    }
 }

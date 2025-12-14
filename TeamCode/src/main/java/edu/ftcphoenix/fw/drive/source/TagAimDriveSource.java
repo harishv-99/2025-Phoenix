@@ -14,34 +14,51 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <h2>Role</h2>
  * <p>
- * {@code TagAimDriveSource} is a reusable implementation of the same behavior
- * that a typical {@code TagAim.teleOpAim(...)} helper would provide:
+ * {@code TagAimDriveSource} is a reusable implementation of the same behavior that
+ * {@code TagAim.teleOpAim(...)} provides:
  * </p>
  *
  * <ul>
- *   <li>It holds a "base" {@link DriveSource} (e.g., stick-based drive).</li>
- *   <li>It reads a {@link BearingSource} (e.g., AprilTags wrapped as bearing).</li>
+ *   <li>It holds a “base” {@link DriveSource} (e.g., stick-based drive).</li>
+ *   <li>It reads a {@link BearingSource} (target bearing sample).</li>
  *   <li>It uses a {@link TagAimController} to turn bearing into {@code omega}.</li>
  *   <li>When the {@link Button} is pressed:
  *     <ul>
  *       <li>Axial and lateral commands come from the base source.</li>
- *       <li>Omega is overridden by the controller's output.</li>
+ *       <li>Omega is overridden by the controller’s output.</li>
  *     </ul>
  *   </li>
- *   <li>When the button is <b>not</b> pressed, it simply passes through the
- *       base {@link DriveSignal} unchanged.</li>
+ *   <li>When the button is <b>not</b> pressed, it passes through the base {@link DriveSignal} unchanged.</li>
  * </ul>
  *
  * <p>
- * This class is useful if you prefer to construct and hold an explicit object
- * instead of using an anonymous wrapper or inline lambda.
+ * This class is useful if you prefer to construct and hold an explicit object rather than using
+ * a helper factory or inline lambda.
  * </p>
+ *
+ * <h2>Camera offset and robot-centric aiming</h2>
+ * <p>
+ * This class does not know where the camera is mounted — it simply consumes a {@link BearingSource}.
+ * If your camera is offset from the robot center and you want the <b>robot center</b> to face the tag,
+ * build a robot-centric bearing source (using {@code CameraMountConfig} + {@code CameraMountLogic}),
+ * or use the {@code TagAim.teleOpAim(..., cameraMount)} overload.
+ * </p>
+ *
+ * <p>
+ * Conceptually:
+ * </p>
+ * <ul>
+ *   <li>Camera sees {@code pCameraToTag} (camera→tag).</li>
+ *   <li>Mount gives {@code pRobotToCamera} (robot→camera).</li>
+ *   <li>Compute {@code pRobotToTag = pRobotToCamera.then(pCameraToTag)}.</li>
+ *   <li>Robot-centric bearing is {@code atan2(left, forward)} in the robot frame.</li>
+ * </ul>
  *
  * <h2>Sign conventions</h2>
  *
  * <p>
- * {@code TagAimDriveSource} does not change the meaning of {@link DriveSignal};
- * it only decides <em>who</em> supplies {@link DriveSignal#omega}:
+ * {@code TagAimDriveSource} does not change the meaning of {@link DriveSignal}; it only decides
+ * <em>who</em> supplies {@link DriveSignal#omega}:
  * </p>
  *
  * <ul>
@@ -83,27 +100,27 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <pre>{@code
  * // Base driver control (sticks) for mecanum drive.
- * DriveSource baseDrive = GamepadDriveSource.teleOpMecanumStandard(pads);
+ * DriveSource baseDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
  *
- * // Bearing source (e.g., from AprilTag sensor).
- * BearingSource bearing = myTagSensor.asBearingSource();
+ * // Tag tracking (updated elsewhere each loop).
+ * TagTarget target = new TagTarget(tagSensor, scoringTagIds, 0.5);
  *
- * // TagAimController configured elsewhere (PID, deadband, maxOmega, loss policy).
- * TagAimController aimCtrl = new TagAimController(...);
+ * // Camera-centric bearing (camera faces tag):
+ * BearingSource bearing = clock -> target.toBearingSample();
  *
- * // Aim button (e.g., P1 left bumper).
- * Button aimButton = pads.p1().leftBumper();
+ * // OR robot-centric bearing (robot center faces tag) if you have a CameraMountConfig:
+ * // BearingSource bearing = clock -> CameraMountLogic.robotBearingSample(target.last(), cameraMount);
  *
- * DriveSource aimedDrive = new TagAimDriveSource(
- *         baseDrive,
- *         aimButton,
- *         bearing,
- *         aimCtrl
- * );
+ * TagAimController aimCtrl = TagAim.controllerFromConfig(TagAim.Config.defaults());
+ * Button aimButton = gamepads.p1().leftBumper();
+ *
+ * DriveSource aimedDrive = new TagAimDriveSource(baseDrive, aimButton, bearing, aimCtrl);
  *
  * // In your loop:
+ * clock.update();
+ * target.update();
  * DriveSignal signal = aimedDrive.get(clock).clamped();
- * drivebase.update(clock);   // update dt used for rate limiting (if enabled)
+ * drivebase.update(clock);   // provides dt for drivebase rate limiting (if enabled)
  * drivebase.drive(signal);
  * }</pre>
  */
@@ -216,15 +233,14 @@ public final class TagAimDriveSource implements DriveSource {
      * Dump internal state to a {@link DebugSink}.
      *
      * <p>
-     * This is intended for one-off debugging and tuning. Callers can choose
-     * any prefix they like; nested callers often use dotted paths such as
-     * {@code "drive.tagAim"}.
+     * This is intended for one-off debugging and tuning. Callers can choose any prefix they like;
+     * nested callers often use dotted paths such as {@code "drive.tagAim"}.
      * </p>
      *
      * <p>
-     * This method is defensive: if {@code dbg} is {@code null}, it does
-     * nothing. Framework classes consistently follow this pattern so callers
-     * may freely pass a {@code NullDebugSink} or {@code null}.
+     * This method is defensive: if {@code dbg} is {@code null}, it does nothing.
+     * Framework classes consistently follow this pattern so callers may freely pass
+     * a {@code NullDebugSink} or {@code null}.
      * </p>
      *
      * @param dbg    debug sink to write to (may be {@code null})

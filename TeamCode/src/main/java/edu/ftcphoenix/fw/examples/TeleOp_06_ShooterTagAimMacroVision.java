@@ -21,6 +21,8 @@ import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.AprilTagSensor;
+import edu.ftcphoenix.fw.sensing.CameraMountConfig;
+import edu.ftcphoenix.fw.sensing.CameraMountLogic;
 import edu.ftcphoenix.fw.sensing.TagAim;
 import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.task.ParallelAllTask;
@@ -38,14 +40,18 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * <ol>
  *   <li><b>Mecanum drive</b> via {@link Drives#mecanum} +
  *       {@link GamepadDriveSource#teleOpMecanumStandard(Gamepads)}.</li>
- *   <li><b>Tag-based auto-aim</b> via
- *       {@link TagAim#teleOpAim(DriveSource, edu.ftcphoenix.fw.input.Button,
- *       TagTarget)} – hold LB to face a scoring tag.</li>
+ *   <li><b>Tag-based auto-aim</b> via TagAim – hold LB to face a scoring tag.</li>
  *   <li><b>Vision-based shooter velocity</b>: AprilTag distance →
  *       {@link InterpolatingTable1D} → shooter velocity (native units).</li>
  *   <li><b>One-button shoot macro</b> (shooter + transfer + pusher)
  *       using {@link TaskRunner} and {@link PlantTasks}.</li>
  * </ol>
+ *
+ * <h2>Camera offset note</h2>
+ * <p>
+ * This example uses {@link CameraMountConfig} so TagAim aims the <b>robot center</b>
+ * at the tag even if the camera is not mounted at the robot center.
+ * </p>
  *
  * <h2>Driver behavior</h2>
  *
@@ -166,6 +172,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
     private AprilTagSensor tagSensor;
     private TagTarget scoringTarget;
 
+    private CameraMountConfig cameraMount;
+
     private Plant shooter;
     private Plant transfer;
     private Plant pusher;
@@ -177,7 +185,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
     // Latest tag observation (for telemetry)
     private boolean lastHasTarget = false;
     private double lastTagRangeInches = 0.0;
-    private double lastTagBearingRad = 0.0;
+    private double lastCameraBearingRad = 0.0;
+    private double lastRobotBearingRad = 0.0;
     private double lastTagAgeSec = 0.0;
     private int lastTagId = -1;
 
@@ -208,11 +217,26 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         // Track scoring tags with a freshness window.
         scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, MAX_TAG_AGE_SEC);
 
+        // 3b) Camera mount: robot→camera extrinsics (Phoenix axes: +X forward, +Y left, +Z up).
+        //
+        // IMPORTANT: Update these values for your robot.
+        // Example: camera is 6" forward, 3" to the RIGHT (so y = -3), 8" up, facing forward.
+        cameraMount = CameraMountConfig.of(
+                /*xInches=*/6.0,
+                /*yInches=*/-3.0,
+                /*zInches=*/8.0,
+                /*yawRad=*/0.0,
+                /*pitchRad=*/0.0,
+                /*rollRad=*/0.0
+        );
+
         // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
+        // This overload uses cameraMount so the ROBOT CENTER faces the tag, not just the camera.
         driveWithAim = TagAim.teleOpAim(
                 baseDrive,
                 gamepads.p1().leftBumper(),
-                scoringTarget
+                scoringTarget,
+                cameraMount
         );
 
         // 4) Mechanism wiring using Actuators.
@@ -255,6 +279,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
         telemetry.addLine("FW Example 06: Shooter TagAim Macro Vision");
         telemetry.addLine("Drive: mecanum + TagAim (hold LB to auto-aim)");
+        telemetry.addLine("TagAim: mount-aware (robot center aims at tag)");
         telemetry.addLine("Shooter macro:");
         telemetry.addLine("  Y = shoot one ball (vision distance)");
         telemetry.addLine("  B = cancel macro + stop shooter");
@@ -317,7 +342,10 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         AprilTagObservation obs = scoringTarget.last();
         lastHasTarget = obs.hasTarget;
         lastTagRangeInches = obs.cameraRangeInches();
-        lastTagBearingRad = obs.cameraBearingRad();
+        lastCameraBearingRad = obs.cameraBearingRad();
+        lastRobotBearingRad = obs.hasTarget
+                ? CameraMountLogic.robotBearingRad(obs, cameraMount)
+                : 0.0;
         lastTagAgeSec = obs.ageSec;
         lastTagId = obs.id;
 
@@ -332,7 +360,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
                 .addData("hasTarget", lastHasTarget)
                 .addData("id", lastTagId)
                 .addData("rangeIn", lastTagRangeInches)
-                .addData("bearingRad", lastTagBearingRad)
+                .addData("cameraBearingRad", lastCameraBearingRad)
+                .addData("robotBearingRad", lastRobotBearingRad)
                 .addData("ageSec", lastTagAgeSec);
 
         telemetry.addLine("Macro")
