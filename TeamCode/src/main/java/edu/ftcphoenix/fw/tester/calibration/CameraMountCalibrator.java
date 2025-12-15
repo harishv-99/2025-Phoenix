@@ -1,0 +1,466 @@
+package edu.ftcphoenix.fw.tester.calibration;
+
+import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
+import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+import edu.ftcphoenix.fw.adapters.ftc.FtcGameTagLayout;
+import edu.ftcphoenix.fw.adapters.ftc.FtcVision;
+import edu.ftcphoenix.fw.field.TagLayout;
+import edu.ftcphoenix.fw.geom.Pose3d;
+import edu.ftcphoenix.fw.sensing.AprilTagObservation;
+import edu.ftcphoenix.fw.sensing.AprilTagSensor;
+import edu.ftcphoenix.fw.tester.BaseTeleOpTester;
+import edu.ftcphoenix.fw.tester.ui.SelectionMenu;
+
+/**
+ * Calibrates {@code pRobotToCamera} (camera mount extrinsics) using:
+ * <ul>
+ *   <li>Known AprilTag field layout (FTC game database by default), and</li>
+ *   <li>A manually-entered / adjustable known robot pose {@code pFieldToRobot}.</li>
+ * </ul>
+ *
+ * <h2>Camera selection</h2>
+ * If constructed without a camera name (or with an empty name), this tester shows an INIT menu
+ * listing configured webcams and lets you select one before calibration starts.
+ *
+ * <h2>Core math</h2>
+ * <pre>
+ * pFieldToTag = pFieldToRobot · pRobotToCamera · pCameraToTag
+ * => pRobotToCamera = inv(pFieldToRobot) · pFieldToTag · inv(pCameraToTag)
+ * </pre>
+ */
+public final class CameraMountCalibrator extends BaseTeleOpTester {
+
+    // Defaults
+    private static final double DEFAULT_MAX_AGE_SEC = 0.35;
+    private static final int DEFAULT_TAG_ID = 1;
+
+    private static final Pose3d DEFAULT_P_FIELD_TO_ROBOT =
+            new Pose3d(0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0);
+
+    // Injected configuration
+    private final String preferredCameraName;   // may be null/empty to trigger picker
+    private final TagLayout layoutOverride;     // may be null => FTC game db
+    private final double maxAgeSec;
+
+    // Runtime state
+    private TagLayout layout;
+    private AprilTagSensor tagSensor;
+
+    private boolean visionReady = false;
+    private String selectedCameraName = null;
+    private String visionInitError = null;
+
+    private final SelectionMenu<String> cameraMenu =
+            new SelectionMenu<String>()
+                    .setTitle("Select Camera")
+                    .setHelp("Dpad: select | A: choose | B: refresh");
+
+    private int selectedTagId = DEFAULT_TAG_ID;
+    private Pose3d pFieldToRobot = DEFAULT_P_FIELD_TO_ROBOT;
+    private boolean fineSteps = true;
+
+    private Pose3d lastRobotToCameraSample = null;
+    private Pose3d lastObservedCameraToTag = null;
+    private Pose3d lastPredictedCameraToTag = null;
+
+    private final PoseAverager avg = new PoseAverager();
+
+    // Construction
+    public CameraMountCalibrator() {
+        this(null, null, DEFAULT_MAX_AGE_SEC);
+    }
+
+    public CameraMountCalibrator(String cameraName) {
+        this(cameraName, null, DEFAULT_MAX_AGE_SEC);
+    }
+
+    public CameraMountCalibrator(String cameraName, TagLayout layoutOverride, double maxAgeSec) {
+        this.preferredCameraName = cameraName;
+        this.layoutOverride = layoutOverride;
+        this.maxAgeSec = maxAgeSec;
+    }
+
+    @Override
+    public String name() {
+        return "Camera Mount Calibrator";
+    }
+
+    @Override
+    protected void onInit() {
+        // Layout
+        this.layout = (layoutOverride != null)
+                ? layoutOverride
+                : new FtcGameTagLayout(AprilTagGameDatabase.getCurrentGameTagLibrary());
+
+        // Camera selection setup
+        selectedCameraName = (preferredCameraName == null || preferredCameraName.trim().isEmpty())
+                ? null
+                : preferredCameraName.trim();
+
+        refreshCameraList();
+
+        // Camera menu navigation is ONLY active before visionReady.
+        cameraMenu.bind(
+                bindings,
+                gamepads.p1().dpadUp(),
+                gamepads.p1().dpadDown(),
+                gamepads.p1().a(),
+                () -> !visionReady,
+                item -> {
+                    selectedCameraName = item.value;
+                    ensureVisionReady();
+                }
+        );
+
+        // B refreshes camera list before vision is ready; after that B clears samples.
+        bindings.onPress(gamepads.p1().b(), () -> {
+            if (!visionReady) {
+                refreshCameraList();
+            } else {
+                avg.clear();
+            }
+        });
+
+        // Capture sample (only when vision is ready)
+        bindings.onPress(gamepads.p1().a(), () -> {
+            if (!visionReady) return;
+            if (lastRobotToCameraSample != null) {
+                avg.add(lastRobotToCameraSample);
+            }
+        });
+
+        // Calibration controls (only when vision is ready)
+        bindings.onPress(gamepads.p1().y(), () -> {
+            if (!visionReady) return;
+            selectedTagId++;
+        });
+
+        bindings.onPress(gamepads.p1().x(), () -> {
+            if (!visionReady) return;
+            selectedTagId = Math.max(1, selectedTagId - 1);
+        });
+
+        bindings.onPress(gamepads.p1().start(), () -> {
+            if (!visionReady) return;
+            fineSteps = !fineSteps;
+        });
+
+        bindings.onPress(gamepads.p1().dpadUp(), () -> {
+            if (!visionReady) return;
+            adjustRobotPose(+stepXY(), 0.0, 0.0);
+        });
+        bindings.onPress(gamepads.p1().dpadDown(), () -> {
+            if (!visionReady) return;
+            adjustRobotPose(-stepXY(), 0.0, 0.0);
+        });
+
+        // Intentionally map left/right to +/-Y for intuitive feel.
+        bindings.onPress(gamepads.p1().dpadLeft(), () -> {
+            if (!visionReady) return;
+            adjustRobotPose(0.0, +stepXY(), 0.0);
+        });
+        bindings.onPress(gamepads.p1().dpadRight(), () -> {
+            if (!visionReady) return;
+            adjustRobotPose(0.0, -stepXY(), 0.0);
+        });
+
+        bindings.onPress(gamepads.p1().leftBumper(), () -> {
+            if (!visionReady) return;
+            adjustRobotPose(0.0, 0.0, +stepYawRad());
+        });
+        bindings.onPress(gamepads.p1().rightBumper(), () -> {
+            if (!visionReady) return;
+            adjustRobotPose(0.0, 0.0, -stepYawRad());
+        });
+
+        // If user provided a camera name, try to bring vision up immediately in INIT.
+        ensureVisionReady();
+    }
+
+    @Override
+    protected void onInitLoop(double dtSec) {
+        if (!visionReady) {
+            renderCameraPicker();
+            return;
+        }
+
+        updateSolveAndTelemetry();
+    }
+
+    @Override
+    protected void onLoop(double dtSec) {
+        if (!visionReady) {
+            renderCameraPicker();
+            return;
+        }
+
+        updateSolveAndTelemetry();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Vision init / camera enumeration
+    // ---------------------------------------------------------------------------------------------
+
+    private void ensureVisionReady() {
+        if (visionReady) return;
+        if (selectedCameraName == null || selectedCameraName.isEmpty()) return;
+
+        visionInitError = null;
+
+        try {
+            tagSensor = FtcVision.aprilTags(ctx.hw, selectedCameraName);
+            visionReady = true;
+        } catch (Exception ex) {
+            visionReady = false;
+            tagSensor = null;
+            visionInitError = ex.getClass().getSimpleName() + ": " + ex.getMessage();
+        }
+    }
+
+    private void refreshCameraList() {
+        List<String> names = enumerateWebcamNames();
+
+        cameraMenu.clearItems();
+        for (String n : names) {
+            cameraMenu.addItem(n, n);
+        }
+
+        if (selectedCameraName != null && !selectedCameraName.isEmpty()) {
+            int idx = names.indexOf(selectedCameraName);
+            if (idx >= 0) {
+                cameraMenu.setSelectedIndex(idx);
+            }
+        }
+    }
+
+    private List<String> enumerateWebcamNames() {
+        List<String> out = new ArrayList<>();
+
+        List<WebcamName> webcams = ctx.hw.getAll(WebcamName.class);
+        for (WebcamName cam : webcams) {
+            Set<String> camNames = ctx.hw.getNamesOf(cam);
+            if (camNames == null || camNames.isEmpty()) continue;
+
+            List<String> sorted = new ArrayList<>(camNames);
+            Collections.sort(sorted);
+            out.add(sorted.get(0));
+        }
+
+        Collections.sort(out);
+        return out;
+    }
+
+    private void renderCameraPicker() {
+        Telemetry t = ctx.telemetry;
+        t.clearAll();
+
+        cameraMenu.render(t);
+
+        t.addLine("");
+        t.addLine("Chosen: " + (selectedCameraName == null ? "(none)" : selectedCameraName));
+        t.addLine("Press A to choose a camera and initialize vision.");
+        t.addLine("Press B to refresh camera list.");
+
+        if (visionInitError != null) {
+            t.addLine("");
+            t.addLine("Vision init error:");
+            t.addLine(visionInitError);
+        }
+
+        t.update();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Calibration solve + telemetry
+    // ---------------------------------------------------------------------------------------------
+
+    private void updateSolveAndTelemetry() {
+        AprilTagObservation obs = tagSensor.best(selectedTagId, maxAgeSec);
+        lastObservedCameraToTag = (obs.hasTarget) ? obs.pCameraToTag : null;
+
+        lastRobotToCameraSample = null;
+        lastPredictedCameraToTag = null;
+
+        if (obs.hasTarget) {
+            TagLayout.TagPose tagPose = layout.get(obs.id);
+            if (tagPose != null) {
+                Pose3d pFieldToTag = tagPose.fieldToTagPose();
+                Pose3d pCameraToTag = obs.pCameraToTag;
+
+                Pose3d pRobotToCamera = pFieldToRobot.inverse()
+                        .then(pFieldToTag)
+                        .then(pCameraToTag.inverse());
+
+                lastRobotToCameraSample = pRobotToCamera;
+
+                Pose3d pFieldToCamera = pFieldToRobot.then(pRobotToCamera);
+                lastPredictedCameraToTag = pFieldToCamera.inverse().then(pFieldToTag);
+            }
+        }
+
+        renderCalibrationTelemetry();
+    }
+
+    private void renderCalibrationTelemetry() {
+        Telemetry t = ctx.telemetry;
+        t.clearAll();
+
+        t.addLine("=== Camera Mount Calibrator ===");
+        t.addLine(String.format(Locale.US,
+                "Camera=%s | TagId=%d | Step=%s | MaxAge=%.0f ms",
+                selectedCameraName, selectedTagId, fineSteps ? "FINE" : "COARSE", maxAgeSec * 1000.0
+        ));
+        t.addLine("Controls: Y/X tagId | A capture | B clear | dpad XY | LB/RB yaw | START step");
+
+        t.addLine("");
+        t.addLine("Known robot pose (pFieldToRobot):");
+        addPoseLine(t, "pFieldToRobot", pFieldToRobot);
+
+        t.addLine("");
+        t.addLine("Observation (pCameraToTag):");
+        if (lastObservedCameraToTag == null) {
+            t.addLine("  No fresh detection for selected tag ID.");
+        } else {
+            addPoseLine(t, "pCameraToTag(obs)", lastObservedCameraToTag);
+        }
+
+        t.addLine("");
+        t.addLine("Mount solve (pRobotToCamera):");
+        if (lastRobotToCameraSample == null) {
+            t.addLine("  Need: (1) fresh detection AND (2) this tag present in layout.");
+        } else {
+            addPoseLine(t, "pRobotToCamera(sample)", lastRobotToCameraSample);
+
+            if (lastPredictedCameraToTag != null && lastObservedCameraToTag != null) {
+                Pose3d pPredToObs = lastPredictedCameraToTag.inverse().then(lastObservedCameraToTag);
+                double trans = translationNormInches(pPredToObs);
+
+                t.addLine(String.format(Locale.US,
+                        "Residual: trans=%.2f in | yaw=%.2f° pitch=%.2f° roll=%.2f°",
+                        trans,
+                        Math.toDegrees(pPredToObs.yawRad),
+                        Math.toDegrees(pPredToObs.pitchRad),
+                        Math.toDegrees(pPredToObs.rollRad)
+                ));
+            }
+        }
+
+        t.addLine("");
+        t.addLine(String.format(Locale.US, "Captured samples: %d", avg.count()));
+
+        Pose3d mean = avg.meanOrNull();
+        if (mean == null) {
+            t.addLine("Average: (none yet) Press A a few times while holding still.");
+        } else {
+            t.addLine("Average mount (paste into CameraMountConfig.of):");
+            addPoseLine(t, "pRobotToCamera(avg)", mean);
+
+            t.addLine(String.format(Locale.US,
+                    "CameraMountConfig.of(%.3f, %.3f, %.3f, %.6f, %.6f, %.6f)",
+                    mean.xInches, mean.yInches, mean.zInches,
+                    mean.yawRad, mean.pitchRad, mean.rollRad
+            ));
+        }
+
+        t.update();
+    }
+
+    private static void addPoseLine(Telemetry t, String label, Pose3d p) {
+        t.addLine(String.format(Locale.US,
+                "  %s: x=%.2f y=%.2f z=%.2f | yaw=%.1f° pitch=%.1f° roll=%.1f°",
+                label,
+                p.xInches, p.yInches, p.zInches,
+                Math.toDegrees(p.yawRad),
+                Math.toDegrees(p.pitchRad),
+                Math.toDegrees(p.rollRad)
+        ));
+    }
+
+    private static double translationNormInches(Pose3d p) {
+        double dx = p.xInches;
+        double dy = p.yInches;
+        double dz = p.zInches;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    // Robot pose adjustment
+    private double stepXY() {
+        return fineSteps ? 0.25 : 1.0;
+    }
+
+    private double stepYawRad() {
+        return Math.toRadians(fineSteps ? 0.5 : 2.0);
+    }
+
+    private void adjustRobotPose(double dxInches, double dyInches, double dyawRad) {
+        pFieldToRobot = new Pose3d(
+                pFieldToRobot.xInches + dxInches,
+                pFieldToRobot.yInches + dyInches,
+                pFieldToRobot.zInches,
+                pFieldToRobot.yawRad + dyawRad,
+                pFieldToRobot.pitchRad,
+                pFieldToRobot.rollRad
+        );
+    }
+
+    // Averager
+    private static final class PoseAverager {
+        private int n = 0;
+
+        private double sumX = 0.0, sumY = 0.0, sumZ = 0.0;
+        private double sumSinYaw = 0.0, sumCosYaw = 0.0;
+        private double sumSinPitch = 0.0, sumCosPitch = 0.0;
+        private double sumSinRoll = 0.0, sumCosRoll = 0.0;
+
+        void clear() {
+            n = 0;
+            sumX = sumY = sumZ = 0.0;
+            sumSinYaw = sumCosYaw = 0.0;
+            sumSinPitch = sumCosPitch = 0.0;
+            sumSinRoll = sumCosRoll = 0.0;
+        }
+
+        int count() {
+            return n;
+        }
+
+        void add(Pose3d p) {
+            n++;
+            sumX += p.xInches;
+            sumY += p.yInches;
+            sumZ += p.zInches;
+
+            sumSinYaw += Math.sin(p.yawRad);
+            sumCosYaw += Math.cos(p.yawRad);
+
+            sumSinPitch += Math.sin(p.pitchRad);
+            sumCosPitch += Math.cos(p.pitchRad);
+
+            sumSinRoll += Math.sin(p.rollRad);
+            sumCosRoll += Math.cos(p.rollRad);
+        }
+
+        Pose3d meanOrNull() {
+            if (n <= 0) return null;
+
+            double x = sumX / n;
+            double y = sumY / n;
+            double z = sumZ / n;
+
+            double yaw = Math.atan2(sumSinYaw, sumCosYaw);
+            double pitch = Math.atan2(sumSinPitch, sumCosPitch);
+            double roll = Math.atan2(sumSinRoll, sumCosRoll);
+
+            return new Pose3d(x, y, z, yaw, pitch, roll);
+        }
+    }
+}

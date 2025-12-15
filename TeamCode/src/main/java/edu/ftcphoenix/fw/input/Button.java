@@ -222,8 +222,10 @@ public interface Button {
          */
         public StatefulButton(BooleanSupplier raw) {
             this.raw = Objects.requireNonNull(raw, "raw supplier is required");
-            this.prev = false;
-            this.curr = false;
+
+            boolean initial = raw.getAsBoolean();
+            this.prev = initial;
+            this.curr = initial;
         }
 
         @Override

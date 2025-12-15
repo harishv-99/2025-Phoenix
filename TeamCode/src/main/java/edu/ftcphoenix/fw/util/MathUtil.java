@@ -62,6 +62,20 @@ public final class MathUtil {
     }
 
     /**
+     * Clamps an integer to [min, max] (inclusive).
+     *
+     * <p>If min > max, this swaps them to keep the method robust.</p>
+     */
+    public static int clamp(int value, int min, int max) {
+        if (min > max) {
+            int t = min;
+            min = max;
+            max = t;
+        }
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /**
      * Clamp a value to the symmetric interval [-{@code maxAbs}, +{@code maxAbs}].
      *
      * <p>This is a common pattern when limiting a normalized power or command
