@@ -199,7 +199,7 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
     private final TaskRunner macroRunner = new TaskRunner();
 
     // For telemetry
-    private DriveSignal lastDrive = new DriveSignal(0.0, 0.0, 0.0);
+    private DriveSignal lastDrive = DriveSignal.ZERO;
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -273,8 +273,8 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
         double dtSec = clock.dtSec();
 
         // --- 2) Inputs + bindings ---
-        gamepads.update(dtSec);
-        bindings.update(dtSec);
+        gamepads.update(clock);
+        bindings.update(clock);
 
         // --- 3) Macros (shooter/transfer/pusher) ---
         macroRunner.update(clock);
@@ -290,8 +290,8 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
         DriveSignal driveCmd = stickDrive.get(clock).clamped();
         lastDrive = driveCmd;
 
-        drivebase.drive(driveCmd);
         drivebase.update(clock);
+        drivebase.drive(driveCmd);
 
         // --- 5) Mechanism updates ---
         shooter.update(dtSec);

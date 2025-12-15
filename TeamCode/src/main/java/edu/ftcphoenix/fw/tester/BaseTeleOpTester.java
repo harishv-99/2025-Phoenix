@@ -2,25 +2,38 @@ package edu.ftcphoenix.fw.tester;
 
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
+import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
  * Convenience base class for Phoenix testers.
  *
- * <p>Provides:
+ * <p>Provides:</p>
  * <ul>
  *   <li>{@link TesterContext} via {@link #ctx}</li>
  *   <li>{@link Gamepads} wrapper via {@link #gamepads}</li>
  *   <li>{@link Bindings} via {@link #bindings}</li>
- *   <li>Automatic input/binding updates each {@code initLoop()} and {@code loop()}</li>
+ *   <li>A shared per-loop {@link LoopClock} via {@link #clock} (from {@link TesterContext})</li>
  * </ul>
  *
- * <p>Override:
- * <ul>
- *   <li>{@link #onInit()} for one-time setup</li>
- *   <li>{@link #onInitLoop(double)} for INIT-phase menus/selections</li>
- *   <li>{@link #onLoop(double)} for RUN-phase logic</li>
- *   <li>{@link #onStart()} / {@link #onStop()} optionally</li>
- * </ul>
+ * <h2>One loop, one heartbeat</h2>
+ * <p>Testers must use the <b>shared</b> {@link LoopClock} from {@link TesterContext} so that per-cycle
+ * systems (button edge tracking, bindings) can be made idempotent by {@link LoopClock#cycle()} across
+ * nested callers (e.g., a menu calling into a tester).</p>
+ *
+ * <p>This base class therefore does <b>not</b> create or update its own clock. The runner (OpMode or
+ * tester suite) advances {@link TesterContext#clock} once per OpMode cycle.</p>
+ *
+ * <h2>Update order</h2>
+ * <p>Each {@code initLoop()} / {@code loop()} call executes in this order:</p>
+ * <ol>
+ *   <li>{@code gamepads.update(clock)} – advances global button edge state (idempotent by cycle)</li>
+ *   <li>{@code bindings.update(clock)} – fires binding actions (idempotent per Bindings instance)</li>
+ *   <li>{@code onInitLoop(dtSec)} or {@code onLoop(dtSec)} – tester-specific logic</li>
+ * </ol>
+ *
+ * <p>Because {@code Button.updateAllRegistered(clock)} is idempotent by cycle, it is safe for both a
+ * suite and the active tester to call {@code gamepads.update(clock)} in the same cycle: only the first
+ * call actually advances button state; subsequent calls are no-ops.</p>
  */
 public abstract class BaseTeleOpTester implements TeleOpTester {
 
@@ -28,18 +41,30 @@ public abstract class BaseTeleOpTester implements TeleOpTester {
     protected Gamepads gamepads;
     protected final Bindings bindings = new Bindings();
 
+    /**
+     * Shared per-loop heartbeat provided by the runner via {@link TesterContext}.
+     *
+     * <p>This is assigned in {@link #init(TesterContext)} and should be treated as read-only
+     * by testers (do not call {@code clock.update(...)} here).</p>
+     */
+    protected LoopClock clock;
+
     @Override
     public final void init(TesterContext ctx) {
         this.ctx = ctx;
+        this.clock = ctx.clock;
+
+        // Each tester gets a Gamepads wrapper; button edge tracking is global and idempotent by cycle.
         this.gamepads = Gamepads.create(ctx.gamepad1, ctx.gamepad2);
+
         onInit();
     }
 
     @Override
     public final void initLoop(double dtSec) {
-        // Inputs + bindings first (consistent across all testers).
-        gamepads.update(dtSec);
-        bindings.update(dtSec);
+        // Per-cycle systems first.
+        gamepads.update(clock);
+        bindings.update(clock);
 
         onInitLoop(dtSec);
     }
@@ -51,9 +76,9 @@ public abstract class BaseTeleOpTester implements TeleOpTester {
 
     @Override
     public final void loop(double dtSec) {
-        // Inputs + bindings first (consistent across all testers).
-        gamepads.update(dtSec);
-        bindings.update(dtSec);
+        // Per-cycle systems first.
+        gamepads.update(clock);
+        bindings.update(clock);
 
         onLoop(dtSec);
     }
@@ -64,34 +89,42 @@ public abstract class BaseTeleOpTester implements TeleOpTester {
     }
 
     /**
-     * Override to set up hardware, bindings, and internal state.
+     * Override to set up bindings and internal state.
+     *
+     * <p>Called once when the tester is entered.</p>
      */
     protected void onInit() {
+        // Default: no-op.
     }
 
     /**
      * Override to implement INIT-phase behavior (selection menus, camera selection, etc).
      *
-     * <p>Avoid commanding actuators here; keep it to UI and setup.</p>
+     * <p>Called every INIT loop while this tester is active.</p>
      */
     protected void onInitLoop(double dtSec) {
+        // Default: no-op.
     }
 
     /**
      * Override to implement RUN-phase tester behavior.
+     *
+     * <p>Called every RUN loop while this tester is active.</p>
      */
     protected abstract void onLoop(double dtSec);
 
     /**
-     * Optional hook for OpMode start.
+     * Optional hook called once when the OpMode transitions from INIT to RUN.
      */
     protected void onStart() {
+        // Default: no-op.
     }
 
     /**
-     * Optional hook for OpMode stop.
+     * Optional hook called once when the tester is stopped (or when returning to menu).
      */
     protected void onStop() {
+        // Default: no-op.
     }
 
     // ---------------------------------------------------------------------------------------------

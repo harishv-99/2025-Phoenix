@@ -180,7 +180,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
     private final TaskRunner macroRunner = new TaskRunner();
 
-    private DriveSignal lastDrive = new DriveSignal(0.0, 0.0, 0.0);
+    private DriveSignal lastDrive = DriveSignal.ZERO;
 
     // Latest tag observation (for telemetry)
     private boolean lastHasTarget = false;
@@ -302,14 +302,14 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         // ------------------------------------------------------------------
         // 2) Sense (inputs & sensors)
         // ------------------------------------------------------------------
-        gamepads.update(dtSec);      // controller state
-        scoringTarget.update();      // AprilTags via TagTarget
+        gamepads.update(clock);        // controller state
+        scoringTarget.update(clock);   // AprilTags via TagTarget  (UPDATED)
 
         // ------------------------------------------------------------------
         // 3) Decide (high-level logic)
         // ------------------------------------------------------------------
         // User-input–driven decisions (may start/cancel macros).
-        bindings.update(dtSec);
+        bindings.update(clock);
 
         // High-level task/macro logic (sets plant targets over time).
         macroRunner.update(clock);
@@ -328,8 +328,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         DriveSignal cmd = driveWithAim.get(clock).clamped();
         lastDrive = cmd;
 
-        drivebase.drive(cmd);
         drivebase.update(clock);
+        drivebase.drive(cmd);
 
         // Plants: shooter, transfer, pusher.
         shooter.update(dtSec);

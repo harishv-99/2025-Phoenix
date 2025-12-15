@@ -20,8 +20,8 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *       {@code gamepad2}.</li>
  *   <li>Create and own a {@link Bindings} instance for button edge-detection
  *       and simple state machines.</li>
- *   <li>Create and own a {@link LoopClock} to track loop {@code dtSec}.</li>
- *   <li>Ensure inputs and bindings are updated every loop.</li>
+ *   <li>Create and own a {@link LoopClock} to track loop timing.</li>
+ *   <li>Ensure inputs and bindings are updated every loop in a consistent order.</li>
  *   <li>Provide simple accessors:
  *     <ul>
  *       <li>{@link #p1()} and {@link #p2()} for the two controllers
@@ -40,8 +40,15 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   </li>
  * </ul>
  *
- * <p>This keeps your TeleOp classes focused on <em>what the robot should do</em>
- * instead of input plumbing.</p>
+ * <h2>Per-cycle update rule</h2>
+ *
+ * <p>Phoenix treats {@link LoopClock} as the per-cycle heartbeat:</p>
+ * <ol>
+ *   <li>{@code clock.update(getRuntime())}</li>
+ *   <li>{@code gamepads.update(clock)} (updates button edges; idempotent by {@code clock.cycle()})</li>
+ *   <li>{@code bindings.update(clock)} (fires actions; idempotent by {@code clock.cycle()})</li>
+ *   <li>{@code onLoopRobot(dtSec)}</li>
+ * </ol>
  *
  * <h2>Typical usage</h2>
  *
@@ -49,25 +56,10 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * @TeleOp(name = "My TeleOp", group = "Examples")
  * public final class MyTeleOp extends PhoenixTeleOpBase {
  *
- *     private MecanumDrivebase drive;
- *
  *     @Override
  *     protected void onInitRobot() {
- *         // 1) Map hardware
- *         MecanumDrivebase.Config cfg = MecanumConfig.defaults();
- *         drive = Drives.mecanum(hardwareMap, "FL", "FR", "BL", "BR")
- *                      .config(cfg)
- *                      .build();
- *
- *         // 2) Set up drive controls using player 1 sticks
- *         DriveSource sticks = GamepadDriveSource.teleOpMecanumWithSlowMode(
- *                 gamepads(),          // full pair, if needed
- *                 p1().rightBumper(),  // hold for slow mode
- *                 0.30                 // 30% speed
- *         );
- *
  *         // Example: bind A to do something once on press
- *         bind().onPress(p1().buttonA(), () -> telemetry.addLine("A pressed"));
+ *         bind().onPress(p1().a(), () -> telemetry.addLine("A pressed"));
  *     }
  *
  *     @Override
@@ -110,15 +102,15 @@ public abstract class PhoenixTeleOpBase extends OpMode {
 
     @Override
     public final void loop() {
-        // Update timing
+        // 1) Update timing (exactly once per OpMode cycle)
         clock.update(getRuntime());
         double dtSec = clock.dtSec();
 
-        // Update inputs + bindings
-        gamepads.update(dtSec);   // currently a no-op, kept for future filters
-        bindings.update(dtSec);
+        // 2) Update inputs + bindings (per-cycle systems)
+        gamepads.update(clock);
+        bindings.update(clock);
 
-        // Delegate to subclass for robot behavior
+        // 3) Delegate to subclass for robot behavior
         onLoopRobot(dtSec);
     }
 
@@ -154,12 +146,6 @@ public abstract class PhoenixTeleOpBase extends OpMode {
 
     /**
      * Called every loop after inputs and bindings have been updated.
-     *
-     * <p>Use this to:</p>
-     * <ul>
-     *   <li>Update drive / stages / subsystems.</li>
-     *   <li>Publish telemetry.</li>
-     * </ul>
      *
      * @param dtSec loop time step in seconds (from {@link LoopClock})
      */

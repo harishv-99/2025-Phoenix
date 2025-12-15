@@ -133,7 +133,7 @@ public final class TesterSuite extends BaseTeleOpTester {
             BaseTeleOpTester bt = (BaseTeleOpTester) active;
             // Global buttons were already updated by the suite's BaseTeleOpTester.
             // We still need to update the active tester's Bindings so its actions can fire.
-            bt.bindings.update(dtSec);
+            bt.bindings.update(clock);
             bt.onInitLoop(dtSec);
         } else {
             active.initLoop(dtSec);
@@ -146,7 +146,7 @@ public final class TesterSuite extends BaseTeleOpTester {
     private void dispatchActiveLoop(double dtSec) {
         if (active instanceof BaseTeleOpTester) {
             BaseTeleOpTester bt = (BaseTeleOpTester) active;
-            bt.bindings.update(dtSec);
+            bt.bindings.update(clock);
             bt.onLoop(dtSec);
         } else {
             active.loop(dtSec);

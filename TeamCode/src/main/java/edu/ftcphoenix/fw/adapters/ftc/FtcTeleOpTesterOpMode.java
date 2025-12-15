@@ -2,6 +2,7 @@ package edu.ftcphoenix.fw.adapters.ftc;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 
+import edu.ftcphoenix.fw.input.Button;
 import edu.ftcphoenix.fw.tester.TeleOpTester;
 import edu.ftcphoenix.fw.tester.TesterContext;
 import edu.ftcphoenix.fw.util.LoopClock;
@@ -22,8 +23,11 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   <li>{@link #stop()} → {@link TeleOpTester#stop()}</li>
  * </ul>
  *
- * <p>The {@code init_loop()} hook is especially useful for selection menus (e.g., choose
- * a camera from configured devices) and for doing HardwareMap lookups during INIT.</p>
+ * <h2>One loop, one heartbeat</h2>
+ * <p>This OpMode owns a single {@link LoopClock} instance and advances it exactly once per FTC loop
+ * (in {@link #init_loop()} and {@link #loop()}). That shared clock is also passed into
+ * {@link TesterContext} so that per-cycle systems (like button edges and bindings) can be idempotent
+ * by {@link LoopClock#cycle()} across nested callers (suite → active tester).</p>
  */
 public abstract class FtcTeleOpTesterOpMode extends OpMode {
 
@@ -40,7 +44,14 @@ public abstract class FtcTeleOpTesterOpMode extends OpMode {
 
     @Override
     public final void init() {
-        ctx = new TesterContext(hardwareMap, telemetry, gamepad1, gamepad2);
+        // Fresh start: avoid stale registered Buttons from previous runs.
+        Button.clearRegistered();
+
+        // Start dt tracking immediately so tester init/init_loop can rely on a "started" clock.
+        clock.reset(getRuntime());
+
+        // Build shared tester context (includes the shared loop clock).
+        ctx = new TesterContext(hardwareMap, telemetry, gamepad1, gamepad2, clock);
 
         tester = createTester();
         if (tester == null) {
@@ -50,9 +61,6 @@ public abstract class FtcTeleOpTesterOpMode extends OpMode {
         }
 
         tester.init(ctx);
-
-        // Start dt tracking immediately so init_loop() also has stable dt.
-        clock.reset(getRuntime());
 
         telemetry.addLine("Ready: " + tester.name());
         telemetry.update();

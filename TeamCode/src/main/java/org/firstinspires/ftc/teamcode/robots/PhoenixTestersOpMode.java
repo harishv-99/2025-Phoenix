@@ -30,7 +30,7 @@ public final class PhoenixTestersOpMode extends OpMode {
 
     @Override
     public void init() {
-        ctx = new TesterContext(hardwareMap, telemetry, gamepad1, gamepad2);
+        ctx = new TesterContext(hardwareMap, telemetry, gamepad1, gamepad2, clock);
 
         suite = StandardTesters.createSuite();
         PhoenixRobotTesters.register(suite);

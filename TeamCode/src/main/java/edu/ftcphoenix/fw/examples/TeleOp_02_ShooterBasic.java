@@ -58,8 +58,9 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *       <li>Update inputs ({@link Gamepads}, {@link Bindings}).</li>
  *       <li>Compute a {@link DriveSignal} from sticks.</li>
  *       <li>Convert modes → targets for {@link Plant}s.</li>
- *       <li>Call {@link Plant#update(double)} and
- *           {@link MecanumDrivebase#update(LoopClock)}.</li>
+ *       <li>Call {@link MecanumDrivebase#update(LoopClock)} then
+ *           {@link MecanumDrivebase#drive(DriveSignal)}, and call
+ *           {@link Plant#update(double)}.</li>
  *       <li>Send telemetry.</li>
  *     </ol>
  *   </li>
@@ -98,7 +99,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *   </li>
  *   <li><b>Shooter / mechanism</b>:
  *     <ul>
- *       <li>P1 right bumper: toggle shooter on/off.</li>
+ *       <li>P1 left bumper: toggle shooter on/off.</li>
  *       <li>P1 A: "LOAD" – gentle transfer, pusher in load position.</li>
  *       <li>P1 B: "SHOOT" – faster transfer, pusher in shoot position.</li>
  *       <li>P1 X: "RETRACT" – stop transfer, retract pusher.</li>
@@ -231,7 +232,7 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
     private PusherMode pusherMode = PusherMode.RETRACT;
 
     // For telemetry
-    private DriveSignal lastDrive = new DriveSignal(0.0, 0.0, 0.0);
+    private DriveSignal lastDrive = DriveSignal.ZERO;
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -271,9 +272,9 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
 
         // === 4) Bindings: map buttons to high-level modes (using lambdas) ===
 
-        // Toggle shooter on/off with right bumper.
+        // Toggle shooter on/off with left bumper.
         bindings.onPress(
-                gamepads.p1().rightBumper(),
+                gamepads.p1().leftBumper(),
                 () -> shooterEnabled = !shooterEnabled
         );
 
@@ -307,7 +308,8 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
         telemetry.addLine("FW Example 02: Shooter Basic");
         telemetry.addLine("Drive: same as Example 01");
         telemetry.addLine("Controls:");
-        telemetry.addLine("  RB = toggle shooter");
+        telemetry.addLine("  LB = toggle shooter");
+        telemetry.addLine("  RB = slow mode (drive)");
         telemetry.addLine("  A = LOAD, B = SHOOT, X = RETRACT");
         telemetry.update();
     }
@@ -324,8 +326,8 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
         double dtSec = clock.dtSec();
 
         // --- 2) Inputs (gamepads + bindings) ---
-        gamepads.update(dtSec);
-        bindings.update(dtSec);
+        gamepads.update(clock);
+        bindings.update(clock);
 
         // --- 3) Drive logic: sticks → drive signal ---
         DriveSignal driveCmd = stickDrive.get(clock).clamped();
@@ -364,14 +366,14 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
                 break;
         }
 
-        // --- 5) Actuation: update plants and drivebase ---
+        // --- 5) Actuation: drivebase + plants ---
+
+        drivebase.update(clock);
+        drivebase.drive(driveCmd);
 
         shooter.update(dtSec);
         transfer.update(dtSec);
         pusher.update(dtSec);
-
-        drivebase.drive(driveCmd);
-        drivebase.update(clock);
 
         // --- 6) Telemetry ---
 

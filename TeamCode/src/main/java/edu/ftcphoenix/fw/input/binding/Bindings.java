@@ -2,62 +2,35 @@ package edu.ftcphoenix.fw.input.binding;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import edu.ftcphoenix.fw.input.Button;
+import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
- * Simple binding manager that turns {@link Button} states into higher-level
- * behaviors for teleop:
+ * Binding manager that maps {@link Button} state to higher-level behavior.
  *
- * <ul>
- *   <li>{@link #onPress(Button, Runnable)} – fire once on rising edge.</li>
- *   <li>{@link #whileHeld(Button, Runnable, Runnable)} – run once per loop while
- *       pressed, and a separate action when released.</li>
- *   <li>{@link #toggle(Button, Consumer)} – flip a boolean on each press and
- *       deliver the new value to a consumer.</li>
- * </ul>
+ * <p>Phoenix uses a polled input model:</p>
+ * <ol>
+ *   <li>Once per loop: update inputs (which advances button edge state).</li>
+ *   <li>Once per loop: update bindings (which runs actions based on button state).</li>
+ * </ol>
  *
- * <p>
- * With the new stateful {@link Button} API, {@code Bindings} no longer needs to
- * compute edges itself. Instead, it delegates to:
- * </p>
+ * <h2>Per-cycle idempotency</h2>
+ * <p>{@link #update(LoopClock)} is <b>idempotent by {@link LoopClock#cycle()}</b>.
+ * If called twice in the same loop cycle, the second call is a no-op. This prevents
+ * nested or layered code from double-firing actions.</p>
  *
- * <ul>
- *   <li>{@link Button#onPress()} – rising edge.</li>
- *   <li>{@link Button#onRelease()} – falling edge.</li>
- *   <li>{@link Button#isHeld()} – level.</li>
- * </ul>
- *
- * <p>
- * Typical usage:
- * </p>
- *
- * <pre>{@code
- * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
- * Bindings bindings = new Bindings();
- *
- * bindings.onPress(pads.p1().a(), () -> shooter.fireOne());
- * bindings.whileHeld(pads.p1().rb(),
- *                    () -> intake.setTarget(+1.0),
- *                    () -> intake.setTarget(0.0));
- *
- * @Override
- * public void loop() {
- *     double dtSec = clock.dtSec();
- *
- *     pads.update(dtSec);      // updates all registered Buttons
- *     bindings.update(dtSec);  // polls buttons and runs actions
- *
- *     // ... mechanism updates ...
- * }
- * }</pre>
+ * <p><b>Important:</b> Call {@code Gamepads.update(clock)} (or {@code Button.updateAllRegistered(clock)})
+ * <em>before</em> calling {@link #update(LoopClock)}, so {@link Button#onPress()} /
+ * {@link Button#onRelease()} reflect the current cycle.</p>
  */
 public final class Bindings {
 
-    // ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
     // Binding record types
-    // ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
 
     private static final class PressBinding {
         final Button button;
@@ -93,73 +66,45 @@ public final class Bindings {
         }
     }
 
-    // ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
     // Binding storage
-    // ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------------------------------
 
     private final List<PressBinding> pressBindings = new ArrayList<>();
     private final List<WhileHeldBinding> whileHeldBindings = new ArrayList<>();
     private final List<ToggleBinding> toggleBindings = new ArrayList<>();
 
     /**
-     * Create an empty {@link Bindings} set.
+     * Tracks which loop cycle we last updated for, to prevent double-firing actions
+     * if update() is accidentally called more than once per loop cycle.
      */
-    public Bindings() {
-        // nothing else
-    }
-
-    // ---------------------------------------------------------------------
-    // Public API
-    // ---------------------------------------------------------------------
+    private long lastUpdatedCycle = Long.MIN_VALUE;
 
     /**
-     * Register an action to run once whenever the given button is pressed
-     * (rising edge).
-     *
-     * <p>
-     * This uses {@link Button#onPress()} internally, so it fires exactly once
-     * per press, regardless of how long the button is held.
-     * </p>
+     * Register an action to run once whenever the given button is pressed (rising edge).
      *
      * @param button button to monitor (non-null)
      * @param action action to run once per press (non-null)
      */
     public void onPress(Button button, Runnable action) {
-        if (button == null) {
-            throw new IllegalArgumentException("button is required");
-        }
-        if (action == null) {
-            throw new IllegalArgumentException("action is required");
-        }
-        pressBindings.add(new PressBinding(button, action));
+        pressBindings.add(new PressBinding(
+                Objects.requireNonNull(button, "button is required"),
+                Objects.requireNonNull(action, "action is required")
+        ));
     }
 
     /**
      * Register an action to run once per loop while the given button is held.
      *
-     * <p>
-     * This is a convenience overload that has no explicit "on release" action.
-     * It is equivalent to calling:
-     * </p>
-     *
-     * <pre>{@code
-     * whileHeld(button, whileHeld, null);
-     * }</pre>
-     *
      * @param button    button to monitor (non-null)
-     * @param whileHeld action to run every loop while the button is held (non-null)
+     * @param whileHeld action to run every loop while held (non-null)
      */
     public void whileHeld(Button button, Runnable whileHeld) {
         whileHeld(button, whileHeld, null);
     }
 
     /**
-     * Register actions to run while a button is held, and once when it is
-     * released.
-     *
-     * <p>
-     * On each loop:
-     * </p>
+     * Register actions to run while a button is held, and once when it is released.
      *
      * <ul>
      *   <li>If {@link Button#isHeld()} is true, {@code whileHeld} is executed.</li>
@@ -168,79 +113,60 @@ public final class Bindings {
      * </ul>
      *
      * @param button    button to monitor (non-null)
-     * @param whileHeld action to run every loop while the button is held (non-null)
-     * @param onRelease action to run once when the button is released
-     *                  (may be {@code null} if not needed)
+     * @param whileHeld action to run every loop while held (non-null)
+     * @param onRelease action to run once on release (may be null)
      */
     public void whileHeld(Button button, Runnable whileHeld, Runnable onRelease) {
-        if (button == null) {
-            throw new IllegalArgumentException("button is required");
-        }
-        if (whileHeld == null) {
-            throw new IllegalArgumentException("whileHeld action is required");
-        }
-        whileHeldBindings.add(new WhileHeldBinding(button, whileHeld, onRelease));
+        whileHeldBindings.add(new WhileHeldBinding(
+                Objects.requireNonNull(button, "button is required"),
+                Objects.requireNonNull(whileHeld, "whileHeld action is required"),
+                onRelease
+        ));
     }
 
     /**
-     * Register a toggle binding: flip a boolean each time the button is pressed
-     * (rising edge) and deliver the new value to the consumer.
-     *
-     * <p>
-     * Internally this uses {@link Button#onPress()} for the rising edge and
-     * maintains a single boolean toggle state per binding.
-     * </p>
+     * Register a toggle: flip a boolean each time the button is pressed (rising edge) and
+     * deliver the new value to the consumer.
      *
      * @param button   button to monitor (non-null)
-     * @param consumer consumer that receives the updated toggle state
-     *                 ({@code true} / {@code false}) each time the button is
-     *                 pressed (non-null)
+     * @param consumer consumer that receives the new toggle state (non-null)
      */
     public void toggle(Button button, Consumer<Boolean> consumer) {
-        if (button == null) {
-            throw new IllegalArgumentException("button is required");
-        }
-        if (consumer == null) {
-            throw new IllegalArgumentException("consumer is required");
-        }
-        toggleBindings.add(new ToggleBinding(button, consumer));
+        toggleBindings.add(new ToggleBinding(
+                Objects.requireNonNull(button, "button is required"),
+                Objects.requireNonNull(consumer, "consumer is required")
+        ));
     }
 
     /**
-     * Remove all registered bindings.
+     * Remove all registered bindings from this instance.
      *
-     * <p>
-     * This does <b>not</b> unregister any {@link Button} instances from the
-     * global button registry; it only clears the actions associated with
-     * this {@link Bindings} instance.
-     * </p>
+     * <p>This does not unregister any {@link Button}s from the global registry.</p>
      */
     public void clear() {
         pressBindings.clear();
         whileHeldBindings.clear();
         toggleBindings.clear();
+        lastUpdatedCycle = Long.MIN_VALUE;
     }
 
     /**
      * Poll all registered bindings and trigger their actions as appropriate.
      *
-     * <p>
-     * This method should be called once per loop <b>after</b> the framework
-     * has updated button state (for example, after {@code Gamepads.update(dtSec)}
-     * has been called, which internally calls
-     * {@link Button#updateAllRegistered()}).
-     * </p>
+     * <p>Idempotent by {@link LoopClock#cycle()}.</p>
      *
-     * <p>
-     * The {@code dtSec} parameter is currently unused but is included here in
-     * case we later add time-based behaviors (e.g., long-press detection)
-     * directly within {@code Bindings}.
-     * </p>
-     *
-     * @param dtSec time since last loop in seconds (currently unused)
+     * @param clock loop clock (non-null; advanced once per OpMode loop cycle)
      */
-    public void update(double dtSec) {
-        // one-shot press bindings
+    public void update(LoopClock clock) {
+        Objects.requireNonNull(clock, "clock is required");
+
+        long c = clock.cycle();
+        if (c == lastUpdatedCycle) {
+            return; // already updated this cycle
+        }
+        lastUpdatedCycle = c;
+
+        // One-shot press bindings
         for (int i = 0; i < pressBindings.size(); i++) {
             PressBinding b = pressBindings.get(i);
             if (b.button.onPress()) {
@@ -248,7 +174,7 @@ public final class Bindings {
             }
         }
 
-        // while-held bindings
+        // While-held bindings
         for (int i = 0; i < whileHeldBindings.size(); i++) {
             WhileHeldBinding b = whileHeldBindings.get(i);
 
@@ -261,12 +187,12 @@ public final class Bindings {
             }
         }
 
-        // toggle bindings
+        // Toggle bindings
         for (int i = 0; i < toggleBindings.size(); i++) {
             ToggleBinding b = toggleBindings.get(i);
             if (b.button.onPress()) {
                 b.toggled = !b.toggled;
-                b.consumer.accept(Boolean.valueOf(b.toggled));
+                b.consumer.accept(b.toggled);
             }
         }
     }

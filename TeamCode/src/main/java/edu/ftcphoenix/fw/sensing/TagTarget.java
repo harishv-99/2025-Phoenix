@@ -5,6 +5,7 @@ import java.util.Set;
 
 import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
+import edu.ftcphoenix.fw.util.LoopClock;
 
 /**
  * Tracks the "best" AprilTag target across loops for a specific set of IDs.
@@ -47,12 +48,18 @@ import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
  * TagTarget target = new TagTarget(tagSensor, Set.of(1, 2, 3), 0.5);
  *
  * // In loop():
- * target.update();
+ * target.update(clock);
  * if (target.hasTarget()) {
  *     double cameraBearing = target.bearingRad();
  *     double rangeLosInches = target.lineOfSightRangeInches();
  * }
  * }</pre>
+ *
+ * <h2>Per-cycle idempotency</h2>
+ * <p>
+ * {@link #update(LoopClock)} is idempotent by {@link LoopClock#cycle()} to prevent
+ * accidental double polling (e.g., multiple layers calling update in the same loop).
+ * </p>
  */
 public final class TagTarget {
 
@@ -63,6 +70,11 @@ public final class TagTarget {
     // Last observation returned by the sensor for this ID set + age constraint.
     private AprilTagObservation lastObs =
             AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
+
+    /**
+     * Tracks which loop cycle we last updated for, to prevent double-polling in a single cycle.
+     */
+    private long lastUpdatedCycle = Long.MIN_VALUE;
 
     /**
      * Create a tag target tracker.
@@ -91,19 +103,31 @@ public final class TagTarget {
      * Update the tracked target using the underlying sensor.
      *
      * <p>
-     * Call this exactly once per control loop, before reading {@link #last()},
+     * Call this once per control loop, before reading {@link #last()},
      * {@link #hasTarget()}, {@link #bearingRad()}, etc.
      * </p>
+     *
+     * <p>This method is idempotent by {@link LoopClock#cycle()}.</p>
+     *
+     * @param clock loop clock (must not be {@code null})
      */
-    public void update() {
+    public void update(LoopClock clock) {
+        Objects.requireNonNull(clock, "clock is required");
+
+        long c = clock.cycle();
+        if (c == lastUpdatedCycle) {
+            return;
+        }
+        lastUpdatedCycle = c;
+
         lastObs = sensor.best(idsOfInterest, maxAgeSec);
     }
 
     /**
      * Latest observation from this tracker.
      *
-     * @return last observation returned by {@link #update()}, or an initial
-     * "no target" observation if {@link #update()} has not yet been called
+     * @return last observation returned by {@link #update(LoopClock)}, or an initial
+     * "no target" observation if {@link #update(LoopClock)} has not yet been called
      */
     public AprilTagObservation last() {
         return lastObs;
@@ -159,16 +183,6 @@ public final class TagTarget {
         return CameraMountLogic.robotBearingRad(lastObs, cameraMount);
     }
 
-    /**
-     * Test whether the current camera-centric bearing is within the given angular tolerance.
-     *
-     * <p>Semantics:</p>
-     * <ul>
-     *   <li>If {@link #hasTarget()} is {@code false}, this returns {@code false}.</li>
-     *   <li>If {@code toleranceRad} is negative, throws {@link IllegalArgumentException}.</li>
-     *   <li>Otherwise returns {@code true} when {@code |bearing| <= toleranceRad}.</li>
-     * </ul>
-     */
     public boolean isBearingWithin(double toleranceRad) {
         if (toleranceRad < 0.0) {
             throw new IllegalArgumentException("toleranceRad must be non-negative");
@@ -179,13 +193,6 @@ public final class TagTarget {
         return Math.abs(lastObs.cameraBearingRad()) <= toleranceRad;
     }
 
-    /**
-     * Test whether the current robot-centric bearing is within the given angular tolerance.
-     *
-     * @param cameraMount  robot→camera extrinsics; must not be null
-     * @param toleranceRad non-negative tolerance in radians
-     * @return {@code true} if there is a target and {@code |robotBearing| <= toleranceRad}
-     */
     public boolean isRobotBearingWithin(CameraMountConfig cameraMount, double toleranceRad) {
         Objects.requireNonNull(cameraMount, "cameraMount is required");
         if (toleranceRad < 0.0) {
@@ -197,50 +204,24 @@ public final class TagTarget {
         return Math.abs(CameraMountLogic.robotBearingRad(lastObs, cameraMount)) <= toleranceRad;
     }
 
-    /**
-     * Planar range to the tracked tag, in inches, using the camera X/Y plane (forward/left).
-     *
-     * <p>
-     * This is the distance in the camera X/Y plane (forward/left). For 3D line-of-sight range,
-     * use {@link #lineOfSightRangeInches()}.
-     * </p>
-     *
-     * @return planar range in inches (camera X/Y plane). Only meaningful when {@link #hasTarget()} is true.
-     */
     public double rangeInches() {
         double f = lastObs.cameraForwardInches();
         double l = lastObs.cameraLeftInches();
         return Math.sqrt(f * f + l * l);
     }
 
-    /**
-     * 3D line-of-sight range from the camera to the tag, in inches.
-     *
-     * @return 3D range in inches. Only meaningful when {@link #hasTarget()} is true.
-     */
     public double lineOfSightRangeInches() {
         return lastObs.cameraRangeInches();
     }
 
-    /**
-     * Maximum acceptable tag age in seconds for this tracker.
-     */
     public double maxAgeSec() {
         return maxAgeSec;
     }
 
-    /**
-     * IDs this tracker is currently considering.
-     *
-     * <p>The returned set is the same instance passed to the constructor; treat it as read-only.</p>
-     */
     public Set<Integer> idsOfInterest() {
         return idsOfInterest;
     }
 
-    /**
-     * Convert the current observation into a {@link BearingSample} using camera-centric bearing.
-     */
     public BearingSample toBearingSample() {
         if (!lastObs.hasTarget) {
             return new BearingSample(false, 0.0);
@@ -248,23 +229,11 @@ public final class TagTarget {
         return new BearingSample(true, lastObs.cameraBearingRad());
     }
 
-    /**
-     * Convert the current observation into a {@link BearingSample} using robot-centric bearing.
-     *
-     * @param cameraMount robot→camera extrinsics; must not be null
-     * @return bearing sample (hasTarget + robotBearingRad)
-     */
     public BearingSample toRobotBearingSample(CameraMountConfig cameraMount) {
         Objects.requireNonNull(cameraMount, "cameraMount is required");
         return CameraMountLogic.robotBearingSample(lastObs, cameraMount);
     }
 
-    /**
-     * Emit debug information about this tracker and its last observation.
-     *
-     * @param dbg    debug sink to write to; if {@code null}, does nothing
-     * @param prefix key prefix to use; if {@code null} or empty, {@code "tagTarget"} is used
-     */
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
             return;
@@ -276,6 +245,7 @@ public final class TagTarget {
         dbg.addData(p + ".ids", idsOfInterest.toString());
         dbg.addData(p + ".maxAgeSec", maxAgeSec);
         dbg.addData(p + ".sensor.class", sensor.getClass().getSimpleName());
+        dbg.addData(p + ".lastUpdatedCycle", lastUpdatedCycle);
 
         AprilTagObservation o = lastObs;
         dbg.addData(p + ".obs.hasTarget", o.hasTarget);
@@ -291,13 +261,6 @@ public final class TagTarget {
         dbg.addData(p + ".obs.cameraPlanarRangeInches", rangeInches());
     }
 
-    /**
-     * Debug dump that also includes robot-centric bearing (mount-aware).
-     *
-     * @param dbg         debug sink to write to; if {@code null}, does nothing
-     * @param prefix      key prefix to use; if {@code null} or empty, {@code "tagTarget"} is used
-     * @param cameraMount robot→camera extrinsics; must not be null
-     */
     public void debugDump(DebugSink dbg, String prefix, CameraMountConfig cameraMount) {
         if (dbg == null) {
             return;

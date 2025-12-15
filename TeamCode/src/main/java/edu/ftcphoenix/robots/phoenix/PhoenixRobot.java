@@ -188,11 +188,13 @@ public final class PhoenixRobot {
 
     public void updateTeleOp() {
         // --- 2) Inputs + bindings ---
-        gamepads.update(clock.dtSec());
-        bindings.update(clock.dtSec());
+        gamepads.update(clock);
 
         // Update tracked tag once per loop.
-        scoringTarget.update();
+        scoringTarget.update(clock);
+
+        bindings.update(clock);
+
 
         // --- 3) TeleOp Macros ---
         taskRunnerTeleOp.update(clock);
@@ -203,8 +205,8 @@ public final class PhoenixRobot {
 
         // --- 4) Drive: TagAim-wrapped drive source (LB may override omega) ---
         DriveSignal cmd = driveWithAim.get(clock);
-        drivebase.drive(cmd);
         drivebase.update(clock);
+        drivebase.drive(cmd);
 
         // --- 4) Other mechanisms ---
 

@@ -28,9 +28,11 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *
  * <pre>{@code
  * Gamepads pads = Gamepads.create(gamepad1, gamepad2);
+ * LoopClock clock = new LoopClock();
  *
- * void loop(double dtSec) {
- *     pads.update(dtSec); // updates all buttons
+ * void loop(double runtimeSec) {
+ *     clock.update(runtimeSec);
+ *     pads.update(clock); // updates registered button edges (idempotent by clock.cycle())
  *
  *     Axis lx = pads.p1().leftX();
  *     Axis ly = pads.p1().leftY();
@@ -150,184 +152,49 @@ public interface Axis {
         final Axis self = this;
         final BooleanSupplier raw;
         if (threshold >= 0.0) {
-            // Positive threshold: held when value >= threshold.
             raw = () -> self.get() >= threshold;
         } else {
-            // Negative threshold: held when value <= threshold.
             raw = () -> self.get() <= threshold;
         }
-        // Wrap in a stateful, registered Button with edge + level semantics.
         return Button.of(raw);
     }
 
     // ------------------------------------------------------------------------
-    // Factory helpers
+    // Factories
     // ------------------------------------------------------------------------
 
     /**
-     * Factory for an {@link Axis} backed by a {@link DoubleSupplier}.
-     *
-     * <p>
-     * This is the most generic way to adapt arbitrary numeric sources into
-     * the {@code Axis} interface.
-     * </p>
-     *
-     * <p>
-     * The supplied value is used directly; the factory does not clamp or scale.
-     * Calling code is responsible for choosing an appropriate range or applying
-     * transformations (e.g., via {@link #clamped(double, double)} or
-     * {@link #scaled(double)}).
-     * </p>
+     * Create an axis from a raw supplier.
      */
-    static Axis of(final DoubleSupplier supplier) {
-        if (supplier == null) {
-            throw new IllegalArgumentException("supplier is required");
-        }
-        return supplier::getAsDouble;
+    static Axis of(DoubleSupplier raw) {
+        return raw::getAsDouble;
     }
 
     /**
-     * Create an axis from a constant value.
+     * Create a signed axis from two buttons (negative and positive).
      *
-     * <p>
-     * This is rarely used in production code, but is handy for testing or
-     * temporarily wiring "always on" behavior.
-     * </p>
+     * <p>Returns:</p>
+     * <ul>
+     *   <li>-1 when {@code negative} is held and {@code positive} is not</li>
+     *   <li>+1 when {@code positive} is held and {@code negative} is not</li>
+     *   <li>0 when neither or both are held</li>
+     * </ul>
      */
-    static Axis constant(double value) {
-        return () -> value;
-    }
-
-    /**
-     * Create an axis in {0.0, 1.0} from a raw {@link BooleanSupplier}.
-     *
-     * <p>
-     * When the supplier returns {@code true}, the axis returns {@code 1.0}.
-     * Otherwise it returns {@code 0.0}.
-     * </p>
-     */
-    static Axis fromBooleanSupplier(final BooleanSupplier supplier) {
-        if (supplier == null) {
-            throw new IllegalArgumentException("supplier is required");
-        }
-        return () -> supplier.getAsBoolean() ? 1.0 : 0.0;
-    }
-
-    /**
-     * Create an axis in {0.0, 1.0} from a {@link Button}.
-     *
-     * <p>
-     * The returned axis uses {@link Button#isHeld()} (level semantics),
-     * <b>not</b> {@link Button#onPress()} / {@link Button#onRelease()}.
-     * </p>
-     *
-     * @param button source button; must not be {@code null}
-     * @return axis that is 1.0 when the button is held, 0.0 otherwise
-     */
-    static Axis fromButton(final Button button) {
-        if (button == null) {
-            throw new IllegalArgumentException("Button is required");
-        }
-        return new Axis() {
-            @Override
-            public double get() {
-                return button.isHeld() ? 1.0 : 0.0;
-            }
+    static Axis signedFromButtons(Button negative, Button positive) {
+        return () -> {
+            boolean neg = negative != null && negative.isHeld();
+            boolean pos = positive != null && positive.isHeld();
+            if (neg == pos) return 0.0;
+            return pos ? 1.0 : -1.0;
         };
     }
 
     /**
-     * Create an axis from a {@link BooleanSupplier}, returning 1.0 when the
-     * supplier is {@code true}, 0.0 when it is {@code false}.
+     * Create a [0..1] axis from a single button.
      *
-     * <p>
-     * This is a convenience alias for {@link #fromBooleanSupplier(BooleanSupplier)}.
-     * </p>
+     * <p>Returns 1 when held, otherwise 0.</p>
      */
-    static Axis fromBoolean(BooleanSupplier supplier) {
-        return fromBooleanSupplier(supplier);
-    }
-
-    // ------------------------------------------------------------------------
-    // Combinators: build signed axes from positive axes / buttons
-    // ------------------------------------------------------------------------
-
-    /**
-     * Build a signed axis in [-1, +1] from two "positive" axes (typically triggers).
-     *
-     * <p>
-     * Intended usage is to combine a forward and backward trigger:
-     * </p>
-     *
-     * <pre>{@code
-     * Axis forward = player.rightTrigger(); // [0,1]
-     * Axis back    = player.leftTrigger();  // [0,1]
-     *
-     * Axis axial = Axis.signedFromPositivePair(forward, back);
-     * }</pre>
-     *
-     * <p>
-     * Internally, both inputs are clamped to [0, 1] via
-     * {@link MathUtil#clamp01(double)} before subtraction, so accidental misuse
-     * (e.g., passing in a stick axis in [-1, +1]) is somewhat contained.
-     * </p>
-     *
-     * @param positive "forward" axis (e.g., right trigger)
-     * @param negative "backward" axis (e.g., left trigger)
-     * @return signed axis in [-1, +1] as (positive - negative)
-     */
-    static Axis signedFromPositivePair(final Axis positive, final Axis negative) {
-        if (positive == null) {
-            throw new IllegalArgumentException("positive axis is required");
-        }
-        if (negative == null) {
-            throw new IllegalArgumentException("negative axis is required");
-        }
-
-        return new Axis() {
-            @Override
-            public double get() {
-                double pos = MathUtil.clamp01(positive.get());
-                double neg = MathUtil.clamp01(negative.get());
-                return pos - neg; // in [-1, +1]
-            }
-        };
-    }
-
-    /**
-     * Build a signed axis in [-1, +1] from two {@link Button}s.
-     *
-     * <p>
-     * This is analogous to {@link #signedFromPositivePair(Axis, Axis)} but
-     * uses buttons instead of continuous axes.
-     * </p>
-     *
-     * <p>
-     * When {@code positive} is held and {@code negative} is not, the axis is +1.0.<br>
-     * When {@code negative} is held and {@code positive} is not, the axis is -1.0.<br>
-     * When both are held, the axis is 0.0 (they cancel).<br>
-     * When neither is held, the axis is 0.0.
-     * </p>
-     *
-     * @param positive "forward" button
-     * @param negative "backward" button
-     * @return signed axis in [-1, +1] derived from the two buttons
-     */
-    static Axis signedFromButtonsPair(final Button positive, final Button negative) {
-        if (negative == null) {
-            throw new IllegalArgumentException("negative button is required");
-        }
-        if (positive == null) {
-            throw new IllegalArgumentException("positive button is required");
-        }
-
-        return new Axis() {
-            @Override
-            public double get() {
-                double pos = positive.isHeld() ? 1.0 : 0.0;
-                double neg = negative.isHeld() ? 1.0 : 0.0;
-                return pos - neg; // in [-1, +1]
-            }
-        };
+    static Axis fromButton(Button button) {
+        return () -> (button != null && button.isHeld()) ? 1.0 : 0.0;
     }
 }

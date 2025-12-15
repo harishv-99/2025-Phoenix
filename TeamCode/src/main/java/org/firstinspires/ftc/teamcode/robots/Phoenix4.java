@@ -176,11 +176,10 @@ public final class Phoenix4 extends OpMode {
     public void loop() {
         // --- 1) Clock ---
         clock.update(getRuntime());
-        double dtSec = clock.dtSec();
 
         // --- 2) Inputs ---
         // In later examples, we may also read sensors here.
-        gamepads.update(dtSec);
+        gamepads.update(clock);
 
         // --- 3) Logic: sticks → drive signal ---
         DriveSignal cmd = stickDrive.get(clock).clamped();

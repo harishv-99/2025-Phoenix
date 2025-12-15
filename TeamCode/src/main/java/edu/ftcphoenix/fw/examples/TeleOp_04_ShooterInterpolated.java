@@ -92,7 +92,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *   </li>
  *   <li><b>Shooter</b>:
  *     <ul>
- *       <li>P1 right bumper: toggle shooter on/off.</li>
+ *       <li>P1 left bumper: toggle shooter on/off.</li>
  *       <li>P1 D-pad UP/DOWN: adjust "distance to target" in inches.</li>
  *     </ul>
  *   </li>
@@ -172,7 +172,7 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
     private boolean shooterEnabled = false;
     private double lastShooterTarget = 0.0;
 
-    private DriveSignal lastDrive = new DriveSignal(0.0, 0.0, 0.0);
+    private DriveSignal lastDrive = DriveSignal.ZERO;
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -199,9 +199,9 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
 
         // 4) Bindings: shooter enable + distance adjust
 
-        // RB: toggle shooter on/off.
+        // LB: toggle shooter on/off.
         bindings.onPress(
-                gamepads.p1().rightBumper(),
+                gamepads.p1().leftBumper(),
                 () -> shooterEnabled = !shooterEnabled
         );
 
@@ -224,7 +224,7 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
         telemetry.addLine("FW Example 04: Shooter Interpolated");
         telemetry.addLine("Drive: same as Example 01");
         telemetry.addLine("Shooter:");
-        telemetry.addLine("  RB = toggle shooter on/off");
+        telemetry.addLine("  LB = toggle shooter on/off");
         telemetry.addLine("  D-pad UP/DOWN = adjust 'distance' (inches)");
         telemetry.update();
     }
@@ -241,15 +241,15 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
         double dtSec = clock.dtSec();
 
         // --- 2) Inputs + bindings ---
-        gamepads.update(dtSec);
-        bindings.update(dtSec);
+        gamepads.update(clock);
+        bindings.update(clock);
 
         // --- 3) Drive: always manual ---
         DriveSignal driveCmd = stickDrive.get(clock).clamped();
         lastDrive = driveCmd;
 
-        drivebase.drive(driveCmd);
         drivebase.update(clock);
+        drivebase.drive(driveCmd);
 
         // --- 4) Shooter: distance → velocity via interpolation table ---
 

@@ -124,7 +124,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     private boolean shooterEnabled = false;
 
-    private DriveSignal lastDrive = new DriveSignal(0.0, 0.0, 0.0);
+    private DriveSignal lastDrive = DriveSignal.ZERO;
 
     // For telemetry about the last tag observation used for shooter control.
     private boolean lastHasTarget = false;
@@ -216,13 +216,13 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         double dtSec = clock.dtSec();
 
         // 2) Sense (inputs & sensors)
-        gamepads.update(dtSec);
-        scoringTarget.update();      // TagTarget → AprilTagSensor.best(...)
+        gamepads.update(clock);
+        scoringTarget.update(clock);      // TagTarget → AprilTagSensor.best(...)
 
         // 3) Decide (high-level logic)
 
         // User-input driven decisions (e.g., shooterEnabled toggle on A)
-        bindings.update(dtSec);
+        bindings.update(clock);
 
         // Vision-based shooter target decision
         AprilTagObservation obs = scoringTarget.last();
@@ -250,8 +250,8 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         DriveSignal cmd = driveWithAim.get(clock).clamped();
         lastDrive = cmd;
 
-        drivebase.drive(cmd);
         drivebase.update(clock);
+        drivebase.drive(cmd);
 
         // Shooter plant executes whatever target we just decided above
         shooter.update(dtSec);
