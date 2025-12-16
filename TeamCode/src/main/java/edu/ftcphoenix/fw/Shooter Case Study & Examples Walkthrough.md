@@ -65,7 +65,7 @@ pusher.update(dtSec);
 Notes:
 
 * `Bindings.update(clock)`, `TaskRunner.update(clock)`, and `TagTarget.update(clock)` are **idempotent by `clock.cycle()`**. Calling them twice in one loop cycle becomes a no-op (safety against accidental double-updates).
-* `MecanumDrivebase.update(clock)` exists to provide loop timing for optional rate limiting. Call `drivebase.update(clock)` **before** `drivebase.drive(cmd)` so the current loop’s `dt` is used (the examples follow this order).
+* `MecanumDrivebase.update(clock)` exists to provide loop timing for optional rate limiting. Call `drivebase.update(clock)` **before** `drivebase.drive(cmd)` so the current loop’s `dt` is used (the examples follow this order). `drivebase.drive(...)` applies motor power **immediately**; `update(...)` does not move motors by itself.
 
 ---
 

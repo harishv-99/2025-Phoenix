@@ -127,18 +127,34 @@ public final class DriveSignal {
         this.lateral = lateral;
         this.omega = omega;
     }
-
     /**
-     * Return a new signal with each component multiplied by the given scale.
+     * Return a new signal with translation and rotation scaled independently.
      *
-     * <p>This is commonly used for "slow mode" or fine control, where you
-     * want to uniformly shrink all components of the command.</p>
+     * <p>This is most commonly used for TeleOp "slow mode" (fine control), where
+     * you often want translation and rotation to slow down by different amounts.
+     * For example, you might set translation to 0.35x while setting rotation to 0.20x
+     * so turning stays extra gentle while lining up.
+     * </p>
+     *
+     * <p>Scaling is applied as:</p>
+     * <ul>
+     *   <li>{@code axial'   = axial   * translationScale}</li>
+     *   <li>{@code lateral' = lateral * translationScale}</li>
+     *   <li>{@code omega'   = omega   * omegaScale}</li>
+     * </ul>
+     *
+     * <p>Typical scales are in (0, 1], but no clamping is performed. If you want to
+     * enforce a specific range, use {@link #clamped()} after scaling.</p>
+     *
+     * @param translationScale scale applied to {@link #axial} and {@link #lateral}
+     * @param omegaScale       scale applied to {@link #omega}
+     * @return a new scaled drive signal
      */
-    public DriveSignal scaled(double scale) {
+    public DriveSignal scaled(double translationScale, double omegaScale) {
         return new DriveSignal(
-                axial * scale,
-                lateral * scale,
-                omega * scale
+                axial * translationScale,
+                lateral * translationScale,
+                omega * omegaScale
         );
     }
 

@@ -1,5 +1,7 @@
 package edu.ftcphoenix.fw.drive;
 
+import java.util.Objects;
+
 import edu.ftcphoenix.fw.debug.DebugSink;
 import edu.ftcphoenix.fw.hal.PowerOutput;
 import edu.ftcphoenix.fw.util.LoopClock;
@@ -57,7 +59,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *
  * // In the main loop:
  * drive.update(clock);        // update dt used for rate limiting
- * drive.drive(signal);        // apply drive command
+ * drive.drive(signal);        // applies motor power immediately
  * }</pre>
  */
 public final class MecanumDrivebase {
@@ -104,6 +106,35 @@ public final class MecanumDrivebase {
          * <p>Default: {@code 1.0} (no scaling).</p>
          */
         public double maxOmega = 1.0;
+
+        // --------------------------------------------------------------------
+        // Physical-speed mapping (used by drive(ChassisSpeeds))
+        // --------------------------------------------------------------------
+
+        /**
+         * Approximate maximum forward speed of the robot at full command, in inches/sec.
+         *
+         * <p>Used only when converting a {@link ChassisSpeeds} command into a normalized
+         * {@link DriveSignal}. This is a <b>best-effort mapping</b>, not closed-loop velocity
+         * control.</p>
+         */
+        public double maxVxInchesPerSec = 40.0;
+
+        /**
+         * Approximate maximum leftward strafe speed of the robot at full command, in inches/sec.
+         *
+         * <p>Used only when converting a {@link ChassisSpeeds} command into a normalized
+         * {@link DriveSignal}.</p>
+         */
+        public double maxVyInchesPerSec = 40.0;
+
+        /**
+         * Approximate maximum angular speed at full command, in rad/sec.
+         *
+         * <p>Used only when converting a {@link ChassisSpeeds} command into a normalized
+         * {@link DriveSignal}.</p>
+         */
+        public double maxOmegaRadPerSec = Math.toRadians(180.0);
 
         // --------------------------------------------------------------------
         // Optional per-axis rate limiting (advanced)
@@ -159,6 +190,10 @@ public final class MecanumDrivebase {
             c.maxLateral = this.maxLateral;
             c.maxOmega = this.maxOmega;
 
+            c.maxVxInchesPerSec = this.maxVxInchesPerSec;
+            c.maxVyInchesPerSec = this.maxVyInchesPerSec;
+            c.maxOmegaRadPerSec = this.maxOmegaRadPerSec;
+
             c.maxAxialRatePerSec = this.maxAxialRatePerSec;
             c.maxLateralRatePerSec = this.maxLateralRatePerSec;
             c.maxOmegaRatePerSec = this.maxOmegaRatePerSec;
@@ -210,6 +245,56 @@ public final class MecanumDrivebase {
         this.cfg = (cfg != null ? cfg.copy() : Config.defaults());
     }
 
+
+    /**
+     * Command the drivebase using a {@link ChassisSpeeds} velocity intent.
+     *
+     * <p>This is a <b>best-effort</b> mapping from physical units to a normalized
+     * {@link DriveSignal}. It does <em>not</em> perform closed-loop velocity control.
+     * Battery voltage, carpet, friction, and load will change the actual achieved speeds.</p>
+     *
+     * <p>All components are robot-centric, aligned with Phoenix pose conventions
+     * (+X forward, +Y left, yaw CCW-positive).</p>
+     *
+     * <p>Saturation policy: if any component would exceed its configured maximum, all
+     * components are scaled by the same factor so the command preserves its direction
+     * in (vx, vy, omega) space.</p>
+     *
+     * <p><b>Actuation timing:</b> this method ultimately calls {@link #drive(DriveSignal)},
+     * which <b>immediately</b> sends wheel power commands to the hardware outputs.</p>
+     *
+     * <p><b>Rate limiting:</b> if you enable rate limiting in {@link Config}, call
+     * {@link #update(LoopClock)} once per loop <b>before</b> calling this method so the
+     * current loop's {@code dtSec} is used.</p>
+     *
+     * @param speeds desired chassis speeds (robot-centric) (must not be {@code null})
+     * @throws IllegalStateException if any of the speed-mapping max values are <= 0
+     */
+    public void drive(ChassisSpeeds speeds) {
+        Objects.requireNonNull(speeds, "speeds");
+
+        double maxVx = cfg.maxVxInchesPerSec;
+        double maxVy = cfg.maxVyInchesPerSec;
+        double maxOmega = cfg.maxOmegaRadPerSec;
+
+        if (maxVx <= 0.0 || maxVy <= 0.0 || maxOmega <= 0.0) {
+            throw new IllegalStateException("Invalid speed mapping config: maxVxInchesPerSec, maxVyInchesPerSec, and maxOmegaRadPerSec must all be > 0");
+        }
+
+        // Convert physical units -> normalized command space.
+        double axial = speeds.vxRobotIps / maxVx;
+        double lateral = speeds.vyRobotIps / maxVy;
+        double omega = speeds.omegaRobotRadPerSec / maxOmega;
+
+        // Preserve-direction saturation in command space.
+        double maxMag = Math.max(1.0, Math.max(Math.abs(axial), Math.max(Math.abs(lateral), Math.abs(omega))));
+        axial /= maxMag;
+        lateral /= maxMag;
+        omega /= maxMag;
+
+        drive(new DriveSignal(axial, lateral, omega));
+    }
+
     /**
      * Command the drivebase using a {@link DriveSignal}.
      *
@@ -224,14 +309,18 @@ public final class MecanumDrivebase {
      *   <li>Clamps wheel powers to [-1, +1] and sends them to the hardware.</li>
      * </ol>
      *
-     * @param s drive command; if {@code null}, this is treated as a stop command
+     * <p><b>Actuation timing:</b> this method <b>immediately</b> sends wheel power commands
+     * to the hardware outputs (via {@link PowerOutput#setPower(double)}). It does not
+     * "latch" the command for a later update.</p>
+     *
+     * <p><b>Rate limiting:</b> if rate limiting is enabled in {@link Config}, call
+     * {@link #update(LoopClock)} once per loop <b>before</b> calling this method so the
+     * current loop's {@code dtSec} is used.</p>
+     *
+     * @param s drive command (must not be {@code null})
      */
     public void drive(DriveSignal s) {
-        if (s == null) {
-            // Treat null as a stop command for robustness.
-            stop();
-            return;
-        }
+        Objects.requireNonNull(s, "s");
 
         // 1) Apply per-axis scaling from the config.
         double desiredAxial = s.axial * cfg.maxAxial;
@@ -314,8 +403,13 @@ public final class MecanumDrivebase {
      * Update loop timing information used for rate limiting.
      *
      * <p>
-     * Call this once per loop <b>before</b> calling {@link #drive(DriveSignal)} if
-     * you want rate limiting to use the most recent dt.
+     * This method only records loop timing ({@code dtSec}) for optional rate limiting.
+     * It does <b>not</b> command motors.
+     * </p>
+     *
+     * <p>
+     * Call this once per loop <b>before</b> calling {@link #drive(DriveSignal)} (or
+     * {@link #drive(ChassisSpeeds)}) if you want rate limiting to use the most recent dt.
      * </p>
      *
      * @param clock loop timing helper (may be {@code null})

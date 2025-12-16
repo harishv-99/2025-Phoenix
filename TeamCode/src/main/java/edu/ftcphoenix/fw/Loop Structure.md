@@ -88,7 +88,7 @@ public void loop() {
     // 5) Drive
     DriveSignal cmd = driveSource.get(clock).clamped();
     drivebase.update(clock);   // ensure rate limiting uses current dt
-    drivebase.drive(cmd);
+    drivebase.drive(cmd);      // applies motor power immediately
 
     // 6) Plants (mechanisms)
     double dtSec = clock.dtSec();
@@ -168,6 +168,11 @@ Guideline:
   ```
 
 Calling `drive(signal)` before `update(clock)` means the rate limiter uses the previous cycle’s dt.
+
+Also remember the semantics:
+
+* `drivebase.drive(...)` sends power commands to the hardware **immediately**.
+* `drivebase.update(clock)` only provides timing (`dtSec`) for optional rate limiting; it does not move motors by itself.
 
 ---
 

@@ -165,7 +165,8 @@ Phoenix gives you factories so your code reads like intent:
 
 * `Tasks` — general composition (`sequence`, `parallelAll`, `waitForSeconds`, `waitUntil`, `runOnce`, …)
 * `PlantTasks` — patterns that command a `Plant` (`setInstant`, `holdFor`, `moveTo`, …)
-* `DriveTasks` — patterns that command a `MecanumDrivebase` (`driveForSeconds`, `goToPoseFieldRelative`, …)
+* `DriveTasks` — simple patterns that command a `MecanumDrivebase` (`driveForSeconds`, `stop`, …)
+* `GoToPoseTasks` — the single go-to-pose stack (`goToPoseFieldRelative`, `goToPoseTagRelative`, …)
 
 Example macro (shoot one disc):
 

@@ -2,7 +2,7 @@ package edu.ftcphoenix.fw.drive.control;
 
 import java.util.Objects;
 
-import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.ChassisSpeeds;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.geom.Pose2d;
 import edu.ftcphoenix.fw.localization.PoseEstimate;
@@ -72,9 +72,7 @@ public final class GoToPoseTask implements Task {
          */
         public double maxNoPoseSec = 0.25;
 
-        /**
-         * Creates a new {@code Config} with default values.
-         */
+        /** Creates a new {@code Config} with default values. */
         public Config() {
         }
     }
@@ -100,8 +98,7 @@ public final class GoToPoseTask implements Task {
      * Creates a new {@code GoToPoseTask}.
      *
      * @param poseEstimator pose estimator providing the robot's pose
-     * @param controller    controller that converts pose error into a
-     *                      {@link DriveSignal}
+     * @param controller    controller that converts pose error into a {@link ChassisSpeeds}
      * @param drivebase     mecanum drivebase to command
      * @param targetPose    target pose in the same field frame as the estimator
      * @param cfg           configuration parameters for this task
@@ -142,6 +139,9 @@ public final class GoToPoseTask implements Task {
             // For robustness; TaskRunner should always call start() first.
             start(clock);
         }
+
+        // Feed dt to the drivebase (for any enabled rate limiting).
+        drivebase.update(clock);
 
         double dtSec = clock.dtSec();
         elapsedSec += dtSec;
@@ -195,16 +195,14 @@ public final class GoToPoseTask implements Task {
         }
 
         // Compute feedforward for heading if desired.
-        // For now, default to zero; this can be extended later to account for
-        // anticipated motion (e.g., strafing while keeping a tag centered).
+        // For now, default to zero; this can be extended later.
         double omegaFF = 0.0;
 
-        // Use the controller to generate a drive command.
-        DriveSignal cmd = controller.update(robotPose, targetPose, omegaFF);
+        // Use the controller to generate a chassis-speed command.
+        ChassisSpeeds cmd = controller.update(robotPose, targetPose, omegaFF);
 
-        // Apply to drivebase.
+        // Apply to drivebase (best-effort mapping to motor power).
         drivebase.drive(cmd);
-        drivebase.update(clock);
     }
 
     @Override
@@ -217,40 +215,28 @@ public final class GoToPoseTask implements Task {
         return finished ? outcome : TaskOutcome.NOT_DONE;
     }
 
-    /**
-     * @return the target pose this task is driving toward.
-     */
+    /** @return the target pose this task is driving toward. */
     public Pose2d getTargetPose() {
         return targetPose;
     }
 
-    /**
-     * @return the most recent position error magnitude in inches.
-     * Useful for telemetry and debugging.
-     */
+    /** @return the most recent position error magnitude in inches. */
     public double getLastPosErrorInches() {
         return lastPosErrorInches;
     }
 
-    /**
-     * @return the most recent absolute heading error in radians.
-     * Useful for telemetry and debugging.
-     */
+    /** @return the most recent absolute heading error in radians. */
     public double getLastHeadingErrorRad() {
         return lastHeadingErrorRad;
     }
 
-    /**
-     * @return the total elapsed time in seconds since this task started.
-     */
+    /** @return the total elapsed time in seconds since this task started. */
     public double getElapsedSec() {
         return elapsedSec;
     }
 
     /**
-     * @return how long (in seconds) we have been in a "no pose" condition
-     * since the last valid pose was seen. Mainly intended for
-     * debugging / telemetry.
+     * @return how long (in seconds) we have been in a "no pose" condition since the last valid pose was seen.
      */
     public double getNoPoseElapsedSec() {
         return noPoseElapsedSec;
