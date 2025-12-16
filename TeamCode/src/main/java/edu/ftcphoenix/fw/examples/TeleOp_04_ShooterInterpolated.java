@@ -172,7 +172,7 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
     private boolean shooterEnabled = false;
     private double lastShooterTarget = 0.0;
 
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -186,7 +186,7 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
 
         // 2) Drive wiring (same as Example 01)
         drivebase = Drives.mecanum(hardwareMap);
-        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // 3) Shooter wiring using Actuators
         shooter = Actuators.plant(hardwareMap)

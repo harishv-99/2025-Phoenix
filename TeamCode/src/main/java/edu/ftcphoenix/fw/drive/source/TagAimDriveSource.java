@@ -132,8 +132,8 @@ public final class TagAimDriveSource implements DriveSource {
     private final TagAimController controller;
 
     // Debug / introspection state
-    private DriveSignal lastBaseSignal = DriveSignal.ZERO;
-    private DriveSignal lastOutputSignal = DriveSignal.ZERO;
+    private DriveSignal lastBaseSignal = DriveSignal.zero();
+    private DriveSignal lastOutputSignal = DriveSignal.zero();
     private BearingSample lastBearingSample = null;
     private double lastOmegaFromController = 0.0;
     private boolean lastAimActive = false;
@@ -198,7 +198,7 @@ public final class TagAimDriveSource implements DriveSource {
         // Get the base driver command first.
         DriveSignal base = baseDrive.get(clock);
         if (base == null) {
-            base = DriveSignal.ZERO;
+            base = DriveSignal.zero();
         }
         lastBaseSignal = base;
 

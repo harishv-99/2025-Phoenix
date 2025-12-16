@@ -40,7 +40,7 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
     private MecanumDrivebase drivebase;
     private DriveSource stickDrive;
 
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     @Override
     public void init() {
@@ -52,7 +52,7 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         drivebase = Drives.mecanum(hardwareMap);
 
         // Standard TeleOp stick mapping (includes slow-mode button).
-        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
     }
 
     @Override

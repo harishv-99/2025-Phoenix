@@ -232,7 +232,7 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
     private PusherMode pusherMode = PusherMode.RETRACT;
 
     // For telemetry
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -246,7 +246,7 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
 
         // === 2) Drive wiring (same as Example 01) ===
         drivebase = Drives.mecanum(hardwareMap);
-        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // === 3) Mechanism wiring using Actuators ===
 

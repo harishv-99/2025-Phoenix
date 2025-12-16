@@ -199,7 +199,7 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
     private final TaskRunner macroRunner = new TaskRunner();
 
     // For telemetry
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     // ----------------------------------------------------------------------
     // OpMode lifecycle
@@ -213,7 +213,7 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
 
         // === 2) Drive wiring (same pattern as Examples 01–02) ===
         drivebase = Drives.mecanum(hardwareMap);
-        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // === 3) Mechanism wiring using Actuators ===
 

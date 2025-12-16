@@ -124,7 +124,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     private boolean shooterEnabled = false;
 
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     // For telemetry about the last tag observation used for shooter control.
     private boolean lastHasTarget = false;
@@ -144,7 +144,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // 2) Drive wiring: mecanum + sticks.
         drivebase = Drives.mecanum(hardwareMap);
-        baseDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        baseDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // 3) Tag sensor: real FTC VisionPortal + AprilTagProcessor adapter.
         //

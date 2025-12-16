@@ -34,7 +34,7 @@ public final class DriveSubsystem implements Subsystem {
 
     private final MecanumDrivebase drivebase;
     private final DriveSource driveSource;
-    private DriveSignal lastCommand = DriveSignal.ZERO;
+    private DriveSignal lastCommand = DriveSignal.zero();
 
     public DriveSubsystem(HardwareMap hw,
                           Gamepads gamepads,
@@ -56,13 +56,12 @@ public final class DriveSubsystem implements Subsystem {
         );
 
         // Stick drive with custom slow-mode scale.
-        GamepadDriveSource.Config stickCfg = GamepadDriveSource.Config.defaults();
+        GamepadDriveSource.Config stickCfg = GamepadDriveSource.Config.defaults()
+                .withSlow(gamepads.p1().rightBumper(),
+                        MULT_SLOWDOWN, MULT_SLOWDOWN);
         DriveSource sticks = GamepadDriveSource.teleOpMecanum(
                 gamepads,
-                stickCfg,
-                gamepads.p1().rightBumper(), // hold for slow mode
-                MULT_SLOWDOWN
-        );
+                stickCfg);
 
         this.driveSource = sticks;
 

@@ -96,7 +96,7 @@ public final class PhoenixRobot {
         shooter = new Shooter(hardwareMap, telemetry, gamepads);
 
         // --- Use the standard TeleOp stick mapping for mecanum.
-        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // ---
         cameraMountConfig = CameraMountConfig.of(

@@ -30,7 +30,7 @@ import edu.ftcphoenix.robots.phoenix.RobotConfig;
  *     <ul>
  *       <li>{@link Drives#mecanum} to wire the drive motors.</li>
  *       <li>{@link Gamepads} to wrap FTC gamepads.</li>
- *       <li>{@link GamepadDriveSource#teleOpMecanumStandard(Gamepads)} for
+ *       <li>{@link GamepadDriveSource#teleOpMecanumSlowRb(Gamepads)} for
  *           stick → mecanum mapping.</li>
  *     </ul>
  *   </li>
@@ -125,7 +125,7 @@ public final class Phoenix4 extends OpMode {
     /**
      * Last commanded drive signal, for telemetry.
      */
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     Plant pFL;
     Plant pFR;
@@ -158,10 +158,10 @@ public final class Phoenix4 extends OpMode {
                 mecanumConfig);
 
         // 3) Use the standard TeleOp stick mapping for mecanum.
-        stickDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         dbg = new FtcTelemetryDebugSink(telemetry);
-        telemetry.addLine("FW Example 01: Mecanum Basic");
+        telemetry.addLine("=== Phoenix Robot ===");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");
         telemetry.update();
     }

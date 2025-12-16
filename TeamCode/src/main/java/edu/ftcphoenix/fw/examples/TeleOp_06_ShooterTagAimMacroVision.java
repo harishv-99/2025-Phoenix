@@ -39,7 +39,7 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <ol>
  *   <li><b>Mecanum drive</b> via {@link Drives#mecanum} +
- *       {@link GamepadDriveSource#teleOpMecanumStandard(Gamepads)}.</li>
+ *       {@link GamepadDriveSource#teleOpMecanumSlowRb(Gamepads)}.</li>
  *   <li><b>Tag-based auto-aim</b> via TagAim – hold LB to face a scoring tag.</li>
  *   <li><b>Vision-based shooter velocity</b>: AprilTag distance →
  *       {@link InterpolatingTable1D} → shooter velocity (native units).</li>
@@ -180,7 +180,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
     private final TaskRunner macroRunner = new TaskRunner();
 
-    private DriveSignal lastDrive = DriveSignal.ZERO;
+    private DriveSignal lastDrive = DriveSignal.zero();
 
     // Latest tag observation (for telemetry)
     private boolean lastHasTarget = false;
@@ -206,7 +206,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
         // 2) Drive wiring: mecanum + sticks.
         drivebase = Drives.mecanum(hardwareMap);
-        baseDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
+        baseDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // 3) Tag sensor: FTC VisionPortal + AprilTagProcessor adapter.
         //

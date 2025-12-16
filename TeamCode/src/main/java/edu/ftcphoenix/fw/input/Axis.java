@@ -38,7 +38,7 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *     Axis ly = pads.p1().leftY();
  *
  *     double strafe = lx.get();
- *     double forward = -ly.get(); // if you prefer up = +1 in your math
+ *     double forward = ly.get(); // Phoenix gamepad convention: pushing up is positive
  * }
  * }</pre>
  *
@@ -101,6 +101,17 @@ public interface Axis {
     }
 
     /**
+     * Return a new {@link Axis} with its sign inverted.
+     *
+     * <p>
+     * Equivalent to {@code scaled(-1.0)}.
+     * </p>
+     */
+    default Axis inverted() {
+        return scaled(-1.0);
+    }
+
+    /**
      * Apply a deadband to this axis, returning a new axis.
      *
      * <p>
@@ -110,6 +121,10 @@ public interface Axis {
      * <p>
      * This is useful for joystick center wobble or accidental small motions.
      * </p>
+     *
+     * <p>
+     * Note: This method treats the deadband as centered around 0.
+     * </p>
      */
     default Axis deadband(double deadband) {
         final Axis self = this;
@@ -118,6 +133,118 @@ public interface Axis {
         return () -> {
             double v = self.get();
             return (Math.abs(v) <= db) ? 0.0 : v;
+        };
+    }
+
+    /**
+     * Apply a deadband centered at 0 and renormalize the remaining range back to the
+     * provided {@code [min, max]}.
+     *
+     * <p>
+     * This is useful when you want to remove small inputs (e.g., stick drift) but still
+     * reach full scale at the extremes.
+     * </p>
+     *
+     * <p>
+     * The caller provides {@code min} and {@code max} explicitly so {@code Axis} does not
+     * need to assume any particular range.
+     * </p>
+     *
+     * <p>
+     * Behavior (deadband centered at 0):
+     * </p>
+     * <ul>
+     *   <li>If {@code |v| <= deadband} → 0</li>
+     *   <li>If {@code v > deadband} → linearly map {@code [deadband..max]} to {@code [0..max]}</li>
+     *   <li>If {@code v < -deadband} → linearly map {@code [min..-deadband]} to {@code [min..0]}</li>
+     * </ul>
+     */
+    default Axis deadbandNormalized(double deadband, double min, double max) {
+        final Axis self = this;
+        final double db = Math.abs(deadband);
+
+        return () -> {
+            double v = MathUtil.clamp(self.get(), min, max);
+
+            if (Math.abs(v) <= db) {
+                return 0.0;
+            }
+
+            // Positive side: [db..max] -> [0..max]
+            if (v > 0.0) {
+                if (max <= db) {
+                    return MathUtil.clamp(v, min, max);
+                }
+                double t = (v - db) / (max - db);   // db -> 0, max -> 1
+                double out = t * max;               // 0 -> 0, 1 -> max
+                return MathUtil.clamp(out, min, max);
+            }
+
+            // Negative side: [min..-db] -> [min..0]
+            if (min >= -db) {
+                return MathUtil.clamp(v, min, max);
+            }
+            double t = (v + db) / (min + db);       // -db -> 0, min -> 1 (denominator is negative)
+            double out = t * min;                   // 0 -> 0, 1 -> min
+            return MathUtil.clamp(out, min, max);
+        };
+    }
+
+    /**
+     * Shape this axis with the same "deadband → normalize → pow(expo)" behavior used by
+     * drive-stick shaping.
+     *
+     * <p>
+     * This method:
+     * </p>
+     * <ol>
+     *   <li>Clamps the raw value to {@code [min, max]}.</li>
+     *   <li>Applies a deadband centered at 0.</li>
+     *   <li>Normalizes the remaining magnitude to {@code [0, 1]} based on the corresponding side's
+     *       full-scale magnitude (positive side uses {@code max}, negative uses {@code -min}).</li>
+     *   <li>Applies {@code shaped = pow(norm, expo)} (with {@code expo < 1} treated as {@code 1}).</li>
+     *   <li>Scales back to the original side's full-scale range.</li>
+     * </ol>
+     *
+     * <p>
+     * The caller provides {@code min} and {@code max} explicitly so {@code Axis} does not assume
+     * a specific range like [-1, +1] or [0, 1].
+     * </p>
+     */
+    default Axis shaped(double deadband, double expo, double min, double max) {
+        final Axis self = this;
+        final double db = Math.abs(deadband);
+        final double e = Math.max(1.0, expo);
+
+        return () -> {
+            double v = MathUtil.clamp(self.get(), min, max);
+
+            if (Math.abs(v) <= db) {
+                return 0.0;
+            }
+
+            // Positive side shaping.
+            if (v > 0.0) {
+                double sideMax = max;
+                if (sideMax <= db) {
+                    return MathUtil.clamp(v, min, max);
+                }
+                double norm = (v - db) / (sideMax - db);         // db -> 0, max -> 1
+                norm = MathUtil.clamp(norm, 0.0, 1.0);
+                double shaped = Math.pow(norm, e) * sideMax;
+                return MathUtil.clamp(shaped, min, max);
+            }
+
+            // Negative side shaping.
+            double sideMag = -min; // magnitude of negative full-scale
+            if (sideMag <= db) {
+                return MathUtil.clamp(v, min, max);
+            }
+            double norm = ((-v) - db) / (sideMag - db);          // |v| in (db..sideMag] -> (0..1]
+            norm = MathUtil.clamp(norm, 0.0, 1.0);
+            double shapedMag = Math.pow(norm, e) * sideMag;
+            double shaped = -shapedMag;
+            return MathUtil.clamp(shaped, min, max);
         };
     }
 
@@ -196,5 +323,68 @@ public interface Axis {
      */
     static Axis fromButton(Button button) {
         return () -> (button != null && button.isHeld()) ? 1.0 : 0.0;
+    }
+
+    /**
+     * Generic difference combinator: {@code positive - negative}.
+     *
+     * <p>
+     * This method makes no assumptions about ranges and does not clamp.
+     * </p>
+     */
+    static Axis difference(Axis negative, Axis positive) {
+        return () -> {
+            double neg = (negative != null) ? negative.get() : 0.0;
+            double pos = (positive != null) ? positive.get() : 0.0;
+            return pos - neg;
+        };
+    }
+
+    /**
+     * Create a normalized signed axis from two axes by specifying each axis's expected range.
+     *
+     * <p>
+     * Each input is normalized into {@code [0, 1]} using its provided {@code [min, max]} range,
+     * and the output is {@code posNorm - negNorm}, which is naturally in {@code [-1, +1]}.
+     * </p>
+     *
+     * <p>
+     * This keeps range assumptions explicit while still producing a standard signed control axis.
+     * </p>
+     */
+    static Axis signedNormalizedFromAxes(
+            Axis negativeAxis, double negativeMin, double negativeMax,
+            Axis positiveAxis, double positiveMin, double positiveMax
+    ) {
+        return () -> {
+            double negRaw = (negativeAxis != null) ? negativeAxis.get() : 0.0;
+            double posRaw = (positiveAxis != null) ? positiveAxis.get() : 0.0;
+
+            double negDen = (negativeMax - negativeMin);
+            double posDen = (positiveMax - positiveMin);
+
+            double negNorm = (negDen == 0.0) ? 0.0 : (negRaw - negativeMin) / negDen;
+            double posNorm = (posDen == 0.0) ? 0.0 : (posRaw - positiveMin) / posDen;
+
+            negNorm = MathUtil.clamp(negNorm, 0.0, 1.0);
+            posNorm = MathUtil.clamp(posNorm, 0.0, 1.0);
+
+            return MathUtil.clamp(posNorm - negNorm, -1.0, 1.0);
+        };
+    }
+
+    /**
+     * Convenience helper for the common "two triggers → signed axis" use-case.
+     *
+     * <p>
+     * Assumes each trigger axis is approximately in {@code [0, 1]} and returns
+     * {@code positiveTrigger - negativeTrigger} (in {@code [-1, +1]}).
+     * </p>
+     */
+    static Axis signedFromTriggers(Axis negativeTrigger, Axis positiveTrigger) {
+        return signedNormalizedFromAxes(
+                negativeTrigger, 0.0, 1.0,
+                positiveTrigger, 0.0, 1.0
+        );
     }
 }

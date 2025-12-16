@@ -53,7 +53,8 @@ import edu.ftcphoenix.fw.util.MathUtil;
  *
  *     public PhoenixRobot(HardwareMap hw, Gamepads pads) {
  *         this.drivebase = Drives.mecanum(hw);
- *         this.driveSource = GamepadDriveSource.teleOpMecanumStandard(pads);
+ *         // Choose one of the GamepadDriveSource factories.
+ *         this.driveSource = GamepadDriveSource.teleOpMecanum(pads);
  *     }
  *
  *     public void updateTeleOp(LoopClock clock) {
@@ -95,9 +96,24 @@ public final class DriveSignal {
     /**
      * A constant zero signal (all components = 0).
      *
-     * <p>Useful as a default or "stop" command.</p>
+     * <p>
+     * Prefer {@link #zero()} for call-site readability and consistency with other
+     * "factory" helpers.
+     * </p>
      */
-    public static final DriveSignal ZERO = new DriveSignal(0.0, 0.0, 0.0);
+    private static final DriveSignal ZERO = new DriveSignal(0.0, 0.0, 0.0);
+
+    /**
+     * Return a zero signal (all components = 0).
+     *
+     * <p>
+     * Prefer this over referencing {@link #ZERO} directly so call sites read
+     * consistently with other small factories like {@code noop()}.
+     * </p>
+     */
+    public static DriveSignal zero() {
+        return ZERO;
+    }
 
     /**
      * Construct a new drive signal.
