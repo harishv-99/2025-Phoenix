@@ -45,7 +45,7 @@ public final class CameraMountLogic {
      * @param pCameraToTag camera→tag pose; must not be null
      * @return robot→tag pose
      */
-    public static Pose3d pRobotToTag(CameraMountConfig mount, Pose3d pCameraToTag) {
+    public static Pose3d robotToTagPose(CameraMountConfig mount, Pose3d pCameraToTag) {
         Objects.requireNonNull(mount, "mount");
         Objects.requireNonNull(pCameraToTag, "pCameraToTag");
         return mount.robotToCameraPose().then(pCameraToTag);
@@ -69,7 +69,7 @@ public final class CameraMountLogic {
             return 0.0;
         }
 
-        Pose3d pRobotToTag = pRobotToTag(mount, obs.pCameraToTag);
+        Pose3d pRobotToTag = robotToTagPose(mount, obs.pCameraToTag);
 
         // Robot-frame bearing: atan2(left, forward).
         return Math.atan2(pRobotToTag.yInches, pRobotToTag.xInches);

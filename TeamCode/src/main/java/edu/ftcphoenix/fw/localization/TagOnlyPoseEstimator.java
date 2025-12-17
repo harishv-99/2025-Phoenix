@@ -243,13 +243,13 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
 
         // Last estimate.
         dbg.addData(p + ".lastEstimate.hasPose", lastEstimate.hasPose);
-        if (lastEstimate.pose != null) {
-            dbg.addData(p + ".lastEstimate.pose.xInches", lastEstimate.pose.xInches)
-                    .addData(p + ".lastEstimate.pose.yInches", lastEstimate.pose.yInches)
-                    .addData(p + ".lastEstimate.pose.zInches", lastEstimate.pose.zInches)
-                    .addData(p + ".lastEstimate.pose.yawRad", lastEstimate.pose.yawRad)
-                    .addData(p + ".lastEstimate.pose.pitchRad", lastEstimate.pose.pitchRad)
-                    .addData(p + ".lastEstimate.pose.rollRad", lastEstimate.pose.rollRad);
+        if (lastEstimate.fieldToRobotPose != null) {
+            dbg.addData(p + ".lastEstimate.fieldToRobotPose.xInches", lastEstimate.fieldToRobotPose.xInches)
+                    .addData(p + ".lastEstimate.fieldToRobotPose.yInches", lastEstimate.fieldToRobotPose.yInches)
+                    .addData(p + ".lastEstimate.fieldToRobotPose.zInches", lastEstimate.fieldToRobotPose.zInches)
+                    .addData(p + ".lastEstimate.fieldToRobotPose.yawRad", lastEstimate.fieldToRobotPose.yawRad)
+                    .addData(p + ".lastEstimate.fieldToRobotPose.pitchRad", lastEstimate.fieldToRobotPose.pitchRad)
+                    .addData(p + ".lastEstimate.fieldToRobotPose.rollRad", lastEstimate.fieldToRobotPose.rollRad);
         }
         dbg.addData(p + ".lastEstimate.quality", lastEstimate.quality)
                 .addData(p + ".lastEstimate.ageSec", lastEstimate.ageSec)

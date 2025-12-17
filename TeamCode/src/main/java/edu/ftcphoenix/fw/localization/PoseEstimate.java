@@ -52,7 +52,7 @@ public final class PoseEstimate {
      * <p>When {@link #hasPose} is {@code false}, this pose is still defined but should not be used
      * for control. It may be useful for debugging or as a last-known pose.</p>
      */
-    public final Pose3d pose;
+    public final Pose3d fieldToRobotPose;
 
     /**
      * True if this estimate contains a valid pose.
@@ -89,21 +89,21 @@ public final class PoseEstimate {
     /**
      * Constructs a new {@code PoseEstimate}.
      *
-     * @param pose         robot pose in the FTC field coordinate system (6DOF)
+     * @param fieldToRobotPose robot pose in the FTC field coordinate system (field→robot; 6DOF)
      * @param hasPose      whether this represents a valid pose
      * @param quality      quality score in [0.0, 1.0]
      * @param ageSec       age of the estimate in seconds
      * @param timestampSec time at which the underlying measurement was taken
      */
-    public PoseEstimate(Pose3d pose,
+    public PoseEstimate(Pose3d fieldToRobotPose,
                         boolean hasPose,
                         double quality,
                         double ageSec,
                         double timestampSec) {
-        if (pose == null) {
-            throw new IllegalArgumentException("pose is required");
+        if (fieldToRobotPose == null) {
+            throw new IllegalArgumentException("fieldToRobotPose is required");
         }
-        this.pose = pose;
+        this.fieldToRobotPose = fieldToRobotPose;
         this.hasPose = hasPose;
         this.quality = quality;
         this.ageSec = ageSec;
@@ -119,7 +119,7 @@ public final class PoseEstimate {
      * @return a planar pose projection (x, y, yaw)
      */
     public Pose2d toPose2d() {
-        return pose.toPose2d();
+        return fieldToRobotPose.toPose2d();
     }
 
     /**
@@ -127,7 +127,7 @@ public final class PoseEstimate {
      *
      * <ul>
      *   <li>{@link #hasPose} will be {@code false}.</li>
-     *   <li>{@link #pose} will be the 6DOF identity pose by default.</li>
+     *   <li>{@link #fieldToRobotPose} will be the 6DOF identity pose by default.</li>
      *   <li>{@link #quality} will be 0.0.</li>
      *   <li>{@link #ageSec} will be 0.0.</li>
      *   <li>{@link #timestampSec} will be set to {@code nowSec}.</li>
@@ -152,7 +152,7 @@ public final class PoseEstimate {
             return "PoseEstimate{no pose, timestampSec=" + timestampSec + "}";
         }
         return "PoseEstimate{" +
-                "pose=" + pose +
+                "fieldToRobotPose=" + fieldToRobotPose +
                 ", quality=" + quality +
                 ", ageSec=" + ageSec +
                 ", timestampSec=" + timestampSec +

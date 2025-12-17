@@ -178,7 +178,7 @@ public final class GoToPoseTask implements Task {
         // We have a pose; reset no-pose timer.
         noPoseElapsedSec = 0.0;
 
-        // PoseEstimate.pose is Pose3d; drivetrain control is planar, so project to Pose2d.
+        // PoseEstimate.fieldToRobotPose is Pose3d; drivetrain control is planar, so project to Pose2d.
         Pose2d robotPose = estimate.toPose2d();
 
         // Compute position and heading errors.

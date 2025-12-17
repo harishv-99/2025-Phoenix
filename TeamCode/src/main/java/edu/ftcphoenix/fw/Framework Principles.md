@@ -233,19 +233,28 @@ If a value depends on a frame, the frame name should appear in the identifier.
 
 Examples:
 
-* `fieldRobotPose`, `fieldRobotTargetPose`
+* `fieldToRobotPose`, `fieldToRobotTargetPose`
 * `robotDriveSignal`
 * `cameraBearingRad`, `cameraForwardInches`, `robotLeftInches`
 
 Avoid ambiguous names like `pose`, `targetPose`, `x`, `y`, `heading` when the frame is not obvious.
 
-### 7.2 Transform naming: `pFromToTo`
+In particular, **data holders should not expose a raw `pose` field** if the frame matters. Prefer names like
+`fieldToRobotPose`, `robotToCameraPose`, `cameraToTagPose`, etc.
+
+### 7.2 Transform naming: `fromToToPose` (optionally `p`-prefixed in adapters)
 
 For rigid transforms (`Pose2d` / `Pose3d`) that represent relationships between frames, Phoenix consistently uses:
 
-* `pCameraToTag`
-* `pRobotToCamera`
-* `pFieldToRobot`
+* `cameraToTagPose`
+* `robotToCameraPose`
+* `fieldToRobotPose`
+
+In **Phoenix core code**, the `p` prefix is usually unnecessary (everything is already in Phoenix framing), and it
+creates noisy method APIs. Prefer names like `robotToTagPose(...)` rather than `pRobotToTag(...)`.
+
+In **adapter code** where multiple coordinate systems coexist (FTC SDK vs Phoenix), it *can* be helpful to prefix
+Phoenix-framed values with `p` (for example, `pFieldToRobotPose`) so it’s obvious which convention you’re in.
 
 Rule of thumb: if you see `pAtoB.then(pBtoC)`, the result should be `pAtoC`.
 
