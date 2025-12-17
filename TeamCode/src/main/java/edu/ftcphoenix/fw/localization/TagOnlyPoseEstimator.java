@@ -11,6 +11,7 @@ import edu.ftcphoenix.fw.sensing.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.TagTarget;
 import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.util.MathUtil;
 
 /**
  * {@link PoseEstimator} that derives a field-centric robot pose estimate from:
@@ -146,13 +147,13 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
             final Pose3d cameraToTagPose = obs.cameraToTagPose;
 
             final Pose3d robotToTagPose = robotToCameraPose.then(cameraToTagPose);
-            final Pose3d fieldToRobotPose6Dof = fieldToTagPose.then(robotToTagPose.inverse());
+            final Pose3d fieldToRobot6DofPose = fieldToTagPose.then(robotToTagPose.inverse());
 
             // Planar projection for drivetrain use: assume robot center is on the floor plane.
-            final double fieldRobotYawRad = Pose2d.wrapToPi(fieldToRobotPose6Dof.yawRad);
+            final double fieldRobotYawRad = Pose2d.wrapToPi(fieldToRobot6DofPose.yawRad);
             final Pose3d fieldToRobotPose = new Pose3d(
-                    fieldToRobotPose6Dof.xInches,
-                    fieldToRobotPose6Dof.yInches,
+                    fieldToRobot6DofPose.xInches,
+                    fieldToRobot6DofPose.yInches,
                     0.0,
                     fieldRobotYawRad,
                     0.0,
@@ -222,5 +223,53 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
                 .addData(p + ".lastObs.cameraBearingRad", lastObs.cameraBearingRad())
                 .addData(p + ".lastObs.cameraRangeInches", lastObs.cameraRangeInches())
                 .addData(p + ".lastObs.ageSec", lastObs.ageSec);
+
+        // Optional: compare our estimate to an SDK-provided fieldToRobotPose (if the sensor supplies one).
+        if (lastObs.hasFieldToRobotPose()) {
+            Pose3d obsFieldToRobotPose = lastObs.fieldToRobotPose;
+            dbg.addData(p + ".lastObs.fieldToRobotPose.xInches", obsFieldToRobotPose.xInches)
+                    .addData(p + ".lastObs.fieldToRobotPose.yInches", obsFieldToRobotPose.yInches)
+                    .addData(p + ".lastObs.fieldToRobotPose.zInches", obsFieldToRobotPose.zInches)
+                    .addData(p + ".lastObs.fieldToRobotPose.yawRad", obsFieldToRobotPose.yawRad)
+                    .addData(p + ".lastObs.fieldToRobotPose.pitchRad", obsFieldToRobotPose.pitchRad)
+                    .addData(p + ".lastObs.fieldToRobotPose.rollRad", obsFieldToRobotPose.rollRad);
+
+            if (lastEstimate.hasPose && lastEstimate.fieldToRobotPose != null) {
+                Pose3d est = lastEstimate.fieldToRobotPose;
+
+                // Compare against a planar-projected SDK pose. This avoids "expected" non-zero deltas
+                // if the SDK reports a non-zero Z / pitch / roll but we intentionally publish a
+                // drivetrain-friendly planar estimate.
+                Pose3d obsPlanar = new Pose3d(
+                        obsFieldToRobotPose.xInches,
+                        obsFieldToRobotPose.yInches,
+                        0.0,
+                        Pose2d.wrapToPi(obsFieldToRobotPose.yawRad),
+                        0.0,
+                        0.0
+                );
+
+                double dx = est.xInches - obsPlanar.xInches;
+                double dy = est.yInches - obsPlanar.yInches;
+                double dYaw = MathUtil.wrapToPi(est.yawRad - obsPlanar.yawRad);
+                double dXY = Math.hypot(dx, dy);
+
+                dbg.addData(p + ".deltaToSdkPlanarPose.dxInches", dx)
+                        .addData(p + ".deltaToSdkPlanarPose.dyInches", dy)
+                        .addData(p + ".deltaToSdkPlanarPose.dXYInches", dXY)
+                        .addData(p + ".deltaToSdkPlanarPose.dYawRad", dYaw);
+
+                // Also expose raw 6DOF deltas (useful while validating frame conventions / extrinsics).
+                double dz = est.zInches - obsFieldToRobotPose.zInches;
+                double dPitch = MathUtil.wrapToPi(est.pitchRad - obsFieldToRobotPose.pitchRad);
+                double dRoll = MathUtil.wrapToPi(est.rollRad - obsFieldToRobotPose.rollRad);
+                double dXYZ = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                dbg.addData(p + ".deltaToSdkRawPose.dzInches", dz)
+                        .addData(p + ".deltaToSdkRawPose.dXYZInches", dXYZ)
+                        .addData(p + ".deltaToSdkRawPose.dPitchRad", dPitch)
+                        .addData(p + ".deltaToSdkRawPose.dRollRad", dRoll);
+            }
+        }
     }
 }

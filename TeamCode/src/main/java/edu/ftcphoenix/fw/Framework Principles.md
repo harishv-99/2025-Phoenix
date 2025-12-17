@@ -250,13 +250,11 @@ For rigid transforms (`Pose2d` / `Pose3d`) that represent relationships between 
 * `robotToCameraPose`
 * `fieldToRobotPose`
 
-In **Phoenix core code** (anything that uses *only* Phoenix framing), the `p` prefix is unnecessary and
-creates noisy APIs. Prefer names like `robotToTagPose(...)` rather than `pRobotToTag(...)`.
+In **Phoenix core code**, the `p` prefix is usually unnecessary (everything is already in Phoenix framing), and it
+creates noisy method APIs. Prefer names like `robotToTagPose(...)` rather than `pRobotToTag(...)`.
 
-In **adapter / boundary code** (most commonly `edu.ftcphoenix.fw.adapters.*`, and any FTC-facing code where multiple
-coordinate systems coexist), use explicit prefixes to disambiguate:
-* `ftc...` for FTC-SDK-native values
-* `p...` for Phoenix-framed values (for example, `pFieldToRobotPose`)
+In **adapter code** where multiple coordinate systems coexist (FTC SDK vs Phoenix), it *can* be helpful to prefix
+Phoenix-framed values with `p` (for example, `pFieldToRobotPose`) so it’s obvious which convention you’re in.
 
 Rule of thumb: if you see `pAtoB.then(pBtoC)`, the result should be `pAtoC`.
 

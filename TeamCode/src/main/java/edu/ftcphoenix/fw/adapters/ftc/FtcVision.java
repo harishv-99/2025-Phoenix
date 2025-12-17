@@ -214,8 +214,8 @@ public final class FtcVision {
         Objects.requireNonNull(mount, "mount");
 
         // Convert robot->camera pose from Phoenix framing to FTC localization camera axes.
-        Pose3d pRobotToCamera = mount.robotToCameraPose();
-        Pose3d ftcLocCamPose = FtcFrames.toFtcLocalizationCameraAxesFromPhoenix(pRobotToCamera);
+        Pose3d robotToCameraPose = mount.robotToCameraPose();
+        Pose3d ftcLocCamPose = FtcFrames.toFtcLocalizationCameraAxesFromPhoenix(robotToCameraPose);
 
         Position pos = new Position(
                 DistanceUnit.INCH,
@@ -349,7 +349,7 @@ public final class FtcVision {
             long nowNanos = System.nanoTime();
 
             AprilTagDetection bestDet = null;
-            Pose3d bestPCameraToTag = null;
+            Pose3d bestCameraToTagPose = null;
             double bestRangeInches = Double.POSITIVE_INFINITY;
             double bestAgeSec = Double.POSITIVE_INFINITY;
 
@@ -362,7 +362,7 @@ public final class FtcVision {
                     continue;
                 }
 
-                // We need pose values to build pCameraToTag.
+                // We need pose values to build cameraToTagPose.
                 if (det.ftcPose == null) {
                     continue;
                 }
@@ -376,7 +376,7 @@ public final class FtcVision {
                     continue;
                 }
 
-                // Convert FTC detection pose -> Phoenix pCameraToTag.
+                // Convert FTC detection pose -> Phoenix cameraToTagPose.
                 Pose3d ftcCamToTag = new Pose3d(
                         det.ftcPose.x,
                         det.ftcPose.y,
@@ -386,32 +386,50 @@ public final class FtcVision {
                         det.ftcPose.roll
                 );
 
-                Pose3d pCameraToTag = FtcFrames.toPhoenixFromFtcDetectionFrame(ftcCamToTag);
+                Pose3d cameraToTagPose = FtcFrames.toPhoenixFromFtcDetectionFrame(ftcCamToTag);
 
-                // Choose the closest (3D range). We compute from pCameraToTag to avoid relying on
+                // Choose the closest (3D range). We compute from cameraToTagPose to avoid relying on
                 // any additional FTC convenience fields.
                 double r = Math.sqrt(
-                        pCameraToTag.xInches * pCameraToTag.xInches
-                                + pCameraToTag.yInches * pCameraToTag.yInches
-                                + pCameraToTag.zInches * pCameraToTag.zInches
+                        cameraToTagPose.xInches * cameraToTagPose.xInches
+                                + cameraToTagPose.yInches * cameraToTagPose.yInches
+                                + cameraToTagPose.zInches * cameraToTagPose.zInches
                 );
 
                 if (r < bestRangeInches) {
                     bestRangeInches = r;
                     bestDet = det;
                     bestAgeSec = ageSec;
-                    bestPCameraToTag = pCameraToTag;
+                    bestCameraToTagPose = cameraToTagPose;
                 }
             }
 
-            if (bestDet == null || bestPCameraToTag == null) {
+            if (bestDet == null || bestCameraToTagPose == null) {
                 return AprilTagObservation.noTarget(Double.POSITIVE_INFINITY);
             }
 
-            // NOTE: We do not currently populate pFieldToRobot here; that requires an additional
-            // frame audit of FTC robotPose semantics for the current SDK. Keeping this adapter
-            // strictly correct for pCameraToTag is the priority.
-            return AprilTagObservation.target(bestDet.id, bestPCameraToTag, bestAgeSec);
+            // If the FTC SDK produced a global robot pose (requires a configured camera mount),
+            // surface it as an optional fieldToRobotPose measurement.
+            //
+            // FTC's Field Coordinate System matches Phoenix field framing (+X forward, +Y left, +Z up).
+            // (See FTC Docs April Tags Guide Fig. 40.)
+            if (bestDet.robotPose != null) {
+                Position pos = bestDet.robotPose.getPosition();
+                YawPitchRollAngles ypr = bestDet.robotPose.getOrientation();
+
+                Pose3d fieldToRobotPose = new Pose3d(
+                        pos.x,
+                        pos.y,
+                        pos.z,
+                        ypr.getYaw(AngleUnit.RADIANS),
+                        ypr.getPitch(AngleUnit.RADIANS),
+                        ypr.getRoll(AngleUnit.RADIANS)
+                );
+
+                return AprilTagObservation.target(bestDet.id, bestCameraToTagPose, fieldToRobotPose, bestAgeSec);
+            }
+
+            return AprilTagObservation.target(bestDet.id, bestCameraToTagPose, bestAgeSec);
         }
     }
 }

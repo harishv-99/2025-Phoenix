@@ -164,7 +164,7 @@ public final class AprilTagObservation {
     /**
      * Returns true if this observation contains a {@link #fieldToRobotPose} measurement.
      */
-    public boolean hasPFieldToRobot() {
+    public boolean hasFieldToRobotPose() {
         return hasTarget && fieldToRobotPose != null;
     }
 
@@ -240,7 +240,7 @@ public final class AprilTagObservation {
                 + ", ageSec=" + ageSec
                 + ", cameraBearingRad=" + cameraBearingRad()
                 + ", cameraRangeInches=" + cameraRangeInches()
-                + ", hasPFieldToRobot=" + (fieldToRobotPose != null)
+                + ", hasFieldToRobotPose=" + (fieldToRobotPose != null)
                 + '}';
     }
 }

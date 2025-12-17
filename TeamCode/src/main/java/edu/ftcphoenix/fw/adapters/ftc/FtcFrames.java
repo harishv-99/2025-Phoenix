@@ -67,7 +67,7 @@ import edu.ftcphoenix.fw.geom.Vec3;
  * <h2>How to use</h2>
  * <p>
  * Use these functions only inside the FTC adapter layer. Store outputs using Phoenix naming:
- * {@code pFromToTo}, for example {@code pCameraToTag} or {@code pRobotToCamera}.
+ * {@code pFromToTo}, for example {@code cameraToTagPose} or {@code robotToCameraPose}.
  * </p>
  */
 public final class FtcFrames {
