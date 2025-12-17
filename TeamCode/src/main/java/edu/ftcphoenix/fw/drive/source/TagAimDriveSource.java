@@ -48,9 +48,9 @@ import edu.ftcphoenix.fw.util.LoopClock;
  * Conceptually:
  * </p>
  * <ul>
- *   <li>Camera sees {@code pCameraToTag} (camera→tag).</li>
- *   <li>Mount gives {@code pRobotToCamera} (robot→camera).</li>
- *   <li>Compute {@code pRobotToTag = pRobotToCamera.then(pCameraToTag)}.</li>
+ *   <li>Camera sees {@code cameraToTagPose} (camera→tag).</li>
+ *   <li>Mount gives {@code robotToCameraPose} (robot→camera).</li>
+ *   <li>Compute {@code robotToTagPose = robotToCameraPose.then(cameraToTagPose)}.</li>
  *   <li>Robot-centric bearing is {@code atan2(left, forward)} in the robot frame.</li>
  * </ul>
  *

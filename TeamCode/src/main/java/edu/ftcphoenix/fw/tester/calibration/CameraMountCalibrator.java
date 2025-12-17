@@ -20,10 +20,10 @@ import edu.ftcphoenix.fw.tester.BaseTeleOpTester;
 import edu.ftcphoenix.fw.tester.ui.SelectionMenu;
 
 /**
- * Calibrates {@code pRobotToCamera} (camera mount extrinsics) using:
+ * Calibrates {@code robotToCameraPose} (camera mount extrinsics) using:
  * <ul>
  *   <li>Known AprilTag field layout (FTC game database by default), and</li>
- *   <li>A manually-entered / adjustable known robot pose {@code pFieldToRobot}.</li>
+ *   <li>A manually-entered / adjustable known robot pose {@code fieldToRobotPose}.</li>
  * </ul>
  *
  * <h2>Camera selection</h2>
@@ -32,8 +32,8 @@ import edu.ftcphoenix.fw.tester.ui.SelectionMenu;
  *
  * <h2>Core math</h2>
  * <pre>
- * pFieldToTag = pFieldToRobot · pRobotToCamera · pCameraToTag
- * => pRobotToCamera = inv(pFieldToRobot) · pFieldToTag · inv(pCameraToTag)
+ * fieldToTagPose = fieldToRobotPose · robotToCameraPose · cameraToTagPose
+ * => robotToCameraPose = inv(fieldToRobotPose) · fieldToTagPose · inv(cameraToTagPose)
  * </pre>
  */
 public final class CameraMountCalibrator extends BaseTeleOpTester {
@@ -65,7 +65,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
                     .setHelp("Dpad: select | A: choose | B: refresh");
 
     private int selectedTagId = DEFAULT_TAG_ID;
-    private Pose3d pFieldToRobot = DEFAULT_P_FIELD_TO_ROBOT;
+    private Pose3d fieldToRobotPose = DEFAULT_P_FIELD_TO_ROBOT;
     private boolean fineSteps = true;
 
     private Pose3d lastRobotToCameraSample = null;
@@ -285,7 +285,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
 
     private void updateSolveAndTelemetry() {
         AprilTagObservation obs = tagSensor.best(selectedTagId, maxAgeSec);
-        lastObservedCameraToTag = (obs.hasTarget) ? obs.pCameraToTag : null;
+        lastObservedCameraToTag = (obs.hasTarget) ? obs.cameraToTagPose : null;
 
         lastRobotToCameraSample = null;
         lastPredictedCameraToTag = null;
@@ -293,17 +293,17 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         if (obs.hasTarget) {
             TagLayout.TagPose tagPose = layout.get(obs.id);
             if (tagPose != null) {
-                Pose3d pFieldToTag = tagPose.fieldToTagPose();
-                Pose3d pCameraToTag = obs.pCameraToTag;
+                Pose3d fieldToTagPose = tagPose.fieldToTagPose();
+                Pose3d cameraToTagPose = obs.cameraToTagPose;
 
-                Pose3d pRobotToCamera = pFieldToRobot.inverse()
-                        .then(pFieldToTag)
-                        .then(pCameraToTag.inverse());
+                Pose3d robotToCameraPose = fieldToRobotPose.inverse()
+                        .then(fieldToTagPose)
+                        .then(cameraToTagPose.inverse());
 
-                lastRobotToCameraSample = pRobotToCamera;
+                lastRobotToCameraSample = robotToCameraPose;
 
-                Pose3d pFieldToCamera = pFieldToRobot.then(pRobotToCamera);
-                lastPredictedCameraToTag = pFieldToCamera.inverse().then(pFieldToTag);
+                Pose3d fieldToCameraPose = fieldToRobotPose.then(robotToCameraPose);
+                lastPredictedCameraToTag = fieldToCameraPose.inverse().then(fieldToTagPose);
             }
         }
 
@@ -322,34 +322,34 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         t.addLine("Controls: Y/X tagId | A capture | B clear | dpad XY | LB/RB yaw | START step");
 
         t.addLine("");
-        t.addLine("Known robot pose (pFieldToRobot):");
-        addPoseLine(t, "pFieldToRobot", pFieldToRobot);
+        t.addLine("Known robot pose (fieldToRobotPose):");
+        addPoseLine(t, "fieldToRobotPose", fieldToRobotPose);
 
         t.addLine("");
-        t.addLine("Observation (pCameraToTag):");
+        t.addLine("Observation (cameraToTagPose):");
         if (lastObservedCameraToTag == null) {
             t.addLine("  No fresh detection for selected tag ID.");
         } else {
-            addPoseLine(t, "pCameraToTag(obs)", lastObservedCameraToTag);
+            addPoseLine(t, "cameraToTagPose(obs)", lastObservedCameraToTag);
         }
 
         t.addLine("");
-        t.addLine("Mount solve (pRobotToCamera):");
+        t.addLine("Mount solve (robotToCameraPose):");
         if (lastRobotToCameraSample == null) {
             t.addLine("  Need: (1) fresh detection AND (2) this tag present in layout.");
         } else {
-            addPoseLine(t, "pRobotToCamera(sample)", lastRobotToCameraSample);
+            addPoseLine(t, "robotToCameraPose(sample)", lastRobotToCameraSample);
 
             if (lastPredictedCameraToTag != null && lastObservedCameraToTag != null) {
-                Pose3d pPredToObs = lastPredictedCameraToTag.inverse().then(lastObservedCameraToTag);
-                double trans = translationNormInches(pPredToObs);
+                Pose3d predToObsPose = lastPredictedCameraToTag.inverse().then(lastObservedCameraToTag);
+                double trans = translationNormInches(predToObsPose);
 
                 t.addLine(String.format(Locale.US,
                         "Residual: trans=%.2f in | yaw=%.2f° pitch=%.2f° roll=%.2f°",
                         trans,
-                        Math.toDegrees(pPredToObs.yawRad),
-                        Math.toDegrees(pPredToObs.pitchRad),
-                        Math.toDegrees(pPredToObs.rollRad)
+                        Math.toDegrees(predToObsPose.yawRad),
+                        Math.toDegrees(predToObsPose.pitchRad),
+                        Math.toDegrees(predToObsPose.rollRad)
                 ));
             }
         }
@@ -362,7 +362,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
             t.addLine("Average: (none yet) Press A a few times while holding still.");
         } else {
             t.addLine("Average mount (paste into CameraMountConfig.of):");
-            addPoseLine(t, "pRobotToCamera(avg)", mean);
+            addPoseLine(t, "robotToCameraPose(avg)", mean);
 
             t.addLine(String.format(Locale.US,
                     "CameraMountConfig.of(%.3f, %.3f, %.3f, %.6f, %.6f, %.6f)",
@@ -402,13 +402,13 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     }
 
     private void adjustRobotPose(double dxInches, double dyInches, double dyawRad) {
-        pFieldToRobot = new Pose3d(
-                pFieldToRobot.xInches + dxInches,
-                pFieldToRobot.yInches + dyInches,
-                pFieldToRobot.zInches,
-                pFieldToRobot.yawRad + dyawRad,
-                pFieldToRobot.pitchRad,
-                pFieldToRobot.rollRad
+        fieldToRobotPose = new Pose3d(
+                fieldToRobotPose.xInches + dxInches,
+                fieldToRobotPose.yInches + dyInches,
+                fieldToRobotPose.zInches,
+                fieldToRobotPose.yawRad + dyawRad,
+                fieldToRobotPose.pitchRad,
+                fieldToRobotPose.rollRad
         );
     }
 

@@ -50,7 +50,7 @@ public final class Tags {
      *
      * <p>The returned sensor reports observations in <b>Phoenix framing</b>:
      * +X forward, +Y left, +Z up. Bearing and range are derived from the observation's
-     * {@code pCameraToTag} pose.</p>
+     * {@code cameraToTagPose} pose.</p>
      *
      * @param hw         hardware map from the current OpMode
      * @param cameraName hardware configuration name of the webcam

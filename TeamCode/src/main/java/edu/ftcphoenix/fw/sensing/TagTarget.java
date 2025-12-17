@@ -28,12 +28,12 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <h2>Frame &amp; sign conventions</h2>
  * <p>
- * {@link AprilTagObservation} stores {@code pCameraToTag} (camera→tag) in Phoenix framing:
+ * {@link AprilTagObservation} stores {@code cameraToTagPose} (camera→tag) in Phoenix framing:
  * +X forward, +Y left, +Z up.
  * </p>
  *
  * <ul>
- *   <li><b>Camera-centric bearing</b> is computed from {@code pCameraToTag} as
+ *   <li><b>Camera-centric bearing</b> is computed from {@code cameraToTagPose} as
  *       {@code atan2(left, forward)} in the camera frame:
  *       {@code bearingRad > 0} means the tag is to the <b>left</b>.</li>
  *   <li><b>Robot-centric bearing</b> (optional) accounts for camera offset using
@@ -146,7 +146,7 @@ public final class TagTarget {
      * Camera-centric horizontal bearing to the tracked tag, in radians.
      *
      * <p>
-     * This bearing is relative to the camera forward axis (derived from {@code pCameraToTag}).
+     * This bearing is relative to the camera forward axis (derived from {@code cameraToTagPose}).
      * If your camera is offset and you want the <b>robot center</b> to face the tag,
      * use {@link #robotBearingRad(CameraMountConfig)}.
      * </p>
@@ -171,7 +171,7 @@ public final class TagTarget {
      *
      * <p>
      * This computes robot-centric bearing by applying the mount extrinsics:
-     * {@code pRobotToTag = pRobotToCamera.then(pCameraToTag)}, then computing
+     * {@code robotToTagPose = robotToCameraPose.then(cameraToTagPose)}, then computing
      * {@code atan2(left, forward)} in the robot frame.
      * </p>
      *

@@ -25,7 +25,7 @@ import edu.ftcphoenix.fw.task.WaitUntilTask;
  *
  * <h2>Camera offset note (why CameraMountConfig matters)</h2>
  * <p>
- * A {@link TagTarget} reports bearing derived from {@link AprilTagObservation#pCameraToTag}
+ * A {@link TagTarget} reports bearing derived from {@link AprilTagObservation#cameraToTagPose}
  * (i.e., bearing relative to the <b>camera</b> forward axis). If the camera is offset from the
  * robot center, “camera faces the tag” is not always the same as “robot center faces the tag”.
  * </p>
@@ -248,7 +248,7 @@ public final class TagAim {
         Config cfg = (config != null) ? config : Config.defaults();
 
         // Robot-centric bearing derived from mount + observation pose:
-        // pRobotToTag = pRobotToCamera.then(pCameraToTag)
+        // robotToTagPose = robotToCameraPose.then(cameraToTagPose)
         BearingSource bearing = clock ->
                 CameraMountLogic.robotBearingSample(target.last(), cameraMount);
 

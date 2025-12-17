@@ -7,11 +7,11 @@ import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
 
 /**
  * Math helpers for applying {@link CameraMountConfig} (camera extrinsics) to camera-frame
- * measurements such as {@link AprilTagObservation#pCameraToTag}.
+ * measurements such as {@link AprilTagObservation#cameraToTagPose}.
  *
  * <h2>Why this exists</h2>
  * <p>
- * Many vision measurements are naturally expressed in the camera frame (e.g., {@code pCameraToTag}).
+ * Many vision measurements are naturally expressed in the camera frame (e.g., {@code cameraToTagPose}).
  * If the camera is offset from the robot center (translation and/or yaw), aiming using the
  * camera bearing will cause the <em>camera</em> to face the target, which may not make the
  * <em>robot center</em> face the target.
@@ -19,7 +19,7 @@ import edu.ftcphoenix.fw.sensing.BearingSource.BearingSample;
  *
  * <p>
  * This class converts camera-frame tag measurements into robot-frame equivalents using
- * the mount transform {@code pRobotToCamera} from {@link CameraMountConfig}.
+ * the mount transform {@code robotToCameraPose} from {@link CameraMountConfig}.
  * </p>
  *
  * <h2>Conventions</h2>
@@ -38,17 +38,17 @@ public final class CameraMountLogic {
     /**
      * Convert a camera-frame tag pose into a robot-frame tag pose.
      *
-     * <p>If {@code mount} is {@code pRobotToCamera} and {@code pCameraToTag} is camera→tag,
-     * then this returns {@code pRobotToTag}.</p>
+     * <p>If {@code mount} is {@code robotToCameraPose} and {@code cameraToTagPose} is camera→tag,
+     * then this returns {@code robotToTagPose}.</p>
      *
      * @param mount        camera mount (robot→camera); must not be null
-     * @param pCameraToTag camera→tag pose; must not be null
+     * @param cameraToTagPose camera→tag pose; must not be null
      * @return robot→tag pose
      */
-    public static Pose3d robotToTagPose(CameraMountConfig mount, Pose3d pCameraToTag) {
+    public static Pose3d robotToTagPose(CameraMountConfig mount, Pose3d cameraToTagPose) {
         Objects.requireNonNull(mount, "mount");
-        Objects.requireNonNull(pCameraToTag, "pCameraToTag");
-        return mount.robotToCameraPose().then(pCameraToTag);
+        Objects.requireNonNull(cameraToTagPose, "cameraToTagPose");
+        return mount.robotToCameraPose().then(cameraToTagPose);
     }
 
     /**
@@ -69,10 +69,10 @@ public final class CameraMountLogic {
             return 0.0;
         }
 
-        Pose3d pRobotToTag = robotToTagPose(mount, obs.pCameraToTag);
+        Pose3d robotToTagPose = robotToTagPose(mount, obs.cameraToTagPose);
 
         // Robot-frame bearing: atan2(left, forward).
-        return Math.atan2(pRobotToTag.yInches, pRobotToTag.xInches);
+        return Math.atan2(robotToTagPose.yInches, robotToTagPose.xInches);
     }
 
     /**

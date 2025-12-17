@@ -38,13 +38,14 @@ import edu.ftcphoenix.fw.util.LoopClock;
  *
  * <h2>Planar approximation</h2>
  * <p>
- * {@link AprilTagObservation} contains {@link AprilTagObservation#pCameraToTag} (a 6DOF pose in the
- * Phoenix camera frame), but this estimator intentionally uses a <b>planar approximation</b>:
+ * {@link AprilTagObservation} contains {@link AprilTagObservation#cameraToTagPose} (a 6DOF pose in the
+ * Phoenix camera frame). This estimator uses the full rigid-transform chain to compute a field-centric
+ * robot pose, but it intentionally outputs a <b>planar approximation</b> for drivetrain use:
  * </p>
  * <ul>
- *   <li>It uses the tag's known field height and yaw from {@link TagLayout}.</li>
- *   <li>It uses camera bearing and 3D range derived from {@link AprilTagObservation#pCameraToTag}.</li>
- *   <li>It assumes the robot center is on the floor plane (z = 0) and sets pitch/roll to 0.</li>
+ *   <li>It computes {@code fieldToRobotPose} using the transform chain:
+ *       {@code fieldToTagPose ∘ (robotToCameraPose ∘ cameraToTagPose)^(-1)}.</li>
+ *   <li>It then projects the result into the floor plane by setting {@code z=0} and {@code pitch/roll=0}.</li>
  * </ul>
  *
  * <p>
@@ -137,61 +138,21 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
             // Known placement for this tag in the field frame.
             TagPose tag = layout.require(obs.id);
 
-            // This estimator uses only tag yaw for its planar approximation.
-            final double tagYawRad = tag.yawRad();
+            // Compute pose using the full transform chain:
+            //   fieldToRobotPose = fieldToTagPose ∘ (robotToCameraPose ∘ cameraToTagPose)^(-1)
+            // This captures lateral offsets correctly and sets us up for odometry/tag fusion later.
+            final Pose3d fieldToTagPose = tag.fieldToTagPose();
+            final Pose3d robotToCameraPose = cfg.cameraMount.robotToCameraPose();
+            final Pose3d cameraToTagPose = obs.cameraToTagPose;
 
-            // Tag center height above floor (inches, +Z up in the field frame).
-            final double tagHeightInches = tag.zInches();
+            final Pose3d robotToTagPose = robotToCameraPose.then(cameraToTagPose);
+            final Pose3d fieldToRobotPose6Dof = fieldToTagPose.then(robotToTagPose.inverse());
 
-            // 3D line-of-sight distance from camera to tag center (derived from pCameraToTag).
-            final double losInches = obs.cameraRangeInches();
-
-            // Camera mount (robot frame, inches/radians).
-            final CameraMountConfig cam = cfg.cameraMount;
-            final double robotToCamXInches = cam.xInches();   // +X forward
-            final double robotToCamYInches = cam.yInches();   // +Y left
-            final double camZInches = cam.zInches();          // +Z up
-            final double camYawRad = cam.yawRad();            // yaw about +Z
-
-            // Vertical difference between tag center and camera.
-            final double deltaHeightInches = tagHeightInches - camZInches;
-
-            // Horizontal (floor-plane) distance between camera and tag center.
-            double horizontalDistSq = losInches * losInches - deltaHeightInches * deltaHeightInches;
-            if (horizontalDistSq < 0.0) {
-                // Numerical safety: clamp to zero if noise makes the expression negative.
-                horizontalDistSq = 0.0;
-            }
-            final double horizontalDistInches = Math.sqrt(horizontalDistSq);
-
-            // Assume camera lies roughly along the tag's outward normal in the floor plane.
-            final double nx = Math.cos(tagYawRad);
-            final double ny = Math.sin(tagYawRad);
-
-            final double fieldCameraXInches = tag.xInches() - horizontalDistInches * nx;
-            final double fieldCameraYInches = tag.yInches() - horizontalDistInches * ny;
-
-            // Approximate robot yaw: facing back toward the tag, adjusted for camera yaw and measured bearing.
-            final double fieldRobotYawRad = Pose2d.wrapToPi(tagYawRad + Math.PI - camYawRad - bearingRad);
-
-            // Convert camera offset (robot frame) into field frame using the estimated yaw.
-            final double cos = Math.cos(fieldRobotYawRad);
-            final double sin = Math.sin(fieldRobotYawRad);
-
-            // fieldOffset = R(yaw) * [robotToCamX; robotToCamY]
-            final double fieldRobotToCamXInches = robotToCamXInches * cos - robotToCamYInches * sin;
-            final double fieldRobotToCamYInches = robotToCamXInches * sin + robotToCamYInches * cos;
-
-            // camera = robot + offset  =>  robot = camera - offset
-            final double fieldRobotXInches = fieldCameraXInches - fieldRobotToCamXInches;
-            final double fieldRobotYInches = fieldCameraYInches - fieldRobotToCamYInches;
-
-            // 6DOF output (planar estimate embedded into Pose3d):
-            // - z assumed 0 at robot center on the floor
-            // - pitch/roll assumed 0
+            // Planar projection for drivetrain use: assume robot center is on the floor plane.
+            final double fieldRobotYawRad = Pose2d.wrapToPi(fieldToRobotPose6Dof.yawRad);
             final Pose3d fieldToRobotPose = new Pose3d(
-                    fieldRobotXInches,
-                    fieldRobotYInches,
+                    fieldToRobotPose6Dof.xInches,
+                    fieldToRobotPose6Dof.yInches,
                     0.0,
                     fieldRobotYawRad,
                     0.0,

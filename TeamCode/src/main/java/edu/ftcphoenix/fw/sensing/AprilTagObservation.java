@@ -27,14 +27,14 @@ import edu.ftcphoenix.fw.geom.Pose3d;
  * Whenever a variable or accessor represents a pose/transform, Phoenix code uses:
  * </p>
  * <pre>
- * pFromFrameToToFrame
+ * fromFrameToToFramePose
  * </pre>
  *
  * <p>Examples:</p>
  * <ul>
- *   <li>{@code pRobotToCamera}: camera pose expressed in the robot frame</li>
- *   <li>{@code pCameraToTag}: tag pose expressed in the camera frame</li>
- *   <li>{@code pFieldToRobot}: robot pose expressed in the field frame</li>
+ *   <li>{@code robotToCameraPose}: camera pose expressed in the robot frame</li>
+ *   <li>{@code cameraToTagPose}: tag pose expressed in the camera frame</li>
+ *   <li>{@code fieldToRobotPose}: robot pose expressed in the field frame</li>
  * </ul>
  *
  * <h2>Component naming convention (non-pose values derived from a pose)</h2>
@@ -47,11 +47,11 @@ import edu.ftcphoenix.fw.geom.Pose3d;
  *
  * <p>Examples:</p>
  * <ul>
- *   <li>{@code cameraForwardInches()} is the +X (forward) component of {@code pCameraToTag}.</li>
- *   <li>{@code robotLeftInches()} would be the +Y (left) component of a {@code pRobotToSomething} pose.</li>
+ *   <li>{@code cameraForwardInches()} is the +X (forward) component of {@code cameraToTagPose}.</li>
+ *   <li>{@code robotLeftInches()} would be the +Y (left) component of a {@code robotToSomethingPose} pose.</li>
  * </ul>
  *
- * <h2>Phoenix camera frame (for pCameraToTag)</h2>
+ * <h2>Phoenix camera frame (for cameraToTagPose)</h2>
  * <p>
  * Phoenix defines the camera frame using the same axis convention as all Phoenix frames:
  * </p>
@@ -63,7 +63,7 @@ import edu.ftcphoenix.fw.geom.Pose3d;
  *
  * <h2>Derived aiming helpers</h2>
  * <p>
- * Bearing and range are derived from {@link #pCameraToTag} and are not stored separately to avoid
+ * Bearing and range are derived from {@link #cameraToTagPose} and are not stored separately to avoid
  * redundancy and drift.
  * </p>
  */
@@ -90,30 +90,30 @@ public final class AprilTagObservation {
     public final double ageSec;
 
     /**
-     * Tag pose expressed in the Phoenix camera frame: {@code pCameraToTag}.
+     * Tag pose expressed in the Phoenix camera frame: {@code cameraToTagPose}.
      *
      * <p>Non-null when {@link #hasTarget} is true.</p>
      */
-    public final Pose3d pCameraToTag;
+    public final Pose3d cameraToTagPose;
 
     /**
-     * Optional robot pose expressed in the Phoenix field frame: {@code pFieldToRobot}.
+     * Optional robot pose expressed in the Phoenix field frame: {@code fieldToRobotPose}.
      *
      * <p>If present, this is a field-centric pose measurement source (6DOF). For example, an FTC
      * adapter may populate this from SDK robotPose after converting into Phoenix framing.</p>
      */
-    public final Pose3d pFieldToRobot;
+    public final Pose3d fieldToRobotPose;
 
     private AprilTagObservation(boolean hasTarget,
                                 int id,
                                 double ageSec,
-                                Pose3d pCameraToTag,
-                                Pose3d pFieldToRobot) {
+                                Pose3d cameraToTagPose,
+                                Pose3d fieldToRobotPose) {
         this.hasTarget = hasTarget;
         this.id = id;
         this.ageSec = ageSec;
-        this.pCameraToTag = pCameraToTag;
-        this.pFieldToRobot = pFieldToRobot;
+        this.cameraToTagPose = cameraToTagPose;
+        this.fieldToRobotPose = fieldToRobotPose;
     }
 
     /**
@@ -129,14 +129,14 @@ public final class AprilTagObservation {
      * Create an observation representing a detected tag, expressed in Phoenix framing.
      *
      * @param id               AprilTag ID
-     * @param pCameraToTagPose tag pose in Phoenix camera frame (non-null)
+     * @param cameraToTagPose tag pose in Phoenix camera frame (non-null)
      * @param ageSec           age of the underlying camera frame (seconds)
      */
-    public static AprilTagObservation target(int id, Pose3d pCameraToTagPose, double ageSec) {
-        if (pCameraToTagPose == null) {
-            throw new IllegalArgumentException("pCameraToTagPose must be non-null when hasTarget is true");
+    public static AprilTagObservation target(int id, Pose3d cameraToTagPose, double ageSec) {
+        if (cameraToTagPose == null) {
+            throw new IllegalArgumentException("cameraToTagPose must be non-null when hasTarget is true");
         }
-        return new AprilTagObservation(true, id, ageSec, pCameraToTagPose, null);
+        return new AprilTagObservation(true, id, ageSec, cameraToTagPose, null);
     }
 
     /**
@@ -144,28 +144,28 @@ public final class AprilTagObservation {
      * measurement.
      *
      * @param id                AprilTag ID
-     * @param pCameraToTagPose  tag pose in Phoenix camera frame (non-null)
-     * @param pFieldToRobotPose robot pose in Phoenix field frame (non-null)
+     * @param cameraToTagPose  tag pose in Phoenix camera frame (non-null)
+     * @param fieldToRobotPose robot pose in Phoenix field frame (non-null)
      * @param ageSec            age of the underlying camera frame (seconds)
      */
     public static AprilTagObservation target(int id,
-                                             Pose3d pCameraToTagPose,
-                                             Pose3d pFieldToRobotPose,
+                                             Pose3d cameraToTagPose,
+                                             Pose3d fieldToRobotPose,
                                              double ageSec) {
-        if (pCameraToTagPose == null) {
-            throw new IllegalArgumentException("pCameraToTagPose must be non-null when hasTarget is true");
+        if (cameraToTagPose == null) {
+            throw new IllegalArgumentException("cameraToTagPose must be non-null when hasTarget is true");
         }
-        if (pFieldToRobotPose == null) {
-            throw new IllegalArgumentException("pFieldToRobotPose must be non-null when provided");
+        if (fieldToRobotPose == null) {
+            throw new IllegalArgumentException("fieldToRobotPose must be non-null when provided");
         }
-        return new AprilTagObservation(true, id, ageSec, pCameraToTagPose, pFieldToRobotPose);
+        return new AprilTagObservation(true, id, ageSec, cameraToTagPose, fieldToRobotPose);
     }
 
     /**
-     * Returns true if this observation contains a {@link #pFieldToRobot} measurement.
+     * Returns true if this observation contains a {@link #fieldToRobotPose} measurement.
      */
     public boolean hasPFieldToRobot() {
-        return hasTarget && pFieldToRobot != null;
+        return hasTarget && fieldToRobotPose != null;
     }
 
     /**
@@ -179,34 +179,34 @@ public final class AprilTagObservation {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Components derived from pCameraToTag (Phoenix camera frame)
+    // Components derived from cameraToTagPose (Phoenix camera frame)
     // ---------------------------------------------------------------------------------------------
 
     /**
      * Tag forward component in the Phoenix camera frame (+X forward), in inches.
      */
     public double cameraForwardInches() {
-        return hasTarget ? pCameraToTag.xInches : 0.0;
+        return hasTarget ? cameraToTagPose.xInches : 0.0;
     }
 
     /**
      * Tag left component in the Phoenix camera frame (+Y left), in inches.
      */
     public double cameraLeftInches() {
-        return hasTarget ? pCameraToTag.yInches : 0.0;
+        return hasTarget ? cameraToTagPose.yInches : 0.0;
     }
 
     /**
      * Tag up component in the Phoenix camera frame (+Z up), in inches.
      */
     public double cameraUpInches() {
-        return hasTarget ? pCameraToTag.zInches : 0.0;
+        return hasTarget ? cameraToTagPose.zInches : 0.0;
     }
 
     /**
      * Horizontal bearing from camera forward (+X) to the tag center, in radians.
      *
-     * <p>Derived from {@link #pCameraToTag} using Phoenix sign convention: positive = left.</p>
+     * <p>Derived from {@link #cameraToTagPose} using Phoenix sign convention: positive = left.</p>
      */
     public double cameraBearingRad() {
         if (!hasTarget) {
@@ -218,7 +218,7 @@ public final class AprilTagObservation {
     /**
      * 3D line-of-sight distance from camera origin to the tag center, in inches.
      *
-     * <p>Derived from {@link #pCameraToTag} translation components.</p>
+     * <p>Derived from {@link #cameraToTagPose} translation components.</p>
      */
     public double cameraRangeInches() {
         if (!hasTarget) {
@@ -240,7 +240,7 @@ public final class AprilTagObservation {
                 + ", ageSec=" + ageSec
                 + ", cameraBearingRad=" + cameraBearingRad()
                 + ", cameraRangeInches=" + cameraRangeInches()
-                + ", hasPFieldToRobot=" + (pFieldToRobot != null)
+                + ", hasPFieldToRobot=" + (fieldToRobotPose != null)
                 + '}';
     }
 }

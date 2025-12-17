@@ -33,7 +33,7 @@ public final class StandardTesters {
         // Calibration
         suite.add(
                 "Calib: Camera Mount",
-                "Solve pRobotToCamera using known robot pose + tag layout. Includes camera picker.",
+                "Solve robotToCameraPose using known robot pose + tag layout. Includes camera picker.",
                 CameraMountCalibrator::new
         );
 
