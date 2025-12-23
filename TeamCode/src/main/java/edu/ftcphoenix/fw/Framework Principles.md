@@ -86,20 +86,22 @@ A Plant may be open-loop (power, servo set-and-hold) or closed-loop (motor posit
 `edu.ftcphoenix.fw.actuation.Actuators` is the recommended way to create Plants from FTC hardware.
 
 ```java
+import edu.ftcphoenix.fw.core.hal.Direction;
+
 Plant shooter = Actuators.plant(hardwareMap)
-        .motorPair("shooterLeftMotor",  false,
-                   "shooterRightMotor", true)
+        .motorPair("shooterLeftMotor",  Direction.FORWARD,
+                         "shooterRightMotor", Direction.REVERSE)
         .velocity()   // uses default tolerance in native velocity units
         .build();
 
 Plant transfer = Actuators.plant(hardwareMap)
-        .crServoPair("transferLeftServo",  false,
-                     "transferRightServo", true)
+        .crServoPair("transferLeftServo",  Direction.FORWARD,
+                         "transferRightServo", Direction.REVERSE)
         .power()
         .build();
 
 Plant pusher = Actuators.plant(hardwareMap)
-        .servo("pusherServo", false)
+        .servo("pusherServo", Direction.FORWARD)
         .position()   // servo position set-and-hold (open-loop)
         .build();
 ```

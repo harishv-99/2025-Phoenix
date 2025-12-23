@@ -16,7 +16,10 @@ import edu.ftcphoenix.fw.actuation.Plant;
  *
  * <pre>{@code
  * // Example: CR-servo feeder with timed pulses and shooter-ready gating.
- * Plant bufferPlant = FtcPlants.motorPower(hw, "feeder", false);
+ * Plant bufferPlant = Actuators.plant(hw)
+ *         .motor("feeder", Direction.FORWARD)
+ *         .power()
+ *         .build();
  *
  * BufferController buffer = new BufferController(
  *     bufferPlant,

@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
 
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.core.hal.PowerOutput;
 import edu.ftcphoenix.fw.core.hal.PositionOutput;
 import edu.ftcphoenix.fw.core.hal.VelocityOutput;
@@ -33,8 +34,7 @@ import edu.ftcphoenix.fw.core.math.MathUtil;
  *   </li>
  * </ul>
  *
- * <p>All inversion/direction handling is centralized here, using the
- * FTC SDK's direction APIs:</p>
+ * <p>All direction handling is centralized here, using the FTC SDK's direction APIs:</p>
  *
  * <ul>
  *   <li>{@link DcMotor#setDirection(DcMotorSimple.Direction)}</li>
@@ -62,18 +62,29 @@ public final class FtcHardware {
      * <p>The logical power input is clamped to {@code [-1.0, +1.0]} and
      * forwarded to {@link DcMotorEx#setPower(double)}.</p>
      *
-     * @param hw       hardware map
-     * @param name     configured device name
-     * @param inverted whether to invert the motor direction
+     * @param hw        hardware map
+     * @param name      configured device name
+     * @param direction logical direction for this channel
      * @return a {@link PowerOutput} controlling the motor
      */
     public static PowerOutput motorPower(HardwareMap hw,
                                          String name,
-                                         boolean inverted) {
-        final DcMotorEx m = hw.get(DcMotorEx.class, name);
-        if (inverted) {
-            m.setDirection(DcMotorSimple.Direction.REVERSE);
+                                         Direction direction) {
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
         }
+        if (name == null) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (direction == null) {
+            throw new IllegalArgumentException("direction is required");
+        }
+
+        final DcMotorEx m = hw.get(DcMotorEx.class, name);
+        m.setDirection(direction == Direction.REVERSE
+                ? DcMotorSimple.Direction.REVERSE
+                : DcMotorSimple.Direction.FORWARD);
+
         return new PowerOutput() {
             private double last;
 
@@ -97,18 +108,29 @@ public final class FtcHardware {
      * <p>The logical power input is clamped to {@code [-1.0, +1.0]} and
      * forwarded to {@link CRServo#setPower(double)}.</p>
      *
-     * @param hw       hardware map
-     * @param name     configured device name
-     * @param inverted whether to invert the servo direction
+     * @param hw        hardware map
+     * @param name      configured device name
+     * @param direction logical direction for this channel
      * @return a {@link PowerOutput} controlling the continuous rotation servo
      */
     public static PowerOutput crServoPower(HardwareMap hw,
-                                           String name,
-                                           boolean inverted) {
-        final CRServo s = hw.get(CRServo.class, name);
-        if (inverted) {
-            s.setDirection(CRServo.Direction.REVERSE);
+                                          String name,
+                                          Direction direction) {
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
         }
+        if (name == null) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (direction == null) {
+            throw new IllegalArgumentException("direction is required");
+        }
+
+        final CRServo s = hw.get(CRServo.class, name);
+        s.setDirection(direction == Direction.REVERSE
+                ? CRServo.Direction.REVERSE
+                : CRServo.Direction.FORWARD);
+
         return new PowerOutput() {
             private double last;
 
@@ -139,18 +161,29 @@ public final class FtcHardware {
      * <p>The input is clamped to {@code [0.0, 1.0]} and forwarded to
      * {@link Servo#setPosition(double)}.</p>
      *
-     * @param hw       hardware map
-     * @param name     configured device name
-     * @param inverted whether to invert the servo direction
+     * @param hw        hardware map
+     * @param name      configured device name
+     * @param direction logical direction for this channel
      * @return a {@link PositionOutput} controlling the servo
      */
     public static PositionOutput servoPosition(HardwareMap hw,
                                                String name,
-                                               boolean inverted) {
-        final Servo s = hw.get(Servo.class, name);
-        if (inverted) {
-            s.setDirection(Servo.Direction.REVERSE);
+                                               Direction direction) {
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
         }
+        if (name == null) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (direction == null) {
+            throw new IllegalArgumentException("direction is required");
+        }
+
+        final Servo s = hw.get(Servo.class, name);
+        s.setDirection(direction == Direction.REVERSE
+                ? Servo.Direction.REVERSE
+                : Servo.Direction.FORWARD);
+
         return new PositionOutput() {
             private double last;
 
@@ -180,18 +213,28 @@ public final class FtcHardware {
      * units (e.g., radians) if needed. The framework standardizes on ticks
      * as the native position unit for motors.</p>
      *
-     * @param hw       hardware map
-     * @param name     configured device name
-     * @param inverted whether to invert the motor direction
+     * @param hw        hardware map
+     * @param name      configured device name
+     * @param direction logical direction for this channel
      * @return a {@link PositionOutput} controlling the motor in ticks
      */
     public static PositionOutput motorPosition(HardwareMap hw,
                                                String name,
-                                               boolean inverted) {
-        final DcMotorEx m = hw.get(DcMotorEx.class, name);
-        if (inverted) {
-            m.setDirection(DcMotorSimple.Direction.REVERSE);
+                                               Direction direction) {
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
         }
+        if (name == null) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (direction == null) {
+            throw new IllegalArgumentException("direction is required");
+        }
+
+        final DcMotorEx m = hw.get(DcMotorEx.class, name);
+        m.setDirection(direction == Direction.REVERSE
+                ? DcMotorSimple.Direction.REVERSE
+                : DcMotorSimple.Direction.FORWARD);
 
         // Ensure encoder-based positioning is enabled; reset once at setup.
         m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
@@ -248,18 +291,28 @@ public final class FtcHardware {
      * sensor-based velocity reading from {@link DcMotorEx#getVelocity()}
      * (also ticks/sec).</p>
      *
-     * @param hw       hardware map
-     * @param name     configured device name
-     * @param inverted whether to invert the motor direction
+     * @param hw        hardware map
+     * @param name      configured device name
+     * @param direction logical direction for this channel
      * @return a {@link VelocityOutput} controlling the motor velocity
      */
     public static VelocityOutput motorVelocity(HardwareMap hw,
                                                String name,
-                                               boolean inverted) {
-        final DcMotorEx m = hw.get(DcMotorEx.class, name);
-        if (inverted) {
-            m.setDirection(DcMotorSimple.Direction.REVERSE);
+                                               Direction direction) {
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
         }
+        if (name == null) {
+            throw new IllegalArgumentException("name is required");
+        }
+        if (direction == null) {
+            throw new IllegalArgumentException("direction is required");
+        }
+
+        final DcMotorEx m = hw.get(DcMotorEx.class, name);
+        m.setDirection(direction == Direction.REVERSE
+                ? DcMotorSimple.Direction.REVERSE
+                : DcMotorSimple.Direction.FORWARD);
 
         m.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 

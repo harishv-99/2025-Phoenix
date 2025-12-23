@@ -5,6 +5,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import java.util.Objects;
 
 import edu.ftcphoenix.fw.ftc.FtcHardware;
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.core.hal.PowerOutput;
 import edu.ftcphoenix.fw.core.hal.PositionOutput;
 import edu.ftcphoenix.fw.core.hal.VelocityOutput;
@@ -19,22 +20,22 @@ import edu.ftcphoenix.fw.core.hal.VelocityOutput;
  * <pre>{@code
  * // Shooter: dual-motor velocity plant with a rate limit.
  * Plant shooter = Actuators.plant(hardwareMap)
- *         .motorPair("shooterLeftMotor",  false,
- *                    "shooterRightMotor", true)
+ *         .motorPair("shooterLeftMotor",  Direction.FORWARD,
+ *                    "shooterRightMotor", Direction.REVERSE)
  *         .velocity()                 // uses a default tolerance
  *         .rateLimit(500.0)           // max delta in native units per second
  *         .build();
  *
  * // Transfer: dual CR servo power plant.
  * Plant transfer = Actuators.plant(hardwareMap)
- *         .crServoPair("transferLeftServo",  false,
- *                      "transferRightServo", true)
+ *         .crServoPair("transferLeftServo",  Direction.FORWARD,
+ *                      "transferRightServo", Direction.REVERSE)
  *         .power()
  *         .build();
  *
  * // Pusher: positional servo.
  * Plant pusher = Actuators.plant(hardwareMap)
- *         .servo("pusherServo", false)
+ *         .servo("pusherServo", Direction.FORWARD)
  *         .position()                 // servo set-and-hold (no feedback)
  *         .build();
  * }</pre>
@@ -44,12 +45,12 @@ import edu.ftcphoenix.fw.core.hal.VelocityOutput;
  * <ol>
  *   <li><b>Pick hardware</b> – {@link HardwareStep}:
  *     <ul>
- *       <li>{@link HardwareStep#motor(String, boolean)}</li>
- *       <li>{@link HardwareStep#motorPair(String, boolean, String, boolean)}</li>
- *       <li>{@link HardwareStep#servo(String, boolean)}</li>
- *       <li>{@link HardwareStep#servoPair(String, boolean, String, boolean)}</li>
- *       <li>{@link HardwareStep#crServo(String, boolean)}</li>
- *       <li>{@link HardwareStep#crServoPair(String, boolean, String, boolean)}</li>
+ *       <li>{@link HardwareStep#motor(String, Direction)}</li>
+ *       <li>{@link HardwareStep#motorPair(String, Direction, String, Direction)}</li>
+ *       <li>{@link HardwareStep#servo(String, Direction)}</li>
+ *       <li>{@link HardwareStep#servoPair(String, Direction, String, Direction)}</li>
+ *       <li>{@link HardwareStep#crServo(String, Direction)}</li>
+ *       <li>{@link HardwareStep#crServoPair(String, Direction, String, Direction)}</li>
  *     </ul>
  *   </li>
  *   <li><b>Pick control type</b> – {@link ControlStep}:
@@ -151,8 +152,8 @@ public final class Actuators {
 
         private String nameA;
         private String nameB;
-        private boolean invertedA;
-        private boolean invertedB;
+        private Direction dirA;
+        private Direction dirB;
 
         private HardwareStep(HardwareMap hw) {
             if (hw == null) {
@@ -171,16 +172,16 @@ public final class Actuators {
         /**
          * Use a single DC motor as the underlying actuator.
          *
-         * @param name     motor name in the FTC Robot Configuration
-         * @param inverted whether to invert the motor direction
+         * @param name      motor name in the FTC Robot Configuration
+         * @param direction logical direction for the motor
          * @return {@link ControlStep} to choose control type
          */
-        public ControlStep motor(String name, boolean inverted) {
+        public ControlStep motor(String name, Direction direction) {
             ensureUnset();
             this.hardwareKind = HardwareKind.MOTOR;
             this.nameA = Objects.requireNonNull(name, "name");
-            this.invertedA = inverted;
-            return new ControlStep(hw, hardwareKind, nameA, invertedA, null, false);
+            this.dirA = Objects.requireNonNull(direction, "direction");
+            return new ControlStep(hw, hardwareKind, nameA, dirA, null, Direction.FORWARD);
         }
 
         /**
@@ -188,23 +189,23 @@ public final class Actuators {
          *
          * <p>Both motors will receive the same command.</p>
          *
-         * @param nameA     first motor name
-         * @param invertedA invert flag for first motor
-         * @param nameB     second motor name
-         * @param invertedB invert flag for second motor
+         * @param nameA first motor name
+         * @param dirA  direction for first motor
+         * @param nameB second motor name
+         * @param dirB  direction for second motor
          * @return {@link ControlStep} to choose control type
          */
         public ControlStep motorPair(String nameA,
-                                     boolean invertedA,
+                                     Direction dirA,
                                      String nameB,
-                                     boolean invertedB) {
+                                     Direction dirB) {
             ensureUnset();
             this.hardwareKind = HardwareKind.MOTOR_PAIR;
             this.nameA = Objects.requireNonNull(nameA, "nameA");
             this.nameB = Objects.requireNonNull(nameB, "nameB");
-            this.invertedA = invertedA;
-            this.invertedB = invertedB;
-            return new ControlStep(hw, hardwareKind, nameA, invertedA, nameB, invertedB);
+            this.dirA = Objects.requireNonNull(dirA, "dirA");
+            this.dirB = Objects.requireNonNull(dirB, "dirB");
+            return new ControlStep(hw, hardwareKind, nameA, dirA, nameB, dirB);
         }
 
         /**
@@ -215,16 +216,16 @@ public final class Actuators {
          * to use {@link ControlStep#power()} or
          * {@link ControlStep#velocity()} / {@link ControlStep#velocity(double)}.</p>
          *
-         * @param name     servo name in the FTC Robot Configuration
-         * @param inverted whether to invert the logical direction
+         * @param name      servo name in the FTC Robot Configuration
+         * @param direction logical direction for the actuator
          * @return {@link ControlStep} to choose control type
          */
-        public ControlStep servo(String name, boolean inverted) {
+        public ControlStep servo(String name, Direction direction) {
             ensureUnset();
             this.hardwareKind = HardwareKind.SERVO;
             this.nameA = Objects.requireNonNull(name, "name");
-            this.invertedA = inverted;
-            return new ControlStep(hw, hardwareKind, nameA, invertedA, null, false);
+            this.dirA = Objects.requireNonNull(direction, "direction");
+            return new ControlStep(hw, hardwareKind, nameA, dirA, null, Direction.FORWARD);
         }
 
         /**
@@ -237,23 +238,23 @@ public final class Actuators {
          * to use {@link ControlStep#power()} or
          * {@link ControlStep#velocity()} / {@link ControlStep#velocity(double)}.</p>
          *
-         * @param nameA     first servo name
-         * @param invertedA invert flag for first servo
-         * @param nameB     second servo name
-         * @param invertedB invert flag for second servo
+         * @param nameA first servo name
+         * @param dirA  direction for first servo
+         * @param nameB second servo name
+         * @param dirB  direction for second servo
          * @return {@link ControlStep} to choose control type
          */
         public ControlStep servoPair(String nameA,
-                                     boolean invertedA,
+                                     Direction dirA,
                                      String nameB,
-                                     boolean invertedB) {
+                                     Direction dirB) {
             ensureUnset();
             this.hardwareKind = HardwareKind.SERVO_PAIR;
             this.nameA = Objects.requireNonNull(nameA, "nameA");
             this.nameB = Objects.requireNonNull(nameB, "nameB");
-            this.invertedA = invertedA;
-            this.invertedB = invertedB;
-            return new ControlStep(hw, hardwareKind, nameA, invertedA, nameB, invertedB);
+            this.dirA = Objects.requireNonNull(dirA, "dirA");
+            this.dirB = Objects.requireNonNull(dirB, "dirB");
+            return new ControlStep(hw, hardwareKind, nameA, dirA, nameB, dirB);
         }
 
         /**
@@ -264,16 +265,16 @@ public final class Actuators {
          * {@link ControlStep#velocity(double)} or
          * {@link ControlStep#position()} / {@link ControlStep#position(double)}.</p>
          *
-         * @param name     CR servo name in the FTC Robot Configuration
-         * @param inverted whether to invert the logical direction
+         * @param name      CR servo name in the FTC Robot Configuration
+         * @param direction logical direction for the actuator
          * @return {@link ControlStep} to choose control type
          */
-        public ControlStep crServo(String name, boolean inverted) {
+        public ControlStep crServo(String name, Direction direction) {
             ensureUnset();
             this.hardwareKind = HardwareKind.CR_SERVO;
             this.nameA = Objects.requireNonNull(name, "name");
-            this.invertedA = inverted;
-            return new ControlStep(hw, hardwareKind, nameA, invertedA, null, false);
+            this.dirA = Objects.requireNonNull(direction, "direction");
+            return new ControlStep(hw, hardwareKind, nameA, dirA, null, Direction.FORWARD);
         }
 
         /**
@@ -286,23 +287,23 @@ public final class Actuators {
          * {@link ControlStep#velocity(double)} or
          * {@link ControlStep#position()} / {@link ControlStep#position(double)}.</p>
          *
-         * @param nameA     first CR servo name
-         * @param invertedA invert flag for first CR servo
-         * @param nameB     second CR servo name
-         * @param invertedB invert flag for second CR servo
+         * @param nameA first CR servo name
+         * @param dirA  direction for first CR servo
+         * @param nameB second CR servo name
+         * @param dirB  direction for second CR servo
          * @return {@link ControlStep} to choose control type
          */
         public ControlStep crServoPair(String nameA,
-                                       boolean invertedA,
+                                       Direction dirA,
                                        String nameB,
-                                       boolean invertedB) {
+                                       Direction dirB) {
             ensureUnset();
             this.hardwareKind = HardwareKind.CR_SERVO_PAIR;
             this.nameA = Objects.requireNonNull(nameA, "nameA");
             this.nameB = Objects.requireNonNull(nameB, "nameB");
-            this.invertedA = invertedA;
-            this.invertedB = invertedB;
-            return new ControlStep(hw, hardwareKind, nameA, invertedA, nameB, invertedB);
+            this.dirA = Objects.requireNonNull(dirA, "dirA");
+            this.dirB = Objects.requireNonNull(dirB, "dirB");
+            return new ControlStep(hw, hardwareKind, nameA, dirA, nameB, dirB);
         }
 
         private String describeHardware() {
@@ -340,21 +341,21 @@ public final class Actuators {
         private final HardwareKind kind;
         private final String nameA;
         private final String nameB;
-        private final boolean invertedA;
-        private final boolean invertedB;
+        private final Direction dirA;
+        private final Direction dirB;
 
         private ControlStep(HardwareMap hw,
                             HardwareKind kind,
                             String nameA,
-                            boolean invertedA,
+                            Direction dirA,
                             String nameB,
-                            boolean invertedB) {
+                            Direction dirB) {
             this.hw = Objects.requireNonNull(hw, "hw");
             this.kind = Objects.requireNonNull(kind, "kind");
             this.nameA = nameA;
             this.nameB = nameB;
-            this.invertedA = invertedA;
-            this.invertedB = invertedB;
+            this.dirA = Objects.requireNonNull(dirA, "dirA");
+            this.dirB = Objects.requireNonNull(dirB, "dirB");
         }
 
         /**
@@ -375,24 +376,24 @@ public final class Actuators {
             Plant plant;
             switch (kind) {
                 case MOTOR: {
-                    PowerOutput out = FtcHardware.motorPower(hw, nameA, invertedA);
+                    PowerOutput out = FtcHardware.motorPower(hw, nameA, dirA);
                     plant = Plants.power(out);
                     break;
                 }
                 case MOTOR_PAIR: {
-                    PowerOutput outA = FtcHardware.motorPower(hw, nameA, invertedA);
-                    PowerOutput outB = FtcHardware.motorPower(hw, nameB, invertedB);
+                    PowerOutput outA = FtcHardware.motorPower(hw, nameA, dirA);
+                    PowerOutput outB = FtcHardware.motorPower(hw, nameB, dirB);
                     plant = Plants.powerPair(outA, outB);
                     break;
                 }
                 case CR_SERVO: {
-                    PowerOutput out = FtcHardware.crServoPower(hw, nameA, invertedA);
+                    PowerOutput out = FtcHardware.crServoPower(hw, nameA, dirA);
                     plant = Plants.power(out);
                     break;
                 }
                 case CR_SERVO_PAIR: {
-                    PowerOutput outA = FtcHardware.crServoPower(hw, nameA, invertedA);
-                    PowerOutput outB = FtcHardware.crServoPower(hw, nameB, invertedB);
+                    PowerOutput outA = FtcHardware.crServoPower(hw, nameA, dirA);
+                    PowerOutput outB = FtcHardware.crServoPower(hw, nameB, dirB);
                     plant = Plants.powerPair(outA, outB);
                     break;
                 }
@@ -439,13 +440,13 @@ public final class Actuators {
             Plant plant;
             switch (kind) {
                 case MOTOR: {
-                    VelocityOutput out = FtcHardware.motorVelocity(hw, nameA, invertedA);
+                    VelocityOutput out = FtcHardware.motorVelocity(hw, nameA, dirA);
                     plant = Plants.velocity(out, toleranceNative);
                     break;
                 }
                 case MOTOR_PAIR: {
-                    VelocityOutput outA = FtcHardware.motorVelocity(hw, nameA, invertedA);
-                    VelocityOutput outB = FtcHardware.motorVelocity(hw, nameB, invertedB);
+                    VelocityOutput outA = FtcHardware.motorVelocity(hw, nameA, dirA);
+                    VelocityOutput outB = FtcHardware.motorVelocity(hw, nameB, dirB);
                     plant = Plants.velocityPair(outA, outB, toleranceNative);
                     break;
                 }
@@ -512,24 +513,24 @@ public final class Actuators {
             Plant plant;
             switch (kind) {
                 case MOTOR: {
-                    PositionOutput out = FtcHardware.motorPosition(hw, nameA, invertedA);
+                    PositionOutput out = FtcHardware.motorPosition(hw, nameA, dirA);
                     plant = Plants.motorPosition(out, toleranceNative);
                     break;
                 }
                 case MOTOR_PAIR: {
-                    PositionOutput outA = FtcHardware.motorPosition(hw, nameA, invertedA);
-                    PositionOutput outB = FtcHardware.motorPosition(hw, nameB, invertedB);
+                    PositionOutput outA = FtcHardware.motorPosition(hw, nameA, dirA);
+                    PositionOutput outB = FtcHardware.motorPosition(hw, nameB, dirB);
                     plant = Plants.motorPositionPair(outA, outB, toleranceNative);
                     break;
                 }
                 case SERVO: {
-                    PositionOutput out = FtcHardware.servoPosition(hw, nameA, invertedA);
+                    PositionOutput out = FtcHardware.servoPosition(hw, nameA, dirA);
                     plant = Plants.servoPosition(out);
                     break;
                 }
                 case SERVO_PAIR: {
-                    PositionOutput outA = FtcHardware.servoPosition(hw, nameA, invertedA);
-                    PositionOutput outB = FtcHardware.servoPosition(hw, nameB, invertedB);
+                    PositionOutput outA = FtcHardware.servoPosition(hw, nameA, dirA);
+                    PositionOutput outB = FtcHardware.servoPosition(hw, nameB, dirB);
                     plant = Plants.servoPositionPair(outA, outB);
                     break;
                 }

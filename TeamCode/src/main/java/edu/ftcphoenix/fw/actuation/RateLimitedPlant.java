@@ -189,6 +189,12 @@ class RateLimitedPlant implements Plant {
     }
 
     @Override
+    public boolean hasFeedback() {
+        return inner.hasFeedback();
+    }
+
+
+    @Override
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
             return;

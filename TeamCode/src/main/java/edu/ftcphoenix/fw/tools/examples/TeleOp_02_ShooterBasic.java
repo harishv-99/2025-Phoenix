@@ -9,6 +9,7 @@ import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
@@ -252,21 +253,21 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
 
         // Shooter: two motors, velocity-controlled pair.
         shooter = Actuators.plant(hardwareMap)
-                .motorPair(HW_SHOOTER_LEFT, false,
-                        HW_SHOOTER_RIGHT, true)
+                .motorPair(HW_SHOOTER_LEFT, Direction.FORWARD,
+                        HW_SHOOTER_RIGHT, Direction.REVERSE)
                 .velocity(SHOOTER_VELOCITY_TOLERANCE_NATIVE)
                 .build();
 
         // Transfer: two CR servos, power-controlled pair.
         transfer = Actuators.plant(hardwareMap)
-                .crServoPair(HW_TRANSFER_LEFT, false,
-                        HW_TRANSFER_RIGHT, true)
+                .crServoPair(HW_TRANSFER_LEFT, Direction.FORWARD,
+                        HW_TRANSFER_RIGHT, Direction.REVERSE)
                 .power()
                 .build();
 
         // Pusher: single positional servo, 0..1 position plant.
         pusher = Actuators.plant(hardwareMap)
-                .servo(HW_PUSHER, false)
+                .servo(HW_PUSHER, Direction.FORWARD)
                 .position()
                 .build();
 

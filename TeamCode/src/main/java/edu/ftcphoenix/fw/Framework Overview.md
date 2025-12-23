@@ -110,11 +110,11 @@ Phoenix abstracts FTC hardware into small output interfaces (in `fw.core.hal`):
 
 `edu.ftcphoenix.fw.ftc.FtcHardware` provides factories like:
 
-* `FtcHardware.motorPower(hw, name, inverted)`
-* `FtcHardware.motorVelocity(hw, name, inverted)`
-* `FtcHardware.motorPosition(hw, name, inverted)`
-* `FtcHardware.servoPosition(hw, name, inverted)`
-* `FtcHardware.crServoPower(hw, name, inverted)`
+* `FtcHardware.motorPower(hw, name, direction)`
+* `FtcHardware.motorVelocity(hw, name, direction)`
+* `FtcHardware.motorPosition(hw, name, direction)`
+* `FtcHardware.servoPosition(hw, name, direction)`
+* `FtcHardware.crServoPower(hw, name, direction)`
 
 These return HAL outputs.
 
@@ -123,26 +123,28 @@ These return HAL outputs.
 Most teams should **not** call `FtcHardware` directly. Use the staged builder in `Actuators`:
 
 ```java
+import edu.ftcphoenix.fw.core.hal.Direction;
+
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
 
 // Shooter: dual-motor velocity plant (native units) with a rate limit.
 Plant shooter = Actuators.plant(hardwareMap)
-        .motorPair("shooterLeftMotor",  false,
-                   "shooterRightMotor", true)
+        .motorPair("shooterLeftMotor",  Direction.FORWARD,
+                         "shooterRightMotor", Direction.REVERSE)
         .velocity()            // default tolerance (native units)
         .rateLimit(500.0)      // max delta in native units per second
         .build();
 
 // Transfer: CR servo power plant.
 Plant transfer = Actuators.plant(hardwareMap)
-        .crServo("transferServo", false)
+        .crServo("transferServo", Direction.FORWARD)
         .power()
         .build();
 
 // Pusher: positional servo plant (0..1).
 Plant pusher = Actuators.plant(hardwareMap)
-        .servo("pusherServo", false)
+        .servo("pusherServo", Direction.FORWARD)
         .position()
         .build();
 ```

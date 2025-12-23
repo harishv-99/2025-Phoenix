@@ -20,20 +20,22 @@ The examples live in `edu.ftcphoenix.fw.tools.examples.*`:
 All shooter examples use `Actuators.plant(hardwareMap)` to build `Plant` instances:
 
 ```java
+import edu.ftcphoenix.fw.core.hal.Direction;
+
 Plant shooter = Actuators.plant(hardwareMap)
-        .motorPair("shooterLeftMotor", false,
-                "shooterRightMotor", true)
+        .motorPair("shooterLeftMotor",  Direction.FORWARD,
+                         "shooterRightMotor", Direction.REVERSE)
         .velocity(/*toleranceNative=*/100.0)
         .build();
 
 Plant transfer = Actuators.plant(hardwareMap)
-        .crServoPair("transferLeftServo", false,
-                "transferRightServo", true)
+        .crServoPair("transferLeftServo",  Direction.FORWARD,
+                         "transferRightServo", Direction.REVERSE)
         .power()
         .build();
 
 Plant pusher = Actuators.plant(hardwareMap)
-        .servo("pusherServo", false)
+        .servo("pusherServo", Direction.FORWARD)
         .position()
         .build();
 ```

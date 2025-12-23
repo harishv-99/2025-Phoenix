@@ -166,6 +166,12 @@ public final class InterlockPlant implements Plant {
     }
 
     @Override
+    public boolean hasFeedback() {
+        return inner.hasFeedback();
+    }
+
+
+    @Override
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) return;
         String p = (prefix == null || prefix.isEmpty()) ? "interlock" : prefix;

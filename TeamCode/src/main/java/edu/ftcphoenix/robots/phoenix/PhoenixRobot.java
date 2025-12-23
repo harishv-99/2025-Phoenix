@@ -87,12 +87,18 @@ public final class PhoenixRobot {
         // --- Create mechanisms ---
         MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
         mecanumConfig.maxLateralRatePerSec = 0.01;
-        drivebase = Drives.mecanum(hardwareMap,
-                RobotConfig.DriveTrain.invertMotorFrontLeft,
-                RobotConfig.DriveTrain.invertMotorFrontRight,
-                RobotConfig.DriveTrain.invertMotorBackLeft,
-                RobotConfig.DriveTrain.invertMotorBackRight,
-                null);
+        drivebase = Drives.mecanum(
+                hardwareMap,
+                RobotConfig.DriveTrain.nameMotorFrontLeft,
+                RobotConfig.DriveTrain.directionMotorFrontLeft,
+                RobotConfig.DriveTrain.nameMotorFrontRight,
+                RobotConfig.DriveTrain.directionMotorFrontRight,
+                RobotConfig.DriveTrain.nameMotorBackLeft,
+                RobotConfig.DriveTrain.directionMotorBackLeft,
+                RobotConfig.DriveTrain.nameMotorBackRight,
+                RobotConfig.DriveTrain.directionMotorBackRight,
+                mecanumConfig);
+
         shooter = new Shooter(hardwareMap, telemetry, gamepads);
 
         // --- Use the standard TeleOp stick mapping for mecanum.

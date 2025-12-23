@@ -2,8 +2,9 @@ package edu.ftcphoenix.fw.drive;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import edu.ftcphoenix.fw.ftc.FtcHardware;
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.core.hal.PowerOutput;
+import edu.ftcphoenix.fw.ftc.FtcHardware;
 
 /**
  * High-level helpers for creating common drivebases.
@@ -28,22 +29,23 @@ import edu.ftcphoenix.fw.core.hal.PowerOutput;
  *         <li>{@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}</li>
  *       </ul>
  *   </li>
- *   <li>Applies a sensible default inversion pattern (typically right side
- *       inverted).</li>
+ *   <li>Applies a sensible default direction pattern (typically right side
+ *       {@link Direction#REVERSE}).</li>
  *   <li>Uses {@link MecanumDrivebase.Config#defaults()} for all drive tuning.</li>
  * </ul>
  *
  * <p>If the robot does not drive correctly with this default setup, teams
- * can <b>flip motors</b> without touching any low-level details:</p>
+ * can <b>flip motors</b> without touching any low-level details by changing
+ * the per-motor {@link Direction} values:</p>
  *
  * <pre>{@code
- * // Same standard names, but custom inversion:
+ * // Same standard names, but custom directions:
  * MecanumDrivebase drive = Drives.mecanum(
  *         hardwareMap,
- *         true,  // invert frontLeftMotor
- *         true,  // invert frontRightMotor
- *         true,  // invert backLeftMotor
- *         false  // invert backRightMotor
+ *         Direction.REVERSE,  // frontLeftMotor direction
+ *         Direction.REVERSE,  // frontRightMotor direction
+ *         Direction.FORWARD,  // backLeftMotor direction
+ *         Direction.REVERSE   // backRightMotor direction
  * );
  * }</pre>
  *
@@ -99,78 +101,64 @@ public final class Drives {
 
     /**
      * Create a mecanum drivebase using the <b>standard motor names</b> and a
-     * typical inversion pattern, with {@link MecanumDrivebase.Config#defaults()}.
+     * typical direction pattern, with {@link MecanumDrivebase.Config#defaults()}.
      *
      * <ul>
-     *   <li>{@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}:  not inverted</li>
-     *   <li>{@link #DEFAULT_FRONT_RIGHT_MOTOR_NAME}: inverted</li>
-     *   <li>{@link #DEFAULT_BACK_LEFT_MOTOR_NAME}:   not inverted</li>
-     *   <li>{@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}:  inverted</li>
+     *   <li>{@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}:  {@link Direction#FORWARD}</li>
+     *   <li>{@link #DEFAULT_FRONT_RIGHT_MOTOR_NAME}: {@link Direction#REVERSE}</li>
+     *   <li>{@link #DEFAULT_BACK_LEFT_MOTOR_NAME}:   {@link Direction#FORWARD}</li>
+     *   <li>{@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}:  {@link Direction#REVERSE}</li>
      * </ul>
-     *
-     * <p>If your robot does not drive correctly with this default pattern,
-     * use {@link #mecanum(HardwareMap, boolean, boolean, boolean, boolean)}
-     * and flip the booleans as needed.</p>
      *
      * @param hw FTC hardware map
      */
     public static MecanumDrivebase mecanum(HardwareMap hw) {
-        return mecanum(hw,
-                false,  // frontLeftMotor inverted?
-                true,   // frontRightMotor inverted?
-                false,  // backLeftMotor inverted?
-                true,   // backRightMotor inverted?
-                MecanumDrivebase.Config.defaults());
+        return mecanum(
+                hw,
+                Direction.FORWARD,
+                Direction.REVERSE,
+                Direction.FORWARD,
+                Direction.REVERSE,
+                MecanumDrivebase.Config.defaults()
+        );
     }
 
     /**
-     * Create a mecanum drivebase using the <b>standard motor names</b>,
-     * but with explicit inversion flags for each motor, and
-     * {@link MecanumDrivebase.Config#defaults()}.
-     *
-     * <p>This is the simplest way for students to "flip" motors while
-     * still following the standard naming convention.</p>
-     *
-     * @param hw               FTC hardware map
-     * @param invertFrontLeft  invert {@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}?
-     * @param invertFrontRight invert {@link #DEFAULT_FRONT_RIGHT_MOTOR_NAME}?
-     * @param invertBackLeft   invert {@link #DEFAULT_BACK_LEFT_MOTOR_NAME}?
-     * @param invertBackRight  invert {@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}?
+     * Create a mecanum drivebase using the <b>standard motor names</b>, but with explicit
+     * {@link Direction} values for each motor, and {@link MecanumDrivebase.Config#defaults()}.
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
-                                           boolean invertFrontLeft,
-                                           boolean invertFrontRight,
-                                           boolean invertBackLeft,
-                                           boolean invertBackRight) {
-        return mecanum(hw,
-                invertFrontLeft,
-                invertFrontRight,
-                invertBackLeft,
-                invertBackRight,
-                MecanumDrivebase.Config.defaults());
+                                           Direction frontLeftDirection,
+                                           Direction frontRightDirection,
+                                           Direction backLeftDirection,
+                                           Direction backRightDirection) {
+        return mecanum(
+                hw,
+                frontLeftDirection,
+                frontRightDirection,
+                backLeftDirection,
+                backRightDirection,
+                MecanumDrivebase.Config.defaults()
+        );
     }
 
     /**
-     * Create a mecanum drivebase with <b>custom motor names</b> and inversion,
+     * Create a mecanum drivebase with <b>custom motor names</b> and directions,
      * using {@link MecanumDrivebase.Config#defaults()}.
-     *
-     * <p>Use this overload if your motor names do not match the standard
-     * {@link #DEFAULT_FRONT_LEFT_MOTOR_NAME},
-     * {@link #DEFAULT_FRONT_RIGHT_MOTOR_NAME},
-     * {@link #DEFAULT_BACK_LEFT_MOTOR_NAME},
-     * {@link #DEFAULT_BACK_RIGHT_MOTOR_NAME} convention.</p>
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
-                                           String flName, boolean flInverted,
-                                           String frName, boolean frInverted,
-                                           String blName, boolean blInverted,
-                                           String brName, boolean brInverted) {
-        return mecanum(hw,
-                flName, flInverted,
-                frName, frInverted,
-                blName, blInverted,
-                brName, brInverted,
-                MecanumDrivebase.Config.defaults());
+                                           String flName, Direction flDirection,
+                                           String frName, Direction frDirection,
+                                           String blName, Direction blDirection,
+                                           String brName, Direction brDirection) {
+        return mecanum(
+                hw,
+                flName, flDirection,
+                frName, frDirection,
+                blName, blDirection,
+                brName, brDirection,
+                MecanumDrivebase.Config.defaults()
+        );
     }
 
     // ------------------------------------------------------------------
@@ -178,60 +166,64 @@ public final class Drives {
     // ------------------------------------------------------------------
 
     /**
-     * Create a mecanum drivebase using standard names, default inversion,
+     * Create a mecanum drivebase using standard names, default directions,
      * and a custom {@link MecanumDrivebase.Config}.
-     *
-     * <p>Use this when you want to adjust things like rate limiting but are
-     * happy with the default motor naming convention.</p>
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
                                            MecanumDrivebase.Config config) {
-        return mecanum(hw,
-                false,  // frontLeftMotor inverted?
-                true,   // frontRightMotor inverted?
-                false,  // backLeftMotor inverted?
-                true,   // backRightMotor inverted?
-                config);
+        return mecanum(
+                hw,
+                Direction.FORWARD,
+                Direction.REVERSE,
+                Direction.FORWARD,
+                Direction.REVERSE,
+                config
+        );
     }
 
     /**
-     * Create a mecanum drivebase using standard names, explicit inversion
-     * flags, and a custom {@link MecanumDrivebase.Config}.
-     *
-     * <p>This is the "flip a few booleans and tweak rate limiting" entrypoint
-     * for students whose robots don't behave with the defaults.</p>
+     * Create a mecanum drivebase using standard names, explicit directions,
+     * and a custom {@link MecanumDrivebase.Config}.
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
-                                           boolean invertFrontLeft,
-                                           boolean invertFrontRight,
-                                           boolean invertBackLeft,
-                                           boolean invertBackRight,
+                                           Direction frontLeftDirection,
+                                           Direction frontRightDirection,
+                                           Direction backLeftDirection,
+                                           Direction backRightDirection,
                                            MecanumDrivebase.Config config) {
-        return mecanum(hw,
-                DEFAULT_FRONT_LEFT_MOTOR_NAME, invertFrontLeft,
-                DEFAULT_FRONT_RIGHT_MOTOR_NAME, invertFrontRight,
-                DEFAULT_BACK_LEFT_MOTOR_NAME, invertBackLeft,
-                DEFAULT_BACK_RIGHT_MOTOR_NAME, invertBackRight,
-                config);
+        return mecanum(
+                hw,
+                DEFAULT_FRONT_LEFT_MOTOR_NAME, frontLeftDirection,
+                DEFAULT_FRONT_RIGHT_MOTOR_NAME, frontRightDirection,
+                DEFAULT_BACK_LEFT_MOTOR_NAME, backLeftDirection,
+                DEFAULT_BACK_RIGHT_MOTOR_NAME, backRightDirection,
+                config
+        );
     }
 
     /**
-     * Create a mecanum drivebase with custom names, inversion, and config.
-     *
-     * <p>This is the most flexible overload; advanced teams can use it to
-     * plug in any combination of hardware naming and {@link MecanumDrivebase.Config}
-     * tuning.</p>
+     * Create a mecanum drivebase with custom names, directions, and config.
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
-                                           String flName, boolean flInverted,
-                                           String frName, boolean frInverted,
-                                           String blName, boolean blInverted,
-                                           String brName, boolean brInverted,
+                                           String flName, Direction flDirection,
+                                           String frName, Direction frDirection,
+                                           String blName, Direction blDirection,
+                                           String brName, Direction brDirection,
                                            MecanumDrivebase.Config config) {
-        PowerOutput fl = FtcHardware.motorPower(hw, flName, flInverted);
-        PowerOutput fr = FtcHardware.motorPower(hw, frName, frInverted);
-        PowerOutput bl = FtcHardware.motorPower(hw, blName, blInverted);
-        PowerOutput br = FtcHardware.motorPower(hw, brName, brInverted);
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
+        }
+        if (flName == null || frName == null || blName == null || brName == null) {
+            throw new IllegalArgumentException("All motor names are required");
+        }
+        if (flDirection == null || frDirection == null || blDirection == null || brDirection == null) {
+            throw new IllegalArgumentException("All motor directions are required");
+        }
+
+        PowerOutput fl = FtcHardware.motorPower(hw, flName, flDirection);
+        PowerOutput fr = FtcHardware.motorPower(hw, frName, frDirection);
+        PowerOutput bl = FtcHardware.motorPower(hw, blName, blDirection);
+        PowerOutput br = FtcHardware.motorPower(hw, brName, brDirection);
 
         MecanumDrivebase.Config cfg = (config != null) ? config : MecanumDrivebase.Config.defaults();
         return new MecanumDrivebase(fl, fr, bl, br, cfg);

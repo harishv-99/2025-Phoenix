@@ -72,6 +72,8 @@ Here’s a simplified TeleOp that:
     >   `frontLeftMotor`, `frontRightMotor`, `backLeftMotor`, `backRightMotor`.
 
 ```java
+import edu.ftcphoenix.fw.core.hal.Direction;
+
 @TeleOp(name = "PhoenixTeleOp", group = "Examples")
 public class PhoenixTeleOp extends OpMode {
 
@@ -173,21 +175,21 @@ The recommended way is to use the staged builder in
 private void initShooterPlants() {
     // Shooter: dual DC motors, velocity control with feedback.
     shooter = Actuators.plant(hardwareMap)
-            .motorPair("shooterLeftMotor",  false,
-                       "shooterRightMotor", true)
+            .motorPair("shooterLeftMotor",  Direction.FORWARD,
+                         "shooterRightMotor", Direction.REVERSE)
             .velocity()     // default tolerance (native units)
             .build();
 
     // Transfer: dual CR servos, power control.
     transfer = Actuators.plant(hardwareMap)
-            .crServoPair("transferLeftServo",  false,
-                         "transferRightServo", true)
+            .crServoPair("transferLeftServo",  Direction.FORWARD,
+                         "transferRightServo", Direction.REVERSE)
             .power()
             .build();
 
     // Pusher: positional servo, set-and-hold position.
     pusher = Actuators.plant(hardwareMap)
-            .servo("pusherServo", false)
+            .servo("pusherServo", Direction.FORWARD)
             .position()     // open-loop servo position (no feedback)
             .build();
 }
@@ -199,10 +201,10 @@ The builder has three steps:
 
 1. **Pick hardware**:
 
-    * `.motor(name, inverted)`
-    * `.motorPair(nameA, invA, nameB, invB)`
-    * `.servo(name, inverted)` / `.servoPair(...)`
-    * `.crServo(name, inverted)` / `.crServoPair(...)`
+    * `.motor(name, direction)`
+    * `.motorPair(nameA, dirA, nameB, dirB)`
+    * `.servo(name, direction)` / `.servoPair(...)`
+    * `.crServo(name, direction)` / `.crServoPair(...)`
 
 2. **Pick control type**:
 

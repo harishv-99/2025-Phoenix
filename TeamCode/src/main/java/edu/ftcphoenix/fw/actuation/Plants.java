@@ -130,6 +130,12 @@ public final class Plants {
         }
 
         @Override
+        public boolean hasFeedback() {
+            // Power plants do not have any feedback.
+            return false;
+        }
+
+        @Override
         public String toString() {
             return "PowerPlant{target=" + target + "}";
         }
@@ -176,6 +182,12 @@ public final class Plants {
         public boolean atSetpoint() {
             // Power plants do not have a meaningful setpoint notion.
             return true;
+        }
+
+        @Override
+        public boolean hasFeedback() {
+            // Power plants do not have any feedback.
+            return false;
         }
 
         @Override
@@ -279,6 +291,12 @@ public final class Plants {
         }
 
         @Override
+        public boolean hasFeedback() {
+            // Position servo plants do not have any feedback.
+            return false;
+        }
+
+        @Override
         public String toString() {
             return "PositionPlant{target=" + target + "}";
         }
@@ -325,6 +343,12 @@ public final class Plants {
         public boolean atSetpoint() {
             // Open-loop set-and-hold: treat "commanded" as "reached".
             return true;
+        }
+
+        @Override
+        public boolean hasFeedback() {
+            // Position servo plants do not have any feedback.
+            return false;
         }
 
         @Override

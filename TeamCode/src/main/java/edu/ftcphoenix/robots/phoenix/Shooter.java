@@ -59,23 +59,23 @@ public class Shooter {
     public Shooter(HardwareMap hardwareMap, Telemetry telemetry, Gamepads gamepads) {
         plantPusher = Actuators.plant(hardwareMap)
                 .servo(RobotConfig.Shooter.nameServoPusher,
-                        RobotConfig.Shooter.invertServoPusher)
+                        RobotConfig.Shooter.directionServoPusher)
                 .position()
                 .build();
 
         plantTransfer = Actuators.plant(hardwareMap)
                 .crServoPair(RobotConfig.Shooter.nameCrServoTransferLeft,
-                        RobotConfig.Shooter.invertServoTransferLeft,
+                        RobotConfig.Shooter.directionServoTransferLeft,
                         RobotConfig.Shooter.nameCrServoTransferRight,
-                        RobotConfig.Shooter.invertServoTransferRight)
+                        RobotConfig.Shooter.directionServoTransferRight)
                 .power()
                 .build();
 
         plantShooter = Actuators.plant(hardwareMap)
                 .motorPair(RobotConfig.Shooter.nameMotorShooterLeft,
-                        RobotConfig.Shooter.invertMotorShooterLeft,
+                        RobotConfig.Shooter.directionMotorShooterLeft,
                         RobotConfig.Shooter.nameMotorShooterRight,
-                        RobotConfig.Shooter.invertMotorShooterRight)
+                        RobotConfig.Shooter.directionMotorShooterRight)
                 .velocity(50)
                 .build();
 

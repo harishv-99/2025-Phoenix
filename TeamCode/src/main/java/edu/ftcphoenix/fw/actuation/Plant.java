@@ -125,16 +125,10 @@ public interface Plant {
      * and callers should prefer time-based completion instead of relying on
      * {@link #atSetpoint()}.</p>
      *
-     * <p>The default implementation returns {@code false}. Implementations
-     * that override {@link #atSetpoint()} with a sensor-based definition
-     * should also override this to return {@code true}.</p>
-     *
      * @return {@code true} if this plant exposes a meaningful
      *         {@link #atSetpoint()} value; {@code false} otherwise
      */
-    default boolean hasFeedback() {
-        return false;
-    }
+    boolean hasFeedback();
 
     /**
      * Optional debug hook: emit a compact summary of this plant's state.

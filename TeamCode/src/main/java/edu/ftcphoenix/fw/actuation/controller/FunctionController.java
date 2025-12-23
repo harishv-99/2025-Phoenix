@@ -19,7 +19,10 @@ import edu.ftcphoenix.fw.actuation.Plant;
  * // Lookup/interpolation (user-provided):
  * DoubleUnaryOperator distanceToRadPerSec = dMeters -> shooterTable.lookup(dMeters);
  *
- * Plant shooterPlant = FtcPlants.motorVelocity(hw, "shooter", false, TICKS_PER_REV);
+ * Plant shooterPlant = Actuators.plant(hw)
+ *         .motor("shooter", Direction.FORWARD)
+ *         .velocity()
+ *         .build();
  *
  * FunctionController shooterAutoVel =
  *     new FunctionController(shooterPlant, distanceMeters, distanceToRadPerSec);

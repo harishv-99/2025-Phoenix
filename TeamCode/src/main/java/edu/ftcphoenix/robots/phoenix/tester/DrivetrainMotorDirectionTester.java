@@ -60,25 +60,25 @@ public final class DrivetrainMotorDirectionTester extends BaseTeleOpTester {
         // Build drivetrain motor plants (open-loop power).
         plantFL = Actuators.plant(ctx.hw)
                 .motor(RobotConfig.DriveTrain.nameMotorFrontLeft,
-                        RobotConfig.DriveTrain.invertMotorFrontLeft)
+                        RobotConfig.DriveTrain.directionMotorFrontLeft)
                 .power()
                 .build();
 
         plantFR = Actuators.plant(ctx.hw)
                 .motor(RobotConfig.DriveTrain.nameMotorFrontRight,
-                        RobotConfig.DriveTrain.invertMotorFrontRight)
+                        RobotConfig.DriveTrain.directionMotorFrontRight)
                 .power()
                 .build();
 
         plantBL = Actuators.plant(ctx.hw)
                 .motor(RobotConfig.DriveTrain.nameMotorBackLeft,
-                        RobotConfig.DriveTrain.invertMotorBackLeft)
+                        RobotConfig.DriveTrain.directionMotorBackLeft)
                 .power()
                 .build();
 
         plantBR = Actuators.plant(ctx.hw)
                 .motor(RobotConfig.DriveTrain.nameMotorBackRight,
-                        RobotConfig.DriveTrain.invertMotorBackRight)
+                        RobotConfig.DriveTrain.directionMotorBackRight)
                 .power()
                 .build();
 

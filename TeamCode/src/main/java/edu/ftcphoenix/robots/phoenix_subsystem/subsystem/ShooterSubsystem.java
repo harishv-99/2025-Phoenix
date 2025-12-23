@@ -2,6 +2,7 @@ package edu.ftcphoenix.robots.phoenix_subsystem.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.input.Gamepads;
@@ -71,21 +72,21 @@ public final class ShooterSubsystem implements Subsystem {
 
         // Pusher positional servo
         this.pusher = Actuators.plant(hw)
-                .servo(HW_PUSHER, false)
+                .servo(HW_PUSHER, Direction.FORWARD)
                 .position()
                 .build();
 
         // Feeder CR servos as motors
         this.feeder = Actuators.plant(hw)
-                .crServoPair(HW_FEED_LEFT, false,
-                    HW_FEED_RIGHT, false)
+                .crServoPair(HW_FEED_LEFT, Direction.FORWARD,
+                    HW_FEED_RIGHT, Direction.FORWARD)
                 .power()
                 .build();
 
         // Shooter dual-velocity plant (rad/s target).
         this.shooterPlant = Actuators.plant(hw)
-                .motorPair(HW_SHOOT_LEFT, false,
-                        HW_SHOOT_RIGHT, true)
+                .motorPair(HW_SHOOT_LEFT, Direction.FORWARD,
+                        HW_SHOOT_RIGHT, Direction.REVERSE)
                 .power()
                 .build();
 

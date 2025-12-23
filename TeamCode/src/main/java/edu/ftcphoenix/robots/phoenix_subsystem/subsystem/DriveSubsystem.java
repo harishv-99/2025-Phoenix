@@ -3,6 +3,7 @@ package edu.ftcphoenix.robots.phoenix_subsystem.subsystem;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
@@ -47,10 +48,10 @@ public final class DriveSubsystem implements Subsystem {
         // → FL, FR, BR inverted; BL not inverted.
         this.drivebase = Drives.mecanum(
                 hw,
-                /* invertFrontLeft  */ true,
-                /* invertFrontRight */ true,
-                /* invertBackLeft   */ false,
-                /* invertBackRight  */ true,
+                /* invertFrontLeft  */ Direction.REVERSE,
+                /* invertFrontRight */ Direction.REVERSE,
+                /* invertBackLeft   */ Direction.FORWARD,
+                /* invertBackRight  */ Direction.REVERSE,
                 driveCfg
         );
 

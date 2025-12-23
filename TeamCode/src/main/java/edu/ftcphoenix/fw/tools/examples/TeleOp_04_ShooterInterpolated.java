@@ -9,6 +9,7 @@ import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
@@ -190,8 +191,8 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
 
         // 3) Shooter wiring using Actuators
         shooter = Actuators.plant(hardwareMap)
-                .motorPair(HW_SHOOTER_LEFT, false,
-                        HW_SHOOTER_RIGHT, true)
+                .motorPair(HW_SHOOTER_LEFT, Direction.FORWARD,
+                        HW_SHOOTER_RIGHT, Direction.REVERSE)
                 .velocity(/*toleranceNative=*/100.0)
                 .build();
 

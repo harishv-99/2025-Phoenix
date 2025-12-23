@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
@@ -148,10 +149,10 @@ public final class Phoenix4 extends OpMode {
         //   - Uses the default MecanumConfig.
         MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
         drivebase = Drives.mecanum(hardwareMap,
-                RobotConfig.DriveTrain.invertMotorFrontLeft,
-                RobotConfig.DriveTrain.invertMotorFrontRight,
-                RobotConfig.DriveTrain.invertMotorBackLeft,
-                RobotConfig.DriveTrain.invertMotorBackRight,
+                RobotConfig.DriveTrain.directionMotorFrontLeft,
+                RobotConfig.DriveTrain.directionMotorFrontRight,
+                RobotConfig.DriveTrain.directionMotorBackLeft,
+                RobotConfig.DriveTrain.directionMotorBackRight,
                 mecanumConfig);
 
         // 3) Use the standard TeleOp stick mapping for mecanum.
