@@ -61,11 +61,13 @@ public final class SimpleTagLayout implements TagLayout {
         return layout;
     }
 
+    /** {@inheritDoc} */
     @Override
     public TagPose get(int id) {
         return byId.get(id);
     }
 
+    /** {@inheritDoc} */
     @Override
     public Set<Integer> ids() {
         return Collections.unmodifiableSet(byId.keySet());
@@ -177,6 +179,7 @@ public final class SimpleTagLayout implements TagLayout {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         return "SimpleTagLayout{ids=" + ids() + "}";

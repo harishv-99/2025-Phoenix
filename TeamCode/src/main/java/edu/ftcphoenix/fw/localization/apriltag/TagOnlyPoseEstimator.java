@@ -117,6 +117,7 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
         this.lastEstimate = PoseEstimate.noPose(0.0);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(LoopClock clock) {
         Objects.requireNonNull(clock, "clock");
@@ -175,6 +176,7 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
         this.lastEstimate = estimate;
     }
 
+    /** {@inheritDoc} */
     @Override
     public PoseEstimate getEstimate() {
         return lastEstimate;

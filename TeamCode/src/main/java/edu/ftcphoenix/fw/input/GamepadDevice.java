@@ -140,6 +140,16 @@ public final class GamepadDevice {
     private final Button back;
     private final Button start;
 
+    /**
+     * Create a {@link GamepadDevice} wrapper around an FTC {@link Gamepad}.
+     *
+     * <p>The constructor calls {@link #calibrate()} automatically, treating the current stick/trigger
+     * positions as neutral. In most robots, you will construct this in {@code init()} and then call
+     * {@link #calibrate()} again only if a controller starts drifting.</p>
+     *
+     * @param gp FTC SDK gamepad instance (for example {@code gamepad1} or {@code gamepad2})
+     * @throws NullPointerException if {@code gp} is {@code null}
+     */
     public GamepadDevice(Gamepad gp) {
         this.gp = gp;
 
@@ -331,18 +341,38 @@ public final class GamepadDevice {
     // Public API: buttons
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * The A button.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button a() {
         return a;
     }
 
+    /**
+     * The B button.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button b() {
         return b;
     }
 
+    /**
+     * The X button.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button x() {
         return x;
     }
 
+    /**
+     * The Y button.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button y() {
         return y;
     }
@@ -375,18 +405,38 @@ public final class GamepadDevice {
         return rightBumper;
     }
 
+    /**
+     * D-pad up.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button dpadUp() {
         return dpadUp;
     }
 
+    /**
+     * D-pad down.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button dpadDown() {
         return dpadDown;
     }
 
+    /**
+     * D-pad left.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button dpadLeft() {
         return dpadLeft;
     }
 
+    /**
+     * D-pad right.
+     *
+     * @return a {@link Button} with edge detection
+     */
     public Button dpadRight() {
         return dpadRight;
     }
@@ -439,7 +489,9 @@ public final class GamepadDevice {
     }
 
     /**
-     * Returns the current axis deadband.
+     * Return the current axis deadband.
+     *
+     * @return deadband threshold in {@code [0.0, 1.0]}
      */
     public double axisDeadband() {
         return axisDeadband;

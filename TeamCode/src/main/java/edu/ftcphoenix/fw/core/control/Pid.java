@@ -147,6 +147,7 @@ public final class Pid implements PidController {
         return this;
     }
 
+    /** {@inheritDoc} */
     @Override
     public double update(double error, double dtSec) {
         if (dtSec <= 0.0) {
@@ -184,6 +185,7 @@ public final class Pid implements PidController {
         return output;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void reset() {
         integral = 0.0;

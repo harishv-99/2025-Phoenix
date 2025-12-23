@@ -180,11 +180,13 @@ public final class CameraMountConfig {
                 .addData(p + ".rollRad", rollRad());
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         return "CameraMountConfig{robotToCamera=" + robotToCamera + "}";
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof CameraMountConfig)) return false;
@@ -192,6 +194,7 @@ public final class CameraMountConfig {
         return robotToCamera.equals(other.robotToCamera);
     }
 
+    /** {@inheritDoc} */
     @Override
     public int hashCode() {
         return robotToCamera.hashCode();

@@ -230,6 +230,7 @@ public final class AprilTagObservation {
         return Math.sqrt(f * f + l * l + u * u);
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         if (!hasTarget) {

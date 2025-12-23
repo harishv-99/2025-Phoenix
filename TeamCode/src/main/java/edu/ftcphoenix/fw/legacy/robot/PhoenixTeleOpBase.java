@@ -83,6 +83,7 @@ public abstract class PhoenixTeleOpBase extends OpMode {
     // OpMode lifecycle
     // --------------------------------------------------------------------
 
+    /** {@inheritDoc} */
     @Override
     public final void init() {
         // Core input plumbing
@@ -97,6 +98,7 @@ public abstract class PhoenixTeleOpBase extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public final void start() {
         // Reset loop clock at the moment start() is called
@@ -104,6 +106,7 @@ public abstract class PhoenixTeleOpBase extends OpMode {
         onStartRobot();
     }
 
+    /** {@inheritDoc} */
     @Override
     public final void loop() {
         // 1) Update timing (exactly once per OpMode cycle)
@@ -118,6 +121,7 @@ public abstract class PhoenixTeleOpBase extends OpMode {
         onLoopRobot(dtSec);
     }
 
+    /** {@inheritDoc} */
     @Override
     public final void stop() {
         onStopRobot();

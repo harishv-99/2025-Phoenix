@@ -69,6 +69,7 @@ public final class WaitUntilTask implements Task {
         this.timeoutSec = timeoutSec;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start(LoopClock clock) {
         finished = false;
@@ -76,6 +77,7 @@ public final class WaitUntilTask implements Task {
         elapsedSec = 0.0;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(LoopClock clock) {
         if (finished) {
@@ -97,11 +99,13 @@ public final class WaitUntilTask implements Task {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean isComplete() {
         return finished;
     }
 
+    /** {@inheritDoc} */
     @Override
     public TaskOutcome getOutcome() {
         if (!finished) {

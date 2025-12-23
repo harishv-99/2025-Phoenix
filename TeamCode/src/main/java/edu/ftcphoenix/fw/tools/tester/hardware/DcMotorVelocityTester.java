@@ -72,19 +72,33 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
     private DcMotor.Direction origDir = null;
     private DcMotor.ZeroPowerBehavior origZpb = null;
 
+    /**
+     * Create a DC motor velocity tester with no preferred device name.
+     *
+     * <p>During INIT, a picker menu is shown so you can choose a configured motor.</p>
+     */
     public DcMotorVelocityTester() {
         this(null);
     }
 
+    /**
+     * Create a DC motor velocity tester with a preferred device name.
+     *
+     * <p>If {@code motorName} is null/blank or cannot be resolved, the tester will fall back to the picker menu.</p>
+     *
+     * @param motorName configured motor name in the FTC Robot Configuration (nullable)
+     */
     public DcMotorVelocityTester(String motorName) {
         this.preferredName = motorName;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "DcMotor Velocity Tester";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         picker = new HardwareNamePicker(
@@ -173,6 +187,7 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
         });
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!ready) {
@@ -182,6 +197,7 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
         updateAndRender(dtSec);
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (!ready) {
@@ -191,6 +207,7 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
         updateAndRender(dtSec);
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStop() {
         stopMotorNow();

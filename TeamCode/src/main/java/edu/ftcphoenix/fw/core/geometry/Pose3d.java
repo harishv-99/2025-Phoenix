@@ -202,6 +202,7 @@ public final class Pose3d {
         return new Pose3d(xInches, yInches, zInches, yawRad, pitchRad, rollRad);
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         return "Pose3d{"
@@ -214,6 +215,7 @@ public final class Pose3d {
                 + '}';
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Pose3d)) return false;
@@ -226,6 +228,7 @@ public final class Pose3d {
                 && Double.compare(rollRad, other.rollRad) == 0;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int hashCode() {
         return Objects.hash(xInches, yInches, zInches, yawRad, pitchRad, rollRad);

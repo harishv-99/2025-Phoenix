@@ -59,12 +59,17 @@ public final class IntTuner {
     private double axisCarry = 0.0;
 
     /**
-     * @param label         display label (e.g., "TargetTicks")
-     * @param min           minimum target (inclusive)
-     * @param max           maximum target (inclusive)
-     * @param fineStep      fine step increment
-     * @param coarseStep    coarse step increment
-     * @param initialTarget initial target (clamped)
+     * Create an integer tuner.
+     *
+     * <p>An {@code IntTuner} is a small helper for TeleOp test screens where you want to adjust an
+     * integer target (like encoder ticks) using gamepad buttons/axes.</p>
+     *
+     * @param label display label used in telemetry (for example {@code "TargetTicks"})
+     * @param min minimum target value (inclusive)
+     * @param max maximum target value (inclusive)
+     * @param fineStep increment used in fine mode (absolute value; must be {@code >= 1})
+     * @param coarseStep increment used in coarse mode (absolute value; must be {@code >= 1})
+     * @param initialTarget initial target value (will be clamped into {@code [min, max]})
      */
     public IntTuner(String label,
                     int min,
@@ -98,7 +103,14 @@ public final class IntTuner {
     // Configuration
     // ---------------------------------------------------------------------------------------------
 
-    /** If enable is not supported, this tuner is always considered enabled. */
+    /**
+     * Enable/disable support for the "enabled" toggle.
+     *
+     * <p>If enable is not supported, the tuner is always considered enabled.</p>
+     *
+     * @param supported whether this tuner should expose an enable/disable toggle
+     * @return this tuner for chaining
+     */
     public IntTuner setEnableSupported(boolean supported) {
         this.enabledSupported = supported;
         if (!supported) {
@@ -107,7 +119,12 @@ public final class IntTuner {
         return this;
     }
 
-    /** Value returned by {@link #applied()} when disabled. */
+    /**
+     * Set the value returned by {@link #applied()} when the tuner is disabled.
+     *
+     * @param value disabled output value (will be clamped into {@code [min, max]})
+     * @return this tuner for chaining
+     */
     public IntTuner setDisabledValue(int value) {
         this.disabledValue = MathUtil.clamp(value, min, max);
         return this;
@@ -143,42 +160,84 @@ public final class IntTuner {
     // State access
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * Return whether this tuner is currently enabled.
+     *
+     * <p>If enable support is disabled via {@link #setEnableSupported(boolean)}, this always returns {@code true}.</p>
+     *
+     * @return {@code true} if enabled
+     */
     public boolean isEnabled() {
         return enabledSupported ? enabled : true;
     }
 
+    /**
+     * Return whether the tuner is currently in fine step mode.
+     *
+     * @return {@code true} if in fine mode, {@code false} if in coarse mode
+     */
     public boolean isFine() {
         return fine;
     }
 
+    /**
+     * Return the current raw target value.
+     *
+     * @return current target (clamped into {@code [min, max]})
+     */
     public int target() {
         return target;
     }
 
+    /**
+     * Return the current step size (fine or coarse).
+     *
+     * @return current step increment (always {@code >= 1})
+     */
     public int step() {
         return fine ? fineStep : coarseStep;
     }
 
+    /**
+     * Set the raw target value.
+     *
+     * @param target new target value (will be clamped into {@code [min, max]})
+     */
     public void setTarget(int target) {
         this.target = MathUtil.clamp(target, min, max);
     }
 
+    /**
+     * Increase the target by the current step size.
+     */
     public void inc() {
         setTarget(target + step());
     }
 
+    /**
+     * Decrease the target by the current step size.
+     */
     public void dec() {
         setTarget(target - step());
     }
 
+    /**
+     * Set the target to the configured disabled value (convenient "zero"/reset button).
+     */
     public void zero() {
         setTarget(disabledValue);
     }
 
+    /**
+     * Toggle between fine and coarse step sizes.
+     */
     public void toggleFine() {
         fine = !fine;
     }
 
+    /**
+     * Toggle the enabled state (only if enable support is enabled).
+     */
     public void toggleEnabled() {
         if (!enabledSupported) return;
         enabled = !enabled;
@@ -188,6 +247,14 @@ public final class IntTuner {
      * Apply the enabled gate to the target (if you use enabled semantics).
      * If you don't want enabled semantics, call {@link #setEnableSupported(boolean)} with false.
      */
+    /**
+     * Return the value you should apply to the system under test.
+     *
+     * <p>If enabled support is active and the tuner is disabled, this returns the configured
+     * disabled value. Otherwise it returns {@link #target()}.</p>
+     *
+     * @return applied output value
+     */
     public int applied() {
         return isEnabled() ? target : disabledValue;
     }
@@ -195,8 +262,8 @@ public final class IntTuner {
     /**
      * Update the target from the attached axis nudge, if configured.
      *
-     * @param dtSec  time since last loop (seconds)
-     * @param active gate; if false, axis nudge is ignored
+     * @param dtSec time since last loop (seconds)
+     * @param active optional gate; if provided and it returns {@code false}, axis nudge is ignored
      */
     public void updateFromAxis(double dtSec, BooleanSupplier active) {
         if (axis == null) return;
@@ -231,10 +298,18 @@ public final class IntTuner {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * Bind a standard set of controls.
+     * Bind a standard set of controls to manipulate this tuner.
      *
      * <p>All actions are gated by {@code active}. Pass something like {@code () -> ready}
-     * so picker/menu inputs don't conflict.</p>
+     * so menu inputs don't conflict with your test controls.</p>
+     *
+     * @param bindings bindings registry to attach to
+     * @param enableToggle button that toggles enabled/disabled (nullable)
+     * @param fineToggle button that toggles fine/coarse (nullable)
+     * @param incButton button that increments the target (nullable)
+     * @param decButton button that decrements the target (nullable)
+     * @param zeroButton button that resets to the disabled value (nullable)
+     * @param active optional gating predicate; if null, actions are always allowed
      */
     public void bind(Bindings bindings,
                      Button enableToggle,
@@ -286,6 +361,11 @@ public final class IntTuner {
     // Telemetry
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * Render this tuner's current state into FTC {@link Telemetry}.
+     *
+     * @param t telemetry sink
+     */
     public void render(Telemetry t) {
         t.addLine(String.format(Locale.US,
                 "%s: target=%d applied=%d range=[%d, %d]",

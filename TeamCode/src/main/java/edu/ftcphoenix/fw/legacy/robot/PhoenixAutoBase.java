@@ -53,6 +53,7 @@ public abstract class PhoenixAutoBase extends LinearOpMode {
 
     private LoopClock clock;
 
+    /** {@inheritDoc} */
     @Override
     public final void runOpMode() throws InterruptedException {
         // Basic clock wiring; subclasses can use clock() if they want dt.

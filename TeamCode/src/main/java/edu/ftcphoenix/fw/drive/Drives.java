@@ -75,24 +75,16 @@ public final class Drives {
     // Standard mecanum motor name constants
     // ======================================================================
 
-    /**
-     * Default front-left motor name used by {@link #mecanum(HardwareMap)} helpers.
-     */
+    /** Default front-left motor name used by {@link #mecanum(HardwareMap)} helpers. */
     public static final String DEFAULT_FRONT_LEFT_MOTOR_NAME = "frontLeftMotor";
 
-    /**
-     * Default front-right motor name used by {@link #mecanum(HardwareMap)} helpers.
-     */
+    /** Default front-right motor name used by {@link #mecanum(HardwareMap)} helpers. */
     public static final String DEFAULT_FRONT_RIGHT_MOTOR_NAME = "frontRightMotor";
 
-    /**
-     * Default back-left motor name used by {@link #mecanum(HardwareMap)} helpers.
-     */
+    /** Default back-left motor name used by {@link #mecanum(HardwareMap)} helpers. */
     public static final String DEFAULT_BACK_LEFT_MOTOR_NAME = "backLeftMotor";
 
-    /**
-     * Default back-right motor name used by {@link #mecanum(HardwareMap)} helpers.
-     */
+    /** Default back-right motor name used by {@link #mecanum(HardwareMap)} helpers. */
     public static final String DEFAULT_BACK_RIGHT_MOTOR_NAME = "backRightMotor";
 
     // ======================================================================
@@ -100,8 +92,10 @@ public final class Drives {
     // ======================================================================
 
     /**
-     * Create a mecanum drivebase using the <b>standard motor names</b> and a
-     * typical direction pattern, with {@link MecanumDrivebase.Config#defaults()}.
+     * Create a mecanum drivebase using the <b>standard motor names</b> and a typical direction pattern.
+     *
+     * <p>This overload uses {@link MecanumDrivebase.Config#defaults()} and the conventional
+     * left/right direction pairing:</p>
      *
      * <ul>
      *   <li>{@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}:  {@link Direction#FORWARD}</li>
@@ -110,7 +104,9 @@ public final class Drives {
      *   <li>{@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}:  {@link Direction#REVERSE}</li>
      * </ul>
      *
-     * @param hw FTC hardware map
+     * @param hw FTC {@link HardwareMap} used to look up configured motors
+     * @return a new {@link MecanumDrivebase} wired to the four configured motors
+     * @throws IllegalArgumentException if {@code hw} is {@code null}
      */
     public static MecanumDrivebase mecanum(HardwareMap hw) {
         return mecanum(
@@ -124,8 +120,17 @@ public final class Drives {
     }
 
     /**
-     * Create a mecanum drivebase using the <b>standard motor names</b>, but with explicit
-     * {@link Direction} values for each motor, and {@link MecanumDrivebase.Config#defaults()}.
+     * Create a mecanum drivebase using the <b>standard motor names</b>, but explicit directions.
+     *
+     * <p>This overload still uses {@link MecanumDrivebase.Config#defaults()}.</p>
+     *
+     * @param hw FTC {@link HardwareMap} used to look up configured motors
+     * @param frontLeftDirection logical direction for {@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}
+     * @param frontRightDirection logical direction for {@link #DEFAULT_FRONT_RIGHT_MOTOR_NAME}
+     * @param backLeftDirection logical direction for {@link #DEFAULT_BACK_LEFT_MOTOR_NAME}
+     * @param backRightDirection logical direction for {@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}
+     * @return a new {@link MecanumDrivebase} wired to the four configured motors
+     * @throws IllegalArgumentException if any argument is {@code null}
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
                                            Direction frontLeftDirection,
@@ -143,8 +148,21 @@ public final class Drives {
     }
 
     /**
-     * Create a mecanum drivebase with <b>custom motor names</b> and directions,
-     * using {@link MecanumDrivebase.Config#defaults()}.
+     * Create a mecanum drivebase using <b>custom motor names</b> and directions.
+     *
+     * <p>This overload uses {@link MecanumDrivebase.Config#defaults()}.</p>
+     *
+     * @param hw FTC {@link HardwareMap} used to look up configured motors
+     * @param flName configured device name for the front-left motor
+     * @param flDirection logical direction for the front-left motor
+     * @param frName configured device name for the front-right motor
+     * @param frDirection logical direction for the front-right motor
+     * @param blName configured device name for the back-left motor
+     * @param blDirection logical direction for the back-left motor
+     * @param brName configured device name for the back-right motor
+     * @param brDirection logical direction for the back-right motor
+     * @return a new {@link MecanumDrivebase} wired to the four configured motors
+     * @throws IllegalArgumentException if {@code hw} is {@code null}, any name is {@code null}, or any direction is {@code null}
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
                                            String flName, Direction flDirection,
@@ -166,8 +184,15 @@ public final class Drives {
     // ------------------------------------------------------------------
 
     /**
-     * Create a mecanum drivebase using standard names, default directions,
-     * and a custom {@link MecanumDrivebase.Config}.
+     * Create a mecanum drivebase using standard motor names, default directions, and a custom config.
+     *
+     * <p>This is the easiest way to enable optional tuning (for example, drive rate limiting)
+     * while still using the standard wiring assumptions.</p>
+     *
+     * @param hw FTC {@link HardwareMap} used to look up configured motors
+     * @param config configuration/tuning for the drivebase; if {@code null}, defaults are used
+     * @return a new {@link MecanumDrivebase} wired to the standard four motors
+     * @throws IllegalArgumentException if {@code hw} is {@code null}
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
                                            MecanumDrivebase.Config config) {
@@ -182,8 +207,16 @@ public final class Drives {
     }
 
     /**
-     * Create a mecanum drivebase using standard names, explicit directions,
-     * and a custom {@link MecanumDrivebase.Config}.
+     * Create a mecanum drivebase using standard motor names, explicit directions, and a custom config.
+     *
+     * @param hw FTC {@link HardwareMap} used to look up configured motors
+     * @param frontLeftDirection logical direction for {@link #DEFAULT_FRONT_LEFT_MOTOR_NAME}
+     * @param frontRightDirection logical direction for {@link #DEFAULT_FRONT_RIGHT_MOTOR_NAME}
+     * @param backLeftDirection logical direction for {@link #DEFAULT_BACK_LEFT_MOTOR_NAME}
+     * @param backRightDirection logical direction for {@link #DEFAULT_BACK_RIGHT_MOTOR_NAME}
+     * @param config configuration/tuning for the drivebase; if {@code null}, defaults are used
+     * @return a new {@link MecanumDrivebase} wired to the standard four motors
+     * @throws IllegalArgumentException if {@code hw} is {@code null} or any direction is {@code null}
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
                                            Direction frontLeftDirection,
@@ -202,7 +235,27 @@ public final class Drives {
     }
 
     /**
-     * Create a mecanum drivebase with custom names, directions, and config.
+     * Create a mecanum drivebase with custom motor names, directions, and config.
+     *
+     * <p>This is the most general mecanum factory in {@link Drives}. It is useful when:</p>
+     * <ul>
+     *   <li>Your robot uses non-standard motor names in the FTC Robot Configuration.</li>
+     *   <li>You want full control over motor directions.</li>
+     *   <li>You want to pass a custom {@link MecanumDrivebase.Config} (or {@code null} to use defaults).</li>
+     * </ul>
+     *
+     * @param hw FTC {@link HardwareMap} used to look up configured motors
+     * @param flName configured device name for the front-left motor
+     * @param flDirection logical direction for the front-left motor
+     * @param frName configured device name for the front-right motor
+     * @param frDirection logical direction for the front-right motor
+     * @param blName configured device name for the back-left motor
+     * @param blDirection logical direction for the back-left motor
+     * @param brName configured device name for the back-right motor
+     * @param brDirection logical direction for the back-right motor
+     * @param config configuration/tuning for the drivebase; if {@code null}, defaults are used
+     * @return a new {@link MecanumDrivebase}
+     * @throws IllegalArgumentException if {@code hw} is {@code null}, any name is {@code null}, or any direction is {@code null}
      */
     public static MecanumDrivebase mecanum(HardwareMap hw,
                                            String flName, Direction flDirection,

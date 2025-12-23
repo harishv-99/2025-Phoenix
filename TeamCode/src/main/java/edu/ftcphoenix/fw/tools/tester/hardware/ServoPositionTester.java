@@ -50,19 +50,33 @@ public final class ServoPositionTester extends BaseTeleOpTester {
                     // Disabled means "don't move it anymore" (hold last applied).
                     .setDisabledBehavior(ScalarTuner.DisabledBehavior.HOLD_LAST_APPLIED);
 
+    /**
+     * Create a servo position tester with no preferred device name.
+     *
+     * <p>During INIT, a picker menu is shown so you can choose a configured servo.</p>
+     */
     public ServoPositionTester() {
         this(null);
     }
 
+    /**
+     * Create a servo position tester with a preferred device name.
+     *
+     * <p>If {@code servoName} is null/blank or cannot be resolved, the tester will fall back to the picker menu.</p>
+     *
+     * @param servoName configured servo name in the FTC Robot Configuration (nullable)
+     */
     public ServoPositionTester(String servoName) {
         this.preferredName = servoName;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "Servo Position Tester";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         picker = new HardwareNamePicker(
@@ -114,6 +128,7 @@ public final class ServoPositionTester extends BaseTeleOpTester {
         });
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!ready) {
@@ -123,6 +138,7 @@ public final class ServoPositionTester extends BaseTeleOpTester {
         updateAndRender();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (!ready) {
@@ -132,6 +148,7 @@ public final class ServoPositionTester extends BaseTeleOpTester {
         updateAndRender();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStop() {
         // Leave servo at whatever it was last commanded to.

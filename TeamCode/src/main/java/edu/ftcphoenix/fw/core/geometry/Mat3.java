@@ -182,12 +182,20 @@ public final class Mat3 {
         public final double pitchRad;
         public final double rollRad;
 
+        /**
+         * Construct a yaw/pitch/roll triple.
+         *
+         * @param yawRad yaw angle in radians (CCW-positive)
+         * @param pitchRad pitch angle in radians
+         * @param rollRad roll angle in radians
+         */
         public YawPitchRoll(double yawRad, double pitchRad, double rollRad) {
             this.yawRad = yawRad;
             this.pitchRad = pitchRad;
             this.rollRad = rollRad;
         }
 
+        /** {@inheritDoc} */
         @Override
         public String toString() {
             return "YawPitchRoll{yawRad=" + yawRad + ", pitchRad=" + pitchRad + ", rollRad=" + rollRad + "}";
@@ -200,6 +208,7 @@ public final class Mat3 {
         return v;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         return "Mat3{" +
@@ -209,6 +218,7 @@ public final class Mat3 {
                 '}';
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Mat3)) return false;
@@ -224,6 +234,7 @@ public final class Mat3 {
                 && Double.compare(m22, other.m22) == 0;
     }
 
+    /** {@inheritDoc} */
     @Override
     public int hashCode() {
         return Objects.hash(m00, m01, m02, m10, m11, m12, m20, m21, m22);

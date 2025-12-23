@@ -225,11 +225,13 @@ public interface TagLayout {
             return fieldToTag.rollRad;
         }
 
+        /** {@inheritDoc} */
         @Override
         public String toString() {
             return "TagPose{id=" + id + ", fieldToTag=" + fieldToTag + "}";
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean equals(Object o) {
             if (!(o instanceof TagPose)) return false;
@@ -237,6 +239,7 @@ public interface TagLayout {
             return id == other.id && fieldToTag.equals(other.fieldToTag);
         }
 
+        /** {@inheritDoc} */
         @Override
         public int hashCode() {
             return Objects.hash(id, fieldToTag);

@@ -49,19 +49,33 @@ public final class DcMotorPowerTester extends BaseTeleOpTester {
     private final ScalarTuner power =
             new ScalarTuner("Power", -1.0, +1.0, 0.05, 0.20, 0.0);
 
+    /**
+     * Create a DC motor power tester with no preferred device name.
+     *
+     * <p>During INIT, a picker menu is shown so you can choose a configured motor.</p>
+     */
     public DcMotorPowerTester() {
         this(null);
     }
 
+    /**
+     * Create a DC motor power tester with a preferred device name.
+     *
+     * <p>If {@code motorName} is null/blank or cannot be resolved, the tester will fall back to the picker menu.</p>
+     *
+     * @param motorName configured motor name in the FTC Robot Configuration (nullable)
+     */
     public DcMotorPowerTester(String motorName) {
         this.preferredName = motorName;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "DcMotor Power Tester";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         picker = new HardwareNamePicker(
@@ -130,6 +144,7 @@ public final class DcMotorPowerTester extends BaseTeleOpTester {
         });
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!ready) {
@@ -139,6 +154,7 @@ public final class DcMotorPowerTester extends BaseTeleOpTester {
         updateAndRender();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (!ready) {
@@ -148,6 +164,7 @@ public final class DcMotorPowerTester extends BaseTeleOpTester {
         updateAndRender();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStop() {
         applyPower(0.0);

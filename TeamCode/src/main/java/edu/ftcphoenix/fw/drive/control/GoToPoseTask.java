@@ -116,6 +116,7 @@ public final class GoToPoseTask implements Task {
         this.cfg = Objects.requireNonNull(cfg, "cfg");
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start(LoopClock clock) {
         started = true;
@@ -130,6 +131,7 @@ public final class GoToPoseTask implements Task {
         drivebase.stop();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(LoopClock clock) {
         if (finished) {
@@ -205,11 +207,13 @@ public final class GoToPoseTask implements Task {
         drivebase.drive(cmd);
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean isComplete() {
         return finished;
     }
 
+    /** {@inheritDoc} */
     @Override
     public TaskOutcome getOutcome() {
         return finished ? outcome : TaskOutcome.NOT_DONE;

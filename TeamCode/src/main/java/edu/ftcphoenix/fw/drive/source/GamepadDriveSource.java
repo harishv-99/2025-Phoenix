@@ -351,6 +351,7 @@ public final class GamepadDriveSource implements DriveSource {
     // DriveSource implementation
     // ------------------------------------------------------------------------
 
+    /** {@inheritDoc} */
     @Override
     public DriveSignal get(LoopClock clock) {
         double ax = axisAxialCmd.get();

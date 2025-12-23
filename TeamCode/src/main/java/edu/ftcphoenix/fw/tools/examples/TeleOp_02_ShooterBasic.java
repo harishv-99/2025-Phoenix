@@ -40,8 +40,8 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  *   <li><b>How to wire mechanisms using beginner helpers</b>:
  *     <ul>
  *       <li>{@link Actuators#plant} to turn hardware into {@link Plant}s.</li>
- *       <li>{@code motorPair(...).velocity(...).build()} for the shooter.</li>
- *       <li>{@code crServoPair(...).power().build()} for the transfer.</li>
+ *       <li>{@code motor(...).andMotor(...).velocity(...).build()} for the shooter.</li>
+ *       <li>{@code crServo(...).andCrServo(...).power().build()} for the transfer.</li>
  *       <li>{@code servo(...).position().build()} for the pusher.</li>
  *     </ul>
  *   </li>
@@ -239,6 +239,7 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
     // OpMode lifecycle
     // ----------------------------------------------------------------------
 
+    /** {@inheritDoc} */
     @Override
     public void init() {
         // === 1) Inputs ===
@@ -253,15 +254,15 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
 
         // Shooter: two motors, velocity-controlled pair.
         shooter = Actuators.plant(hardwareMap)
-                .motorPair(HW_SHOOTER_LEFT, Direction.FORWARD,
-                        HW_SHOOTER_RIGHT, Direction.REVERSE)
+                .motor(HW_SHOOTER_LEFT, Direction.FORWARD)
+                .andMotor(HW_SHOOTER_RIGHT, Direction.REVERSE)
                 .velocity(SHOOTER_VELOCITY_TOLERANCE_NATIVE)
                 .build();
 
         // Transfer: two CR servos, power-controlled pair.
         transfer = Actuators.plant(hardwareMap)
-                .crServoPair(HW_TRANSFER_LEFT, Direction.FORWARD,
-                        HW_TRANSFER_RIGHT, Direction.REVERSE)
+                .crServo(HW_TRANSFER_LEFT, Direction.FORWARD)
+                .andCrServo(HW_TRANSFER_RIGHT, Direction.REVERSE)
                 .power()
                 .build();
 
@@ -315,11 +316,13 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
+    /** {@inheritDoc} */
     @Override
     public void loop() {
         // --- 1) Clock ---
@@ -393,6 +396,7 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void stop() {
         // Safely stop mechanisms and drive.

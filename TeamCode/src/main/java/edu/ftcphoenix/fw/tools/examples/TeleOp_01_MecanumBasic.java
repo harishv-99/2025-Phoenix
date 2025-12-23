@@ -42,6 +42,7 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
 
     private DriveSignal lastDrive = DriveSignal.zero();
 
+    /** {@inheritDoc} */
     @Override
     public void init() {
         clock.reset(getRuntime());
@@ -55,11 +56,13 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
+    /** {@inheritDoc} */
     @Override
     public void loop() {
         // --- 1) Clock ---
@@ -85,6 +88,7 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void stop() {
         drivebase.stop();

@@ -78,15 +78,15 @@ public final class ShooterSubsystem implements Subsystem {
 
         // Feeder CR servos as motors
         this.feeder = Actuators.plant(hw)
-                .crServoPair(HW_FEED_LEFT, Direction.FORWARD,
-                    HW_FEED_RIGHT, Direction.FORWARD)
+                .crServo(HW_FEED_LEFT, Direction.FORWARD)
+                .andCrServo(HW_FEED_RIGHT, Direction.FORWARD)
                 .power()
                 .build();
 
         // Shooter dual-velocity plant (rad/s target).
         this.shooterPlant = Actuators.plant(hw)
-                .motorPair(HW_SHOOT_LEFT, Direction.FORWARD,
-                        HW_SHOOT_RIGHT, Direction.REVERSE)
+                .motor(HW_SHOOT_LEFT, Direction.FORWARD)
+                .andMotor(HW_SHOOT_RIGHT, Direction.REVERSE)
                 .power()
                 .build();
 

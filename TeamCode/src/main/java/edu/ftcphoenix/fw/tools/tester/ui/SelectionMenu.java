@@ -37,6 +37,13 @@ public final class SelectionMenu<T> {
         public final String help;
         public final T value;
 
+        /**
+         * Create a menu item.
+         *
+         * @param label display label shown in the menu
+         * @param help optional help text shown for the selected item (nullable)
+         * @param value value associated with this item (for example a factory or device name)
+         */
         public Item(String label, String help, T value) {
             this.label = label;
             this.help = help;
@@ -52,6 +59,12 @@ public final class SelectionMenu<T> {
 
     private boolean wrap = true;
 
+    /**
+     * Set the title shown at the top of the menu.
+     *
+     * @param title title string (nullable; if null, the title line will show {@code "null"})
+     * @return this menu for chaining
+     */
     public SelectionMenu<T> setTitle(String title) {
         this.title = title;
         return this;
@@ -99,33 +112,70 @@ public final class SelectionMenu<T> {
         return addItem(label, null, value);
     }
 
+    /**
+     * Return the number of items in the menu.
+     *
+     * @return item count
+     */
     public int size() {
         return items.size();
     }
 
+    /**
+     * Return whether the menu has no items.
+     *
+     * @return {@code true} if empty
+     */
     public boolean isEmpty() {
         return items.isEmpty();
     }
 
+    /**
+     * Return the currently selected index.
+     *
+     * @return selected index (0-based); if the menu is empty this will be {@code 0}
+     */
     public int selectedIndex() {
         return selected;
     }
 
+    /**
+     * Set the selected index.
+     *
+     * <p>The value is clamped into {@code [0, size-1]} (or to 0 if the menu is empty).</p>
+     *
+     * @param index desired selected index
+     */
     public void setSelectedIndex(int index) {
         selected = index;
         clampSelected();
     }
 
+    /**
+     * Return the currently selected item, or {@code null} if the menu is empty.
+     *
+     * @return selected item or {@code null}
+     */
     public Item<T> selectedItemOrNull() {
         if (items.isEmpty()) return null;
         return items.get(selected);
     }
 
+    /**
+     * Return the value of the currently selected item, or {@code null} if the menu is empty.
+     *
+     * @return selected value or {@code null}
+     */
     public T selectedValueOrNull() {
         Item<T> item = selectedItemOrNull();
         return item == null ? null : item.value;
     }
 
+    /**
+     * Move selection up by one item.
+     *
+     * <p>If {@link #setWrap(boolean)} is enabled, moving up from index 0 wraps to the end.</p>
+     */
     public void up() {
         if (items.isEmpty()) return;
         if (selected > 0) {
@@ -135,6 +185,11 @@ public final class SelectionMenu<T> {
         }
     }
 
+    /**
+     * Move selection down by one item.
+     *
+     * <p>If {@link #setWrap(boolean)} is enabled, moving down from the end wraps to 0.</p>
+     */
     public void down() {
         if (items.isEmpty()) return;
         if (selected < items.size() - 1) {

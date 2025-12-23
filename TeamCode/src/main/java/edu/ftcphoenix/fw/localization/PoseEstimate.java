@@ -147,6 +147,7 @@ public final class PoseEstimate {
         );
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         if (!hasPose) {

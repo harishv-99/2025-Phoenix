@@ -239,6 +239,7 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
         return ys.clone();
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("InterpolatingTable1D{");
@@ -260,6 +261,16 @@ public final class InterpolatingTable1D implements DoubleUnaryOperator {
         private final List<Double> xs = new ArrayList<>();
         private final List<Double> ys = new ArrayList<>();
 
+        /**
+         * Add a single (x, y) sample to the builder.
+         *
+         * <p>Points should be added in strictly increasing {@code x} order if you plan to call
+         * {@link #buildSorted()}.</p>
+         *
+         * @param x x-coordinate (independent variable)
+         * @param y y-coordinate (dependent variable)
+         * @return this builder for chaining
+         */
         public Builder add(double x, double y) {
             xs.add(x);
             ys.add(y);

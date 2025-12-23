@@ -82,6 +82,7 @@ public final class RunForSecondsTask implements Task {
         this.onFinish = onFinish;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start(LoopClock clock) {
         if (started) {
@@ -107,6 +108,7 @@ public final class RunForSecondsTask implements Task {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(LoopClock clock) {
         if (!started || finished) {
@@ -126,11 +128,13 @@ public final class RunForSecondsTask implements Task {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean isComplete() {
         return finished;
     }
 
+    /** {@inheritDoc} */
     @Override
     public TaskOutcome getOutcome() {
         if (!finished) {

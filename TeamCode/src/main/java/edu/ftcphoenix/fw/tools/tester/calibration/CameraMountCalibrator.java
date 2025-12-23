@@ -75,25 +75,48 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     private final PoseAverager avg = new PoseAverager();
 
     // Construction
+
+    /**
+     * Create a calibrator with default settings.
+     *
+     * <p>This constructor does not force a specific camera name. During INIT, the tester will
+     * present a menu of configured webcams so you can choose one.</p>
+     */
     public CameraMountCalibrator() {
         this(null, null, DEFAULT_MAX_AGE_SEC);
     }
 
+    /**
+     * Create a calibrator that prefers a specific camera name.
+     *
+     * <p>If {@code cameraName} is null/blank, the tester will fall back to the camera picker menu.</p>
+     *
+     * @param cameraName configured webcam name in the FTC Robot Configuration (nullable)
+     */
     public CameraMountCalibrator(String cameraName) {
         this(cameraName, null, DEFAULT_MAX_AGE_SEC);
     }
 
+    /**
+     * Create a calibrator with full configuration control.
+     *
+     * @param cameraName configured webcam name in the FTC Robot Configuration (nullable/blank to use picker)
+     * @param layoutOverride optional field {@link TagLayout}; if null, the current FTC game database is used
+     * @param maxAgeSec maximum age (seconds) for tag observations before they are treated as stale
+     */
     public CameraMountCalibrator(String cameraName, TagLayout layoutOverride, double maxAgeSec) {
         this.preferredCameraName = cameraName;
         this.layoutOverride = layoutOverride;
         this.maxAgeSec = maxAgeSec;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "Camera Mount Calibrator";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         // Layout
@@ -186,6 +209,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         ensureVisionReady();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!visionReady) {
@@ -196,6 +220,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         updateSolveAndTelemetry();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (!visionReady) {

@@ -23,14 +23,14 @@ All shooter examples use `Actuators.plant(hardwareMap)` to build `Plant` instanc
 import edu.ftcphoenix.fw.core.hal.Direction;
 
 Plant shooter = Actuators.plant(hardwareMap)
-        .motorPair("shooterLeftMotor",  Direction.FORWARD,
-                         "shooterRightMotor", Direction.REVERSE)
+        .motor("shooterLeftMotor", Direction.FORWARD)
+        .andMotor("shooterRightMotor", Direction.REVERSE)
         .velocity(/*toleranceNative=*/100.0)
         .build();
 
 Plant transfer = Actuators.plant(hardwareMap)
-        .crServoPair("transferLeftServo",  Direction.FORWARD,
-                         "transferRightServo", Direction.REVERSE)
+        .crServo("transferLeftServo", Direction.FORWARD)
+        .andCrServo("transferRightServo", Direction.REVERSE)
         .power()
         .build();
 

@@ -132,6 +132,7 @@ public final class Pose2d {
         return MathUtil.wrapToPi(angleRad);
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         return "Pose2d{" +

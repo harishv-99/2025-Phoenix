@@ -106,6 +106,7 @@ public final class SequenceTask implements Task {
         return new SequenceTask(list);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start(LoopClock clock) {
         started = true;
@@ -113,6 +114,7 @@ public final class SequenceTask implements Task {
         advanceToNextTask(clock);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(LoopClock clock) {
         if (!started) {
@@ -136,6 +138,7 @@ public final class SequenceTask implements Task {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean isComplete() {
         // Finished when we've advanced past the last child.

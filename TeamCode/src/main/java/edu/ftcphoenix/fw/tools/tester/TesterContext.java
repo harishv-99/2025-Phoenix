@@ -44,6 +44,15 @@ public final class TesterContext {
      */
     public final LoopClock clock;
 
+    /**
+     * Create a tester context.
+     *
+     * @param hw FTC hardware map
+     * @param telemetry FTC telemetry sink
+     * @param gamepad1 FTC gamepad 1
+     * @param gamepad2 FTC gamepad 2
+     * @param clock shared per-loop clock advanced by the tester runner
+     */
     public TesterContext(
             HardwareMap hw,
             Telemetry telemetry,

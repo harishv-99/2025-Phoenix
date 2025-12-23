@@ -141,6 +141,7 @@ class RateLimitedPlant implements Plant {
         return desiredTarget;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void stop() {
         inner.stop();
@@ -150,6 +151,7 @@ class RateLimitedPlant implements Plant {
     }
 
 
+    /** {@inheritDoc} */
     @Override
     public void update(double dtSec) {
         if (dtSec < 0.0) {
@@ -173,6 +175,7 @@ class RateLimitedPlant implements Plant {
         inner.update(dtSec);
     }
 
+    /** {@inheritDoc} */
     @Override
     public void reset() {
         inner.reset();
@@ -181,6 +184,7 @@ class RateLimitedPlant implements Plant {
         this.desiredTarget = t;
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean atSetpoint() {
         // Defer to the inner plant's definition of at-setpoint, based on the
@@ -188,12 +192,14 @@ class RateLimitedPlant implements Plant {
         return inner.atSetpoint();
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean hasFeedback() {
         return inner.hasFeedback();
     }
 
 
+    /** {@inheritDoc} */
     @Override
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
@@ -218,10 +224,23 @@ class RateLimitedPlant implements Plant {
         return inner;
     }
 
+    /**
+     * Return the configured maximum <b>increase</b> rate.
+     *
+     * @return maximum allowed increase per second (in plant target units per second)
+     */
     public double getMaxUpPerSec() {
         return maxUpPerSec;
     }
 
+    /**
+     * Return the configured maximum <b>decrease</b> rate.
+     *
+     * <p>This value is stored as a positive magnitude. Internally, the plant clamps
+     * decreases using {@code -maxDownPerSec}.</p>
+     *
+     * @return maximum allowed decrease per second (positive magnitude, in plant target units per second)
+     */
     public double getMaxDownPerSec() {
         return maxDownPerSec;
     }

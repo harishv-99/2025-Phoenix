@@ -252,11 +252,13 @@ public final class FtcVision {
             this.processor = Objects.requireNonNull(processor, "processor");
         }
 
+        /** {@inheritDoc} */
         @Override
         public AprilTagObservation bestAny(double maxAgeSec) {
             return selectBest(null, maxAgeSec);
         }
 
+        /** {@inheritDoc} */
         @Override
         public AprilTagObservation best(Set<Integer> idsOfInterest, double maxAgeSec) {
             Objects.requireNonNull(idsOfInterest, "idsOfInterest");
@@ -266,23 +268,27 @@ public final class FtcVision {
             return selectBest(idsOfInterest, maxAgeSec);
         }
 
+        /** {@inheritDoc} */
         @Override
         public AprilTagObservation best(int id, double maxAgeSec) {
             return best(Collections.singleton(id), maxAgeSec);
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean hasFreshAny(double maxAgeSec) {
             AprilTagObservation obs = bestAny(maxAgeSec);
             return obs.isFresh(maxAgeSec);
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean hasFresh(Set<Integer> idsOfInterest, double maxAgeSec) {
             AprilTagObservation obs = best(idsOfInterest, maxAgeSec);
             return obs.isFresh(maxAgeSec);
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean hasFresh(int id, double maxAgeSec) {
             AprilTagObservation obs = best(id, maxAgeSec);

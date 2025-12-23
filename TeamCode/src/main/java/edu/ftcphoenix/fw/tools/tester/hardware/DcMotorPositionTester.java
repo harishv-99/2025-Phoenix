@@ -84,19 +84,33 @@ public final class DcMotorPositionTester extends BaseTeleOpTester {
     private DcMotor.Direction origDir = null;
     private DcMotor.ZeroPowerBehavior origZpb = null;
 
+    /**
+     * Create a DC motor position tester with no preferred device name.
+     *
+     * <p>During INIT, a picker menu is shown so you can choose a configured motor.</p>
+     */
     public DcMotorPositionTester() {
         this(null);
     }
 
+    /**
+     * Create a DC motor position tester with a preferred device name.
+     *
+     * <p>If {@code motorName} is null/blank or cannot be resolved, the tester will fall back to the picker menu.</p>
+     *
+     * @param motorName configured motor name in the FTC Robot Configuration (nullable)
+     */
     public DcMotorPositionTester(String motorName) {
         this.preferredName = motorName;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "DcMotor Position Tester";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         picker = new HardwareNamePicker(
@@ -197,6 +211,7 @@ public final class DcMotorPositionTester extends BaseTeleOpTester {
         });
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!ready) {
@@ -206,6 +221,7 @@ public final class DcMotorPositionTester extends BaseTeleOpTester {
         updateAndRender(dtSec);
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (!ready) {
@@ -215,6 +231,7 @@ public final class DcMotorPositionTester extends BaseTeleOpTester {
         updateAndRender(dtSec);
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStop() {
         // Safety: always stop power and restore original settings.

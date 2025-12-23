@@ -163,6 +163,8 @@ public final class TagTarget {
      * Convenience alias for {@link #bearingRad()}.
      *
      * <p>Spells out that this is camera-centric bearing.</p>
+     *
+     * @return camera-centric bearing in radians (positive = left/CCW)
      */
     public double cameraBearingRad() {
         return bearingRad();
@@ -185,6 +187,13 @@ public final class TagTarget {
         return CameraMountLogic.robotBearingRad(lastObs, cameraMount);
     }
 
+    /**
+     * Check whether the current camera-centric bearing is within a tolerance.
+     *
+     * @param toleranceRad tolerance in radians (must be {@code >= 0})
+     * @return {@code true} if {@link #hasTarget()} and {@code |bearing| <= toleranceRad}
+     * @throws IllegalArgumentException if {@code toleranceRad} is negative
+     */
     public boolean isBearingWithin(double toleranceRad) {
         if (toleranceRad < 0.0) {
             throw new IllegalArgumentException("toleranceRad must be non-negative");
@@ -195,6 +204,15 @@ public final class TagTarget {
         return Math.abs(lastObs.cameraBearingRad()) <= toleranceRad;
     }
 
+    /**
+     * Check whether the current robot-centric bearing is within a tolerance.
+     *
+     * @param cameraMount robot→camera extrinsics (must not be {@code null})
+     * @param toleranceRad tolerance in radians (must be {@code >= 0})
+     * @return {@code true} if {@link #hasTarget()} and {@code |robotBearing| <= toleranceRad}
+     * @throws NullPointerException if {@code cameraMount} is {@code null}
+     * @throws IllegalArgumentException if {@code toleranceRad} is negative
+     */
     public boolean isRobotBearingWithin(CameraMountConfig cameraMount, double toleranceRad) {
         Objects.requireNonNull(cameraMount, "cameraMount is required");
         if (toleranceRad < 0.0) {
@@ -206,24 +224,55 @@ public final class TagTarget {
         return Math.abs(CameraMountLogic.robotBearingRad(lastObs, cameraMount)) <= toleranceRad;
     }
 
+    /**
+     * Compute planar (XY) range to the tag in the camera frame.
+     *
+     * <p>This uses the forward/left components of the camera→tag pose:
+     * {@code sqrt(forward^2 + left^2)}.</p>
+     *
+     * @return planar range in inches (camera frame)
+     */
     public double rangeInches() {
         double f = lastObs.cameraForwardInches();
         double l = lastObs.cameraLeftInches();
         return Math.sqrt(f * f + l * l);
     }
 
+    /**
+     * Return the full line-of-sight range to the tag in the camera frame.
+     *
+     * @return range in inches along the camera→tag ray
+     */
     public double lineOfSightRangeInches() {
         return lastObs.cameraRangeInches();
     }
 
+    /**
+     * Return the maximum observation age allowed by this tracker.
+     *
+     * @return maximum age in seconds; older observations are treated as no-target
+     */
     public double maxAgeSec() {
         return maxAgeSec;
     }
 
+    /**
+     * Return the set of tag IDs this tracker considers valid targets.
+     *
+     * @return immutable/owned set of tag IDs of interest
+     */
     public Set<Integer> idsOfInterest() {
         return idsOfInterest;
     }
 
+    /**
+     * Convert the current observation into a {@link BearingSample} using camera-centric bearing.
+     *
+     * <p>This is a convenience for piping tag targeting into {@link edu.ftcphoenix.fw.drive.assist.TagAimController}
+     * or other bearing-based controllers.</p>
+     *
+     * @return a bearing sample; {@code hasTarget} will be false if {@link #hasTarget()} is false
+     */
     public BearingSample toBearingSample() {
         if (!lastObs.hasTarget) {
             return new BearingSample(false, 0.0);
@@ -231,11 +280,24 @@ public final class TagTarget {
         return new BearingSample(true, lastObs.cameraBearingRad());
     }
 
+    /**
+     * Convert the current observation into a {@link BearingSample} using robot-centric bearing.
+     *
+     * @param cameraMount robot→camera extrinsics (must not be {@code null})
+     * @return a robot-centric bearing sample; {@code hasTarget} will be false if {@link #hasTarget()} is false
+     * @throws NullPointerException if {@code cameraMount} is {@code null}
+     */
     public BearingSample toRobotBearingSample(CameraMountConfig cameraMount) {
         Objects.requireNonNull(cameraMount, "cameraMount is required");
         return CameraMountLogic.robotBearingSample(lastObs, cameraMount);
     }
 
+    /**
+     * Dump a snapshot of the current tracker state to a {@link DebugSink}.
+     *
+     * @param dbg debug sink; if {@code null}, this method does nothing
+     * @param prefix key prefix to use for debug fields; if null/empty, {@code "tagTarget"} is used
+     */
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {
             return;
@@ -263,6 +325,14 @@ public final class TagTarget {
         dbg.addData(p + ".obs.cameraPlanarRangeInches", rangeInches());
     }
 
+    /**
+     * Dump tracker state to a {@link DebugSink}, including robot-centric bearing if available.
+     *
+     * @param dbg debug sink; if {@code null}, this method does nothing
+     * @param prefix key prefix to use for debug fields; if null/empty, {@code "tagTarget"} is used
+     * @param cameraMount robot→camera extrinsics used to compute robot-centric bearing (must not be {@code null})
+     * @throws NullPointerException if {@code cameraMount} is {@code null}
+     */
     public void debugDump(DebugSink dbg, String prefix, CameraMountConfig cameraMount) {
         if (dbg == null) {
             return;

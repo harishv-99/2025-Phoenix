@@ -175,15 +175,15 @@ The recommended way is to use the staged builder in
 private void initShooterPlants() {
     // Shooter: dual DC motors, velocity control with feedback.
     shooter = Actuators.plant(hardwareMap)
-            .motorPair("shooterLeftMotor",  Direction.FORWARD,
-                         "shooterRightMotor", Direction.REVERSE)
+            .motor("shooterLeftMotor", Direction.FORWARD)
+            .andMotor("shooterRightMotor", Direction.REVERSE)
             .velocity()     // default tolerance (native units)
             .build();
 
     // Transfer: dual CR servos, power control.
     transfer = Actuators.plant(hardwareMap)
-            .crServoPair("transferLeftServo",  Direction.FORWARD,
-                         "transferRightServo", Direction.REVERSE)
+            .crServo("transferLeftServo", Direction.FORWARD)
+            .andCrServo("transferRightServo", Direction.REVERSE)
             .power()
             .build();
 
@@ -201,10 +201,11 @@ The builder has three steps:
 
 1. **Pick hardware**:
 
-    * `.motor(name, direction)`
-    * `.motorPair(nameA, dirA, nameB, dirB)`
-    * `.servo(name, direction)` / `.servoPair(...)`
-    * `.crServo(name, direction)` / `.crServoPair(...)`
+    * `.motor(name, direction)` then (optional) `.andMotor(name, direction)`
+        * After you add a second motor, you may optionally calibrate the <i>last added</i>
+          motor with `.scale(...)` / `.bias(...)` if one side needs a small adjustment.
+    * `.servo(name, direction)` then (optional) `.andServo(name, direction)`
+    * `.crServo(name, direction)` then (optional) `.andCrServo(name, direction)`
 
 2. **Pick control type**:
 
@@ -222,14 +223,14 @@ The builder has three steps:
 The `.position(...)` control mode behaves slightly differently depending on
 which hardware you chose:
 
-* **DC motors** (via `.motor(...)` / `.motorPair(...)`):
+* **DC motors** (via `.motor(...)` and optional `.andMotor(...)`):
 
     * `.position(tolerance)` creates a **feedback-based motor position plant**.
     * `plant.hasFeedback() == true`.
     * `plant.atSetpoint()` becomes true when the encoder error is within tolerance.
     * `plant.reset()` re-zeros the plant’s coordinate frame at the current measured position.
 
-* **Servos** (via `.servo(...)` / `.servoPair(...)`):
+* **Servos** (via `.servo(...)` and optional `.andServo(...)`):
 
     * `.position()` creates a **servo position plant** in the range `0.0..1.0`.
     * This is an open‑loop “set‑and‑hold” behavior.

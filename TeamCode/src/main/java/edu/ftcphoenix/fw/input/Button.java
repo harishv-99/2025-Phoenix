@@ -152,22 +152,26 @@ public interface Button {
             this.curr = initial;
         }
 
+        /** {@inheritDoc} */
         @Override
         public void update() {
             prev = curr;
             curr = raw.getAsBoolean();
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean onPress() {
             return curr && !prev;
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean onRelease() {
             return !curr && prev;
         }
 
+        /** {@inheritDoc} */
         @Override
         public boolean isHeld() {
             return curr;

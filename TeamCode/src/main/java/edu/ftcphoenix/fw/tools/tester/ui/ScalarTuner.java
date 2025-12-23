@@ -91,12 +91,17 @@ public final class ScalarTuner {
     private DoubleUnaryOperator invertFn = v -> (min + max) - v;
 
     /**
-     * @param label         display label (e.g., "Power", "Position")
-     * @param min           minimum target
-     * @param max           maximum target
-     * @param fineStep      fine increment step
-     * @param coarseStep    coarse increment step
-     * @param initialTarget initial target value (clamped)
+     * Create a scalar tuner.
+     *
+     * <p>A {@code ScalarTuner} is a small helper for TeleOp test screens where you want to adjust a
+     * continuous target (like motor power or servo position) using gamepad buttons and/or an axis.</p>
+     *
+     * @param label display label used in telemetry (for example {@code "Power"} or {@code "Position"})
+     * @param min minimum target value (inclusive)
+     * @param max maximum target value (inclusive)
+     * @param fineStep increment used in fine mode (absolute value)
+     * @param coarseStep increment used in coarse mode (absolute value)
+     * @param initialTarget initial target value (will be clamped into {@code [min, max]})
      */
     public ScalarTuner(String label,
                        double min,
@@ -127,7 +132,12 @@ public final class ScalarTuner {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * If enable is not supported, this tuner is always considered enabled.
+     * Enable/disable support for the "enabled" toggle.
+     *
+     * <p>If enable is not supported, the tuner is always considered enabled.</p>
+     *
+     * @param supported whether this tuner should expose an enable/disable toggle
+     * @return this tuner for chaining
      */
     public ScalarTuner setEnableSupported(boolean supported) {
         this.enabledSupported = supported;
@@ -137,6 +147,15 @@ public final class ScalarTuner {
         return this;
     }
 
+    /**
+     * Enable/disable support for the "invert" toggle.
+     *
+     * <p>Invert is useful for quickly flipping power sign or reflecting a servo range without
+     * changing the rest of your test code.</p>
+     *
+     * @param supported whether this tuner should expose an invert toggle
+     * @return this tuner for chaining
+     */
     public ScalarTuner setInvertSupported(boolean supported) {
         this.invertSupported = supported;
         if (!supported) {
@@ -146,7 +165,10 @@ public final class ScalarTuner {
     }
 
     /**
-     * Value used when disabled (for {@link DisabledBehavior#APPLY_DISABLED_VALUE}).
+     * Set the value used when disabled (for {@link DisabledBehavior#APPLY_DISABLED_VALUE}).
+     *
+     * @param value disabled output value (will be clamped into {@code [min, max]})
+     * @return this tuner for chaining
      */
     public ScalarTuner setDisabledValue(double value) {
         this.disabledValue = MathUtil.clamp(value, min, max);
@@ -158,9 +180,12 @@ public final class ScalarTuner {
     }
 
     /**
-     * Sets disabled behavior.
+     * Set how {@link #applied()} behaves when disabled.
      *
      * <p>Defaults to {@link DisabledBehavior#APPLY_DISABLED_VALUE} for safety.</p>
+     *
+     * @param behavior disabled behavior to use (nullable; ignored if null)
+     * @return this tuner for chaining
      */
     public ScalarTuner setDisabledBehavior(DisabledBehavior behavior) {
         if (behavior != null) {
@@ -174,6 +199,11 @@ public final class ScalarTuner {
 
     /**
      * Override the invert mapping if you need something special.
+     *
+     * <p>By default, invert reflects across the midpoint of the range.</p>
+     *
+     * @param invertFn function that maps an applied value to its inverted form (nullable; ignored if null)
+     * @return this tuner for chaining
      */
     public ScalarTuner setInvertFn(DoubleUnaryOperator invertFn) {
         if (invertFn != null) {
@@ -188,9 +218,10 @@ public final class ScalarTuner {
      * <p>If the axis magnitude exceeds {@code deadband}, the axis value (after mapping)
      * becomes the new target.</p>
      *
-     * @param axis     axis to read (e.g., pads.p1().leftY())
-     * @param deadband deadband applied to raw axis
-     * @param axisMap  maps raw axis value to target domain (e.g., v -> (v+1)/2 for [0..1])
+     * @param axis axis to read (for example {@code pads.p1().leftY()})
+     * @param deadband deadband applied to the raw axis
+     * @param axisMap maps raw axis value to the tuner target domain (nullable; identity if null)
+     * @return this tuner for chaining
      */
     public ScalarTuner attachAxis(Axis axis, double deadband, DoubleUnaryOperator axisMap) {
         this.axis = axis;
@@ -203,22 +234,49 @@ public final class ScalarTuner {
     // State access
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * Return whether the tuner is currently enabled.
+     *
+     * @return {@code true} if enabled
+     */
     public boolean isEnabled() {
         return enabledSupported ? enabled : true;
     }
 
+    /**
+     * Return whether the tuner is currently inverted.
+     *
+     * <p>If invert support is disabled via {@link #setInvertSupported(boolean)}, this will return {@code false}.</p>
+     *
+     * @return {@code true} if inverted
+     */
     public boolean isInverted() {
         return invertSupported && inverted;
     }
 
+    /**
+     * Return whether the tuner is currently in fine step mode.
+     *
+     * @return {@code true} if in fine mode, {@code false} if in coarse mode
+     */
     public boolean isFine() {
         return fine;
     }
 
+    /**
+     * Return the current raw target value.
+     *
+     * @return current target (clamped into {@code [min, max]})
+     */
     public double target() {
         return target;
     }
 
+    /**
+     * Return the current step size (fine or coarse).
+     *
+     * @return current step size
+     */
     public double step() {
         return fine ? fineStep : coarseStep;
     }
@@ -230,40 +288,65 @@ public final class ScalarTuner {
         return lastApplied;
     }
 
+    /**
+     * Set the raw target value.
+     *
+     * @param target new target value (will be clamped into {@code [min, max]})
+     */
     public void setTarget(double target) {
         this.target = MathUtil.clamp(target, min, max);
     }
 
+    /**
+     * Increase the target by the current step size.
+     */
     public void inc() {
         setTarget(target + step());
     }
 
+    /**
+     * Decrease the target by the current step size.
+     */
     public void dec() {
         setTarget(target - step());
     }
 
+    /**
+     * Set the target to the configured disabled value.
+     */
     public void zero() {
         setTarget(disabledValue);
     }
 
+    /**
+     * Toggle between fine and coarse step sizes.
+     */
     public void toggleFine() {
         fine = !fine;
     }
 
+    /**
+     * Toggle the enabled state (only if enable support is enabled).
+     */
     public void toggleEnabled() {
         if (!enabledSupported) return;
         enabled = !enabled;
     }
 
+    /**
+     * Toggle the inverted state (only if invert support is enabled).
+     */
     public void toggleInvert() {
         if (!invertSupported) return;
         inverted = !inverted;
     }
 
     /**
-     * Update target from the attached axis override (if configured).
+     * Update the target from the attached axis override (if configured).
      *
      * <p>Call once per loop after inputs are updated.</p>
+     *
+     * @param active optional gate; if provided and it returns {@code false}, the axis override is ignored
      */
     public void updateFromAxis(BooleanSupplier active) {
         if (axis == null) return;
@@ -277,9 +360,11 @@ public final class ScalarTuner {
     }
 
     /**
-     * Value you should apply to a device right now.
+     * Return the value you should apply to a device right now.
      *
      * <p>Includes enable/disable + invert behavior.</p>
+     *
+     * @return applied output value (clamped into {@code [min, max]})
      */
     public double applied() {
         if (!isEnabled() && disabledBehavior == DisabledBehavior.HOLD_LAST_APPLIED) {
@@ -305,10 +390,19 @@ public final class ScalarTuner {
     // ---------------------------------------------------------------------------------------------
 
     /**
-     * Bind a standard set of controls.
+     * Bind a standard set of controls to manipulate this tuner.
      *
      * <p>All actions are gated by {@code active}. Pass something like {@code () -> ready}
-     * so menu/picker inputs don't conflict.</p>
+     * so menu inputs don't conflict with your test controls.</p>
+     *
+     * @param bindings bindings registry to attach to
+     * @param enableToggle button that toggles enabled/disabled (nullable)
+     * @param invertToggle button that toggles invert (nullable)
+     * @param fineToggle button that toggles fine/coarse (nullable)
+     * @param incButton button that increments the target (nullable)
+     * @param decButton button that decrements the target (nullable)
+     * @param zeroButton button that resets to the disabled value (nullable)
+     * @param active optional gating predicate; if null, actions are always allowed
      */
     public void bind(Bindings bindings,
                      Button enableToggle,
@@ -368,6 +462,11 @@ public final class ScalarTuner {
     // Telemetry
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * Render this tuner's current state into FTC {@link Telemetry}.
+     *
+     * @param t telemetry sink
+     */
     public void render(Telemetry t) {
         t.addLine(String.format(Locale.US,
                 "%s: target=%.3f applied=%.3f last=%.3f range=[%.3f, %.3f]",

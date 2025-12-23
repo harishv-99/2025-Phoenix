@@ -130,8 +130,8 @@ import edu.ftcphoenix.fw.actuation.Plant;
 
 // Shooter: dual-motor velocity plant (native units) with a rate limit.
 Plant shooter = Actuators.plant(hardwareMap)
-        .motorPair("shooterLeftMotor",  Direction.FORWARD,
-                         "shooterRightMotor", Direction.REVERSE)
+        .motor("shooterLeftMotor", Direction.FORWARD)
+        .andMotor("shooterRightMotor", Direction.REVERSE)
         .velocity()            // default tolerance (native units)
         .rateLimit(500.0)      // max delta in native units per second
         .build();

@@ -88,6 +88,7 @@ public final class FtcHardware {
         return new PowerOutput() {
             private double last;
 
+            /** {@inheritDoc} */
             @Override
             public void setPower(double power) {
                 double cmd = MathUtil.clampAbs(power, 1.0);
@@ -95,6 +96,7 @@ public final class FtcHardware {
                 m.setPower(cmd);
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getCommandedPower() {
                 return last;
@@ -134,6 +136,7 @@ public final class FtcHardware {
         return new PowerOutput() {
             private double last;
 
+            /** {@inheritDoc} */
             @Override
             public void setPower(double power) {
                 double cmd = MathUtil.clampAbs(power, 1.0);
@@ -141,6 +144,7 @@ public final class FtcHardware {
                 s.setPower(cmd);
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getCommandedPower() {
                 return last;
@@ -187,6 +191,7 @@ public final class FtcHardware {
         return new PositionOutput() {
             private double last;
 
+            /** {@inheritDoc} */
             @Override
             public void setPosition(double position) {
                 double cmd = MathUtil.clamp(position, 0.0, 1.0);
@@ -194,6 +199,7 @@ public final class FtcHardware {
                 s.setPosition(cmd);
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getCommandedPosition() {
                 return last;
@@ -243,6 +249,7 @@ public final class FtcHardware {
         return new PositionOutput() {
             private double lastTicks = 0.0;
 
+            /** {@inheritDoc} */
             @Override
             public void setPosition(double positionTicks) {
                 lastTicks = positionTicks;
@@ -252,17 +259,20 @@ public final class FtcHardware {
                 m.setPower(1.0); // full power; SDK manages PID profile
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getCommandedPosition() {
                 return lastTicks;
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getMeasuredPosition() {
                 // True encoder-based feedback in native ticks.
                 return m.getCurrentPosition();
             }
 
+            /** {@inheritDoc} */
             @Override
             public void stop() {
                 // Stop actively driving toward the previous target.
@@ -319,17 +329,20 @@ public final class FtcHardware {
         return new VelocityOutput() {
             private double commanded = 0.0;
 
+            /** {@inheritDoc} */
             @Override
             public void setVelocity(double velocityTicksPerSec) {
                 commanded = velocityTicksPerSec;
                 m.setVelocity(velocityTicksPerSec);
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getCommandedVelocity() {
                 return commanded;
             }
 
+            /** {@inheritDoc} */
             @Override
             public double getMeasuredVelocity() {
                 // Native FTC SDK units, typically ticks per second.

@@ -35,6 +35,13 @@ public final class ChassisSpeeds {
         return ZERO;
     }
 
+    /**
+     * Construct a robot-centric chassis velocity command.
+     *
+     * @param vxRobotIps forward velocity in the robot frame (inches/sec; + forward)
+     * @param vyRobotIps leftward velocity in the robot frame (inches/sec; + left)
+     * @param omegaRobotRadPerSec angular velocity about +Z (rad/sec; + CCW)
+     */
     public ChassisSpeeds(double vxRobotIps, double vyRobotIps, double omegaRobotRadPerSec) {
         this.vxRobotIps = vxRobotIps;
         this.vyRobotIps = vyRobotIps;
@@ -42,8 +49,11 @@ public final class ChassisSpeeds {
     }
 
     /**
-     * @return a new command with translation components ({@code vxRobotIps}, {@code vyRobotIps})
-     * scaled by {@code translationScale}, and {@code omegaRobotRadPerSec} scaled by {@code omegaScale}.
+     * Return a new command with translation and rotation scaled independently.
+     *
+     * @param translationScale scale applied to {@link #vxRobotIps} and {@link #vyRobotIps}
+     * @param omegaScale scale applied to {@link #omegaRobotRadPerSec}
+     * @return a new scaled chassis velocity command
      */
     public ChassisSpeeds scaled(double translationScale, double omegaScale) {
         return new ChassisSpeeds(
@@ -54,7 +64,12 @@ public final class ChassisSpeeds {
     }
 
     /**
-     * Clamp each component independently.
+     * Clamp each component independently to the given absolute maxima.
+     *
+     * @param maxVxAbsIps maximum absolute value allowed for {@link #vxRobotIps} (inches/sec)
+     * @param maxVyAbsIps maximum absolute value allowed for {@link #vyRobotIps} (inches/sec)
+     * @param maxOmegaAbsRadPerSec maximum absolute value allowed for {@link #omegaRobotRadPerSec} (rad/sec)
+     * @return a new clamped chassis velocity command
      */
     public ChassisSpeeds clamped(double maxVxAbsIps, double maxVyAbsIps, double maxOmegaAbsRadPerSec) {
         return new ChassisSpeeds(

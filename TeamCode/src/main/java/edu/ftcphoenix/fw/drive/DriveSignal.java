@@ -251,6 +251,7 @@ public final class DriveSignal {
         return new DriveSignal(axial, lateral, newOmega);
     }
 
+    /** {@inheritDoc} */
     @Override
     public String toString() {
         return "DriveSignal{"

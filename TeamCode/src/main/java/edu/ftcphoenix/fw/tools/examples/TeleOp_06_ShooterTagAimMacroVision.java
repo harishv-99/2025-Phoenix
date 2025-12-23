@@ -199,6 +199,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
     // OpMode lifecycle
     // ----------------------------------------------------------------------
 
+    /** {@inheritDoc} */
     @Override
     public void init() {
         // 1) Inputs
@@ -243,14 +244,14 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         // 4) Mechanism wiring using Actuators.
 
         shooter = Actuators.plant(hardwareMap)
-                .motorPair(HW_SHOOTER_LEFT, Direction.FORWARD,
-                        HW_SHOOTER_RIGHT, Direction.REVERSE)
+                .motor(HW_SHOOTER_LEFT, Direction.FORWARD)
+                .andMotor(HW_SHOOTER_RIGHT, Direction.REVERSE)
                 .velocity(SHOOTER_VELOCITY_TOLERANCE_NATIVE)
                 .build();
 
         transfer = Actuators.plant(hardwareMap)
-                .crServoPair(HW_TRANSFER_LEFT, Direction.FORWARD,
-                        HW_TRANSFER_RIGHT, Direction.REVERSE)
+                .crServo(HW_TRANSFER_LEFT, Direction.FORWARD)
+                .andCrServo(HW_TRANSFER_RIGHT, Direction.REVERSE)
                 .power()
                 .build();
 
@@ -287,11 +288,13 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
+    /** {@inheritDoc} */
     @Override
     public void loop() {
         // ------------------------------------------------------------------
@@ -373,6 +376,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void stop() {
         cancelShootMacros();

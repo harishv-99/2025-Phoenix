@@ -89,14 +89,14 @@ A Plant may be open-loop (power, servo set-and-hold) or closed-loop (motor posit
 import edu.ftcphoenix.fw.core.hal.Direction;
 
 Plant shooter = Actuators.plant(hardwareMap)
-        .motorPair("shooterLeftMotor",  Direction.FORWARD,
-                         "shooterRightMotor", Direction.REVERSE)
+        .motor("shooterLeftMotor", Direction.FORWARD)
+        .andMotor("shooterRightMotor", Direction.REVERSE)
         .velocity()   // uses default tolerance in native velocity units
         .build();
 
 Plant transfer = Actuators.plant(hardwareMap)
-        .crServoPair("transferLeftServo",  Direction.FORWARD,
-                         "transferRightServo", Direction.REVERSE)
+        .crServo("transferLeftServo", Direction.FORWARD)
+        .andCrServo("transferRightServo", Direction.REVERSE)
         .power()
         .build();
 
@@ -108,7 +108,7 @@ Plant pusher = Actuators.plant(hardwareMap)
 
 The builder is staged on purpose:
 
-1. **Pick hardware**: `motor`, `motorPair`, `servo`, `servoPair`, `crServo`, `crServoPair`
+1. **Pick hardware**: `motor` (optional `andMotor`), `servo` (optional `andServo`), `crServo` (optional `andCrServo`)
 2. **Pick control type**: `power()`, `velocity()` / `velocity(tol)`, `position()` / `position(tol)`
 3. **Optional modifiers**: `rateLimit(maxDeltaPerSec)`, then `build()`
 

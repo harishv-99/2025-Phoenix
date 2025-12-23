@@ -137,6 +137,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     private double lastShooterTargetVel = 0.0;
 
+    /** {@inheritDoc} */
     @Override
     public void init() {
         // 1) Inputs
@@ -180,8 +181,8 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // 4) Shooter wiring using Actuators.
         shooter = Actuators.plant(hardwareMap)
-                .motorPair(HW_SHOOTER_LEFT, Direction.FORWARD,
-                        HW_SHOOTER_RIGHT, Direction.REVERSE)
+                .motor(HW_SHOOTER_LEFT, Direction.FORWARD)
+                .andMotor(HW_SHOOTER_RIGHT, Direction.REVERSE)
                 .velocity(/*toleranceNative=*/100.0)
                 .build();
 
@@ -191,6 +192,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         bindings.onPress(
                 gamepads.p1().a(),
                 new Runnable() {
+                    /** {@inheritDoc} */
                     @Override
                     public void run() {
                         shooterEnabled = !shooterEnabled;
@@ -205,11 +207,13 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
+    /** {@inheritDoc} */
     @Override
     public void loop() {
         // 1) Clock
@@ -280,6 +284,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         telemetry.update();
     }
 
+    /** {@inheritDoc} */
     @Override
     public void stop() {
         shooterEnabled = false;

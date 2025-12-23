@@ -40,6 +40,7 @@ public final class InstantTask implements Task {
         this.action = Objects.requireNonNull(action, "action must not be null");
     }
 
+    /** {@inheritDoc} */
     @Override
     public void start(LoopClock clock) {
         // Idempotent start: only run the action once.
@@ -50,11 +51,13 @@ public final class InstantTask implements Task {
         finished = true;
     }
 
+    /** {@inheritDoc} */
     @Override
     public void update(LoopClock clock) {
         // No periodic work; instant tasks finish in start().
     }
 
+    /** {@inheritDoc} */
     @Override
     public boolean isComplete() {
         return finished;

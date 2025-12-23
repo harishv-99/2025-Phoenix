@@ -48,19 +48,33 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
     private final ScalarTuner power =
             new ScalarTuner("Power", -1.0, +1.0, 0.05, 0.20, 0.0);
 
+    /**
+     * Create a CR servo power tester with no preferred device name.
+     *
+     * <p>During INIT, a picker menu is shown so you can choose from configured CR servos.</p>
+     */
     public CrServoPowerTester() {
         this(null);
     }
 
+    /**
+     * Create a CR servo power tester with a preferred device name.
+     *
+     * <p>If {@code servoName} is null/blank or cannot be resolved, the tester will fall back to the picker menu.</p>
+     *
+     * @param servoName configured CR servo name in the FTC Robot Configuration (nullable)
+     */
     public CrServoPowerTester(String servoName) {
         this.preferredName = servoName;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "CRServo Power Tester";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         picker = new HardwareNamePicker(
@@ -103,6 +117,7 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
         );
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!ready) {
@@ -112,6 +127,7 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
         updateAndRender();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (!ready) {
@@ -121,6 +137,7 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
         updateAndRender();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStop() {
         applyPower(0.0);

@@ -205,18 +205,38 @@ public final class TagAimController {
         dbg.addData(p + ".lossPolicy", lossPolicy.toString());
     }
 
+    /**
+     * Return the configured deadband.
+     *
+     * @return deadband in radians; if {@code |bearing| <= deadband}, output is zero
+     */
     public double deadbandRad() {
         return deadbandRad;
     }
 
+    /**
+     * Return the configured maximum omega magnitude.
+     *
+     * @return absolute max omega output (rad/sec in normalized drive conventions)
+     */
     public double maxOmegaAbs() {
         return maxOmegaAbs;
     }
 
+    /**
+     * Return the policy used when the target is lost.
+     *
+     * @return configured loss policy
+     */
     public LossPolicy lossPolicy() {
         return lossPolicy;
     }
 
+    /**
+     * Return the most recently computed omega output.
+     *
+     * @return last omega command (CCW-positive)
+     */
     public double lastOmega() {
         return lastOmega;
     }

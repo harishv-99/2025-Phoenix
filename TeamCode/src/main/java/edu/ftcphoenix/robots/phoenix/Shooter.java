@@ -64,17 +64,17 @@ public class Shooter {
                 .build();
 
         plantTransfer = Actuators.plant(hardwareMap)
-                .crServoPair(RobotConfig.Shooter.nameCrServoTransferLeft,
-                        RobotConfig.Shooter.directionServoTransferLeft,
-                        RobotConfig.Shooter.nameCrServoTransferRight,
+                .crServo(RobotConfig.Shooter.nameCrServoTransferLeft,
+                        RobotConfig.Shooter.directionServoTransferLeft)
+                .andCrServo(RobotConfig.Shooter.nameCrServoTransferRight,
                         RobotConfig.Shooter.directionServoTransferRight)
                 .power()
                 .build();
 
         plantShooter = Actuators.plant(hardwareMap)
-                .motorPair(RobotConfig.Shooter.nameMotorShooterLeft,
-                        RobotConfig.Shooter.directionMotorShooterLeft,
-                        RobotConfig.Shooter.nameMotorShooterRight,
+                .motor(RobotConfig.Shooter.nameMotorShooterLeft,
+                        RobotConfig.Shooter.directionMotorShooterLeft)
+                .andMotor(RobotConfig.Shooter.nameMotorShooterRight,
                         RobotConfig.Shooter.directionMotorShooterRight)
                 .velocity(50)
                 .build();

@@ -72,6 +72,17 @@ public final class PhoenixRobot {
         SCORING_TAG_IDS = Collections.unmodifiableSet(ids);
     }
 
+    /**
+     * Create the robot container.
+     *
+     * <p>This class owns the major subsystems (drive, shooter, etc.) and wires them to gamepads.
+     * It is intended to be constructed once in an OpMode {@code init()} method.</p>
+     *
+     * @param hardwareMap FTC hardware map
+     * @param telemetry FTC telemetry sink
+     * @param gamepad1 primary driver controller
+     * @param gamepad2 secondary operator controller
+     */
     public PhoenixRobot(HardwareMap hardwareMap, Telemetry telemetry, Gamepad gamepad1, Gamepad gamepad2) {
         this.hardwareMap = hardwareMap;
         this.gamepads = Gamepads.create(gamepad1, gamepad2);
@@ -79,9 +90,15 @@ public final class PhoenixRobot {
         this.dbg = new FtcTelemetryDebugSink(telemetry);
     }
 
+    /**
+     * Initialize components shared by all OpModes.
+     */
     public void initAny() {
     }
 
+    /**
+     * Initialize TeleOp-specific state and bindings.
+     */
     public void initTeleOp() {
 
         // --- Create mechanisms ---
@@ -179,19 +196,31 @@ public final class PhoenixRobot {
                 () -> taskRunnerTeleOp.enqueue(shooter.instantDecreaseVelocity()));
     }
 
+    /**
+     * Start hook shared by all OpModes.
+     */
     public void startAny(double runtime) {
         // Initialize loop timing.
         clock.reset(runtime);
     }
 
+    /**
+     * Start hook for TeleOp.
+     */
     public void startTeleOp() {
     }
 
+    /**
+     * Periodic update shared by all OpModes.
+     */
     public void updateAny(double runtime) {
         // --- 1) Clock ---
         clock.update(runtime);
     }
 
+    /**
+     * Periodic update for TeleOp.
+     */
     public void updateTeleOp() {
         // --- 2) Inputs + bindings ---
         gamepads.update(clock);
@@ -233,10 +262,16 @@ public final class PhoenixRobot {
         telemetry.update();
     }
 
+    /**
+     * Stop hook shared by all OpModes.
+     */
     public void stopAny() {
         drivebase.stop();
     }
 
+    /**
+     * Stop hook for TeleOp.
+     */
     public void stopTeleOp() {
     }
 }

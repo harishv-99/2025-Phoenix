@@ -30,25 +30,36 @@ public final class TesterSuite extends BaseTeleOpTester {
     private boolean opModeStarted = false;
 
     /**
-     * Register a tester (no help).
+     * Register a tester in the menu (no help text).
+     *
+     * @param name display name in the menu
+     * @param factory factory that creates a new tester instance when selected
+     * @return this suite for chaining
      */
     public TesterSuite add(String name, Supplier<TeleOpTester> factory) {
         return add(name, null, factory);
     }
 
     /**
-     * Register a tester with optional one-line help.
+     * Register a tester in the menu with optional one-line help.
+     *
+     * @param name display name in the menu
+     * @param help optional help line shown under the item (nullable)
+     * @param factory factory that creates a new tester instance when selected
+     * @return this suite for chaining
      */
     public TesterSuite add(String name, String help, Supplier<TeleOpTester> factory) {
         menu.addItem(name, help, factory);
         return this;
     }
 
+    /** {@inheritDoc} */
     @Override
     public String name() {
         return "Tester Suite";
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInit() {
         // Menu navigation and selection are ONLY active while inMenu.
@@ -73,6 +84,7 @@ public final class TesterSuite extends BaseTeleOpTester {
         active = null;
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onInitLoop(double dtSec) {
         if (inMenu) {
@@ -90,6 +102,7 @@ public final class TesterSuite extends BaseTeleOpTester {
         renderMenu();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStart() {
         opModeStarted = true;
@@ -98,6 +111,7 @@ public final class TesterSuite extends BaseTeleOpTester {
         }
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onLoop(double dtSec) {
         if (inMenu) {
@@ -115,6 +129,7 @@ public final class TesterSuite extends BaseTeleOpTester {
         renderMenu();
     }
 
+    /** {@inheritDoc} */
     @Override
     protected void onStop() {
         stopActive();

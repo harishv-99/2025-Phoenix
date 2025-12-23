@@ -404,6 +404,7 @@ public final class TagAim {
         final double kp = cfg.kp;
 
         PidController pid = new PidController() {
+            /** {@inheritDoc} */
             @Override
             public double update(double error, double dtSec) {
                 // P-only: omega = Kp * error
