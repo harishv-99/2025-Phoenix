@@ -10,8 +10,8 @@ import edu.ftcphoenix.fw.actuation.PlantTasks;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.task.Tasks;
-import edu.ftcphoenix.fw.util.InterpolatingTable1D;
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
+import edu.ftcphoenix.fw.core.math.MathUtil;
 
 public class Shooter {
 

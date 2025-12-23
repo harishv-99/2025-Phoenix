@@ -12,6 +12,32 @@ The goal is: **get a clean, non‑blocking TeleOp running quickly**.
 
 ---
 
+## Where to look in the framework
+
+If you’re writing robot code, you’ll spend almost all your time in a small set of packages:
+
+* `edu.ftcphoenix.fw.actuation` — mechanisms as `Plant`s (`Actuators`, `PlantTasks`).
+* `edu.ftcphoenix.fw.drive` — driving (`DriveSource`, `DriveSignal`, `MecanumDrivebase`).
+* `edu.ftcphoenix.fw.input` — gamepads/buttons + `Bindings`.
+* `edu.ftcphoenix.fw.task` — macros (`Task`, `TaskRunner`, `Tasks`).
+
+As you add sensors and pose estimation, you’ll also use:
+
+* `edu.ftcphoenix.fw.sensing` — sensors (vision, odometry, etc.).
+* `edu.ftcphoenix.fw.localization` — pose estimation (AprilTags, odometry, fusion).
+* `edu.ftcphoenix.fw.field` — field metadata (tag layouts, constants).
+
+Everything else exists to keep those packages clean:
+
+* `edu.ftcphoenix.fw.core.*` is framework plumbing (math/geometry/control/time/HAL).
+* `edu.ftcphoenix.fw.ftc.*` is the FTC SDK boundary (hardware + vision adapters).
+* `edu.ftcphoenix.fw.tools.*` contains testers and copyable examples.
+* `edu.ftcphoenix.fw.legacy.*` contains intentionally-retained old base classes.
+
+If you’re curious *why* the packages are arranged this way, see **Framework Overview → Package structure**.
+
+---
+
 ## 1. The big ideas
 
 Phoenix code is built around a few simple concepts:

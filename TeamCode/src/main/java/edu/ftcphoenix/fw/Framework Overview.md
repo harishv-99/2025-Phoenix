@@ -6,6 +6,45 @@ The big idea is: **advance a single `LoopClock` once per OpMode cycle**, then ru
 
 ---
 
+## Package structure
+
+Phoenix is organized by **robot concepts**, not by FTC SDK details.
+
+### Packages students use day-to-day
+
+Most robot code should only need imports from these packages:
+
+* `edu.ftcphoenix.fw.input` — gamepad wrappers (`Gamepads`, `GamepadDevice`, `Axis`, `Button`).
+* `edu.ftcphoenix.fw.input.binding` — `Bindings`: map button edges to actions.
+* `edu.ftcphoenix.fw.task` — `Task`, `TaskRunner`, `Tasks`: non-blocking macros over time.
+* `edu.ftcphoenix.fw.actuation` — `Plant`, `Actuators`, `PlantTasks`: mechanisms you command with numeric targets.
+* `edu.ftcphoenix.fw.drive` — `DriveSignal`, `DriveSource`, `MecanumDrivebase`, and drive helpers.
+* `edu.ftcphoenix.fw.sensing` — sensor-facing wrappers (vision, odometry, etc.).
+* `edu.ftcphoenix.fw.localization` — pose estimation (AprilTags, odometry, fusion).
+* `edu.ftcphoenix.fw.field` — field metadata (tag layouts, constants).
+
+Within `drive/`, subpackages are intentionally parallel and predictable:
+
+* `drive.source` — “where drive commands come from” (gamepad, autonomous logic).
+* `drive.assist` — wrappers that *modify* driving (TagAim, heading assist, etc.).
+* `drive.control` — closed-loop drive behaviors/controllers/tasks (go-to-pose, heading controllers).
+
+### Packages that are intentionally “behind the scenes”
+
+These exist so the student-facing packages stay small and consistent:
+
+* `edu.ftcphoenix.fw.core.*` — shared plumbing: time, math, geometry, control, debug, and the HAL.
+* `edu.ftcphoenix.fw.ftc.*` — the **FTC SDK boundary** (hardware adapters, frame conversions, FTC vision plumbing).
+* `edu.ftcphoenix.fw.tools.*` — testers and examples you can copy.
+* `edu.ftcphoenix.fw.legacy.*` — intentionally retained older base classes (not recommended for new code).
+
+Two rules of thumb:
+
+1. If a class references FTC SDK types (`com.qualcomm.*`), it belongs in `fw.ftc` or `fw.tools`, not in the core building blocks.
+2. The package tree is kept **parallel** on purpose (for example, `sensing.vision` ↔ `localization.apriltag`, and later `sensing.odometry` ↔ `localization.odometry`). That makes it easy to predict where new features should go.
+
+---
+
 ## The layers (top → bottom)
 
 Think of Phoenix as a few thin layers you stack:
@@ -22,17 +61,17 @@ Think of Phoenix as a few thin layers you stack:
 4. **Tasks / Macros** (`fw.task`, plus helpers in other packages)
 
     * `Task`, `TaskRunner`, `Tasks`, `PlantTasks`, `DriveTasks`.
-5. **Drive behavior** (`fw.drive` + `fw.drive.source`)
+5. **Drive behavior** (`fw.drive` + `fw.drive.source` + `fw.drive.assist`)
 
     * `DriveSource` produces a `DriveSignal` (stick drive, TagAim, etc.).
 6. **Actuation**
 
     * Drivebase: `MecanumDrivebase`.
     * Mechanisms: `Plant`.
-7. **HAL** (`fw.hal`)
+7. **Core HAL** (`fw.core.hal`)
 
     * Tiny device-neutral interfaces: `PowerOutput`, `PositionOutput`, `VelocityOutput`.
-8. **FTC adapters** (`fw.adapters.ftc`)
+8. **FTC boundary** (`fw.ftc`)
 
     * `FtcHardware` wraps FTC SDK hardware into Phoenix HAL outputs.
 
@@ -40,7 +79,7 @@ Think of Phoenix as a few thin layers you stack:
 
 ## The loop clock (and why it matters)
 
-`LoopClock` (in `fw.util`) tracks:
+`LoopClock` (in `fw.core.time`) tracks:
 
 * `nowSec()` — current time
 * `dtSec()` — delta time since last loop
@@ -61,15 +100,15 @@ This prevents bugs like “button press fired twice” or “tasks advanced twic
 
 ### HAL outputs (lowest level)
 
-Phoenix abstracts FTC hardware into small output interfaces:
+Phoenix abstracts FTC hardware into small output interfaces (in `fw.core.hal`):
 
 * `PowerOutput` — normalized power (typically `[-1, +1]`)
 * `PositionOutput` — native position units (servo `0..1`, motor encoder ticks, etc.)
 * `VelocityOutput` — native velocity units (e.g., ticks/sec)
 
-### FTC adapter: `FtcHardware`
+### FTC boundary: `FtcHardware`
 
-`FtcHardware` provides factories like:
+`edu.ftcphoenix.fw.ftc.FtcHardware` provides factories like:
 
 * `FtcHardware.motorPower(hw, name, inverted)`
 * `FtcHardware.motorVelocity(hw, name, inverted)`
@@ -272,4 +311,4 @@ public void loop() {
 * **Framework Principles** — the rules-of-thumb Phoenix expects you to follow.
 * **Loop Structure** — deeper reasoning about update order and idempotency.
 * **Tasks & Macros Quickstart** — how to build task graphs quickly.
-* **Shooter Case Study & Examples Walkthrough** — maps concepts to real examples in `fw.examples`.
+* **Shooter Case Study & Examples Walkthrough** — maps concepts to real examples in `fw.tools.examples`.

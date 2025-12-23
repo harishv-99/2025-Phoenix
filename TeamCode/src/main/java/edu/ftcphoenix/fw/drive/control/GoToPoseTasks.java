@@ -2,8 +2,8 @@ package edu.ftcphoenix.fw.drive.control;
 
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.field.TagLayout;
-import edu.ftcphoenix.fw.geom.Pose2d;
-import edu.ftcphoenix.fw.geom.Pose3d;
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.localization.PoseEstimate;
 import edu.ftcphoenix.fw.localization.PoseEstimator;
 import edu.ftcphoenix.fw.task.Task;

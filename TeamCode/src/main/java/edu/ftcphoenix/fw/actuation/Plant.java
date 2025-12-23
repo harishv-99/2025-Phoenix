@@ -1,6 +1,6 @@
 package edu.ftcphoenix.fw.actuation;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 
 /**
  * A generic setpoint-driven mechanism.

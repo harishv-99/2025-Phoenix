@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Logical button with built-in edge detection and a global registry.

@@ -2,7 +2,7 @@ package edu.ftcphoenix.fw.task;
 
 import java.util.function.Consumer;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Task that runs a set of callbacks for a fixed amount of time.

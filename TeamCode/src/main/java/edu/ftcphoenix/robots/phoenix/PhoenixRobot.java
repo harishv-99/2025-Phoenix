@@ -9,9 +9,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import edu.ftcphoenix.fw.adapters.ftc.FtcTelemetryDebugSink;
-import edu.ftcphoenix.fw.adapters.ftc.FtcVision;
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcVision;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
@@ -19,13 +19,13 @@ import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
-import edu.ftcphoenix.fw.sensing.AprilTagObservation;
-import edu.ftcphoenix.fw.sensing.AprilTagSensor;
-import edu.ftcphoenix.fw.sensing.CameraMountConfig;
-import edu.ftcphoenix.fw.sensing.TagAim;
-import edu.ftcphoenix.fw.sensing.TagTarget;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
+import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
+import edu.ftcphoenix.fw.drive.assist.TagAim;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.task.TaskRunner;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Central robot class for Phoenix-based robots.

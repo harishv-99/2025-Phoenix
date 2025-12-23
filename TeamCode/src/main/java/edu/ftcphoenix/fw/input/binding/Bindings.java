@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import edu.ftcphoenix.fw.input.Button;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Binding manager that maps {@link Button} state to higher-level behavior.

@@ -1,7 +1,8 @@
 package edu.ftcphoenix.fw.localization;
 
-import edu.ftcphoenix.fw.geom.Pose2d;
-import edu.ftcphoenix.fw.geom.Pose3d;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 
 /**
  * Immutable snapshot of the robot's estimated pose on the field (6DOF).
@@ -81,7 +82,7 @@ public final class PoseEstimate {
     /**
      * Timestamp in seconds at which the underlying measurement was taken.
      *
-     * <p>This value is in the same timebase as the {@link edu.ftcphoenix.fw.util.LoopClock}
+     * <p>This value is in the same timebase as the {@link LoopClock}
      * used by the estimator (typically seconds since OpMode start or another monotonic clock).</p>
      */
     public final double timestampSec;

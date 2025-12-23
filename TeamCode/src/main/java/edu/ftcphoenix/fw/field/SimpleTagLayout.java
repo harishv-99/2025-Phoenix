@@ -1,15 +1,13 @@
 package edu.ftcphoenix.fw.field;
 
-import androidx.annotation.NonNull;
-
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.geom.Pose3d;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 
 /**
  * Simple in-memory implementation of {@link TagLayout}.

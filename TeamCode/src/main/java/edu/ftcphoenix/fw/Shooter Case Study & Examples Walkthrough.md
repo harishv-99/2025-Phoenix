@@ -2,7 +2,7 @@
 
 This document walks through the framework’s shooter examples (02–06) and explains *why* each step exists, using only real APIs from the Phoenix framework.
 
-The examples live in `edu.ftcphoenix.fw.examples.*`:
+The examples live in `edu.ftcphoenix.fw.tools.examples.*`:
 
 * **TeleOp_01_MecanumBasic** – baseline mecanum TeleOp (the foundation all later examples build on)
 * **TeleOp_02_ShooterBasic** – basic “modes” + plants

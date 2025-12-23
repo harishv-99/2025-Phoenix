@@ -2,10 +2,10 @@ package edu.ftcphoenix.fw.drive;
 
 import java.util.Objects;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.hal.PowerOutput;
-import edu.ftcphoenix.fw.util.LoopClock;
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.hal.PowerOutput;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.math.MathUtil;
 
 /**
  * Simple open-loop mecanum mixer.

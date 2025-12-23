@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.hardware.Gamepad;
 
 import java.util.Objects;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Convenience wrapper around two FTC gamepads (player 1 and player 2).

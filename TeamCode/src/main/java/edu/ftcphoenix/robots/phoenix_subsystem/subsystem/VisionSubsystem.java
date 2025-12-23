@@ -5,11 +5,11 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 import java.util.Collections;
 import java.util.Set;
 
-import edu.ftcphoenix.fw.robot.Subsystem;
-import edu.ftcphoenix.fw.sensing.AprilTagObservation;
-import edu.ftcphoenix.fw.sensing.AprilTagSensor;
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.legacy.robot.Subsystem;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Owns the AprilTag sensor and exposes helpers for scoring tags.

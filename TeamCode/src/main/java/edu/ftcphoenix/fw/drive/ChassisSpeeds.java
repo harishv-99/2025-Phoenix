@@ -1,6 +1,6 @@
 package edu.ftcphoenix.fw.drive;
 
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.core.math.MathUtil;
 
 /**
  * Robot-centric chassis velocity command.

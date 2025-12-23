@@ -3,8 +3,8 @@ package edu.ftcphoenix.fw.task;
 import java.util.ArrayList;
 import java.util.List;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Simple sequential task runner.

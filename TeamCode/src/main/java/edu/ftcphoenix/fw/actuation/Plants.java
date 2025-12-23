@@ -1,8 +1,8 @@
 package edu.ftcphoenix.fw.actuation;
 
-import edu.ftcphoenix.fw.hal.PowerOutput;
-import edu.ftcphoenix.fw.hal.PositionOutput;
-import edu.ftcphoenix.fw.hal.VelocityOutput;
+import edu.ftcphoenix.fw.core.hal.PowerOutput;
+import edu.ftcphoenix.fw.core.hal.PositionOutput;
+import edu.ftcphoenix.fw.core.hal.VelocityOutput;
 
 /**
  * Helpers for constructing {@link Plant} instances on top of Phoenix HAL

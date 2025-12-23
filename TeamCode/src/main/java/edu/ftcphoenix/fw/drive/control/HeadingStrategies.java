@@ -1,8 +1,9 @@
 package edu.ftcphoenix.fw.drive.control;
 
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
 import edu.ftcphoenix.fw.field.TagLayout;
 import edu.ftcphoenix.fw.field.TagLayout.TagPose;
-import edu.ftcphoenix.fw.geom.Pose3d;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 
 /**
  * Factory methods for common {@link HeadingStrategy} behaviors.
@@ -15,7 +16,7 @@ import edu.ftcphoenix.fw.geom.Pose3d;
  * <h2>Coordinate conventions</h2>
  *
  * <ul>
- *   <li>{@link edu.ftcphoenix.fw.geom.Pose2d} headings are measured in radians, CCW-positive from +X.</li>
+ *   <li>{@link Pose2d} headings are measured in radians, CCW-positive from +X.</li>
  *   <li>All returned headings follow that same convention.</li>
  * </ul>
  *

@@ -3,8 +3,8 @@ package edu.ftcphoenix.fw.drive.control;
 import java.util.Objects;
 
 import edu.ftcphoenix.fw.drive.ChassisSpeeds;
-import edu.ftcphoenix.fw.geom.Pose2d;
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
+import edu.ftcphoenix.fw.core.math.MathUtil;
 
 /**
  * Simple holonomic controller that drives the robot toward a target pose in a

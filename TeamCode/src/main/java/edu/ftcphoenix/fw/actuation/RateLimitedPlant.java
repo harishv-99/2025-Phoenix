@@ -2,9 +2,7 @@ package edu.ftcphoenix.fw.actuation;
 
 import java.util.Objects;
 
-import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.actuation.controller.*;
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 
 /**
  * A {@link Plant} decorator that rate-limits how quickly the target can

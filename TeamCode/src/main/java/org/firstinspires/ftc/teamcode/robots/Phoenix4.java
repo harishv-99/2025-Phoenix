@@ -1,21 +1,18 @@
 package org.firstinspires.ftc.teamcode.robots;
 
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.adapters.ftc.FtcTelemetryDebugSink;
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.input.binding.Bindings;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.robots.phoenix.RobotConfig;
 
 /**

@@ -2,8 +2,8 @@ package edu.ftcphoenix.robots.phoenix.tester;
 
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.tester.BaseTeleOpTester;
-import edu.ftcphoenix.fw.tester.TesterSuite;
+import edu.ftcphoenix.fw.tools.tester.BaseTeleOpTester;
+import edu.ftcphoenix.fw.tools.tester.TesterSuite;
 import edu.ftcphoenix.robots.phoenix.RobotConfig;
 
 /**

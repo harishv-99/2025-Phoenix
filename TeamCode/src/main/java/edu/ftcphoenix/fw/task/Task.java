@@ -1,6 +1,6 @@
 package edu.ftcphoenix.fw.task;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * A cooperative, stateful unit of work that is driven by the main robot loop.

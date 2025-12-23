@@ -1,6 +1,6 @@
 package edu.ftcphoenix.robots.phoenix.tester;
 
-import edu.ftcphoenix.fw.tester.TesterSuite;
+import edu.ftcphoenix.fw.tools.tester.TesterSuite;
 
 /**
  * Registers robot-specific testers for the Phoenix robot.

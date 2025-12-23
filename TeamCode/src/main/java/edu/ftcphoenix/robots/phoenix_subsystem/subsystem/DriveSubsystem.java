@@ -2,16 +2,15 @@ package edu.ftcphoenix.robots.phoenix_subsystem.subsystem;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.robot.Subsystem;
-import edu.ftcphoenix.fw.util.LoopClock;
-import edu.ftcphoenix.fw2.drive.hw.rev.MecanumDrive;
+import edu.ftcphoenix.fw.legacy.robot.Subsystem;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * P1 drive subsystem: mecanum + TagAim.

@@ -4,10 +4,10 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import java.util.Objects;
 
-import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
-import edu.ftcphoenix.fw.hal.PowerOutput;
-import edu.ftcphoenix.fw.hal.PositionOutput;
-import edu.ftcphoenix.fw.hal.VelocityOutput;
+import edu.ftcphoenix.fw.ftc.FtcHardware;
+import edu.ftcphoenix.fw.core.hal.PowerOutput;
+import edu.ftcphoenix.fw.core.hal.PositionOutput;
+import edu.ftcphoenix.fw.core.hal.VelocityOutput;
 
 /**
  * Beginner-friendly helpers for wiring FTC hardware into {@link Plant} instances.

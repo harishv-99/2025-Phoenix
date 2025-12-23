@@ -1,6 +1,6 @@
 package edu.ftcphoenix.fw.drive.control;
 
-import edu.ftcphoenix.fw.geom.Pose2d;
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
 
 /**
  * Strategy object that decides what heading the robot should face at a given

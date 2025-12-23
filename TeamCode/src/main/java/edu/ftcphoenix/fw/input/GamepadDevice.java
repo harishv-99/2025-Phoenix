@@ -4,7 +4,7 @@ import com.qualcomm.robotcore.hardware.Gamepad;
 
 import java.lang.reflect.Field;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 
 /**
  * Thin wrapper around an FTC {@link Gamepad} that exposes:

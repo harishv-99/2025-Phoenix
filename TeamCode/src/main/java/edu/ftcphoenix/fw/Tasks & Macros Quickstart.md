@@ -29,21 +29,30 @@ Typical flow in an OpMode:
 
 ```java
 public class MyTeleOp extends OpMode {
+    private final LoopClock clock = new LoopClock();
     private final TaskRunner runner = new TaskRunner();
 
     @Override
-    public void loop() {
-        LoopClock clock = ...; // however you track dtSec
+    public void start() {
+        clock.reset(getRuntime());
+    }
 
-        // 1) Update inputs / bindings.
-        bindings.update();
+    @Override
+    public void loop() {
+        // 0) Advance the loop clock once per cycle.
+        clock.update(getRuntime());
+
+        // 1) Update inputs / bindings (button edge detection happens here).
+        gamepads.update(clock);
+        bindings.update(clock);
 
         // 2) Advance tasks.
         runner.update(clock);
 
-        // 3) Let drive + plants use whatever targets the tasks set.
+        // 3) Apply the latest targets.
         drivebase.update(clock);
-        shooter.update(clock);
+        double dtSec = clock.dtSec();
+        shooter.update(dtSec);
         // ... etc.
     }
 }
@@ -114,7 +123,7 @@ Common factories (high‑level view):
 
 * **Instant behavior**
 
-    * `Tasks.instant(Runnable action)` – run once in `start(...)`, then complete.
+    * `Tasks.runOnce(Runnable action)` – run once in `start(...)`, then complete.
     * `Tasks.noop()` – do nothing and complete immediately.
 
 * **Time‑based waits**
@@ -124,6 +133,7 @@ Common factories (high‑level view):
 * **Condition‑based waits**
 
     * `Tasks.waitUntil(BooleanSupplier condition)` – wait until a boolean becomes true.
+    * `Tasks.waitUntil(BooleanSupplier condition, double timeoutSec)` – wait until true or time out.
 
 * **Composition**
 
@@ -173,7 +183,7 @@ These work with *both* feedback and non‑feedback plants (for example, power pl
     * Same as above, **but** the final target stays at `+1.0`.
     * Think: “run for at least this long, but keep that command afterward.”
 
-### 4.2 Feedback‑based move helpers (require feedback
+### 4.2 Feedback‑based move helpers (require feedback)
 
 These helpers rely on `plant.hasFeedback() == true` and `plant.atSetpoint()` being meaningful. They are designed for encoder‑backed motor plants (position or velocity) created via `Actuators.plant(...).motor(...).position(...)` or `.velocity(...)`.
 
@@ -294,7 +304,7 @@ bindings.onPress(shootButton, () -> {
 });
 ```
 
-The rest of your TeleOp loop just calls `bindings.update()` and `runner.update(clock)`.
+The rest of your TeleOp loop just calls `bindings.update(clock)` and `runner.update(clock)`.
 
 ---
 

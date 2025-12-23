@@ -2,8 +2,8 @@ package edu.ftcphoenix.fw.drive;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
-import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
-import edu.ftcphoenix.fw.hal.PowerOutput;
+import edu.ftcphoenix.fw.ftc.FtcHardware;
+import edu.ftcphoenix.fw.core.hal.PowerOutput;
 
 /**
  * High-level helpers for creating common drivebases.

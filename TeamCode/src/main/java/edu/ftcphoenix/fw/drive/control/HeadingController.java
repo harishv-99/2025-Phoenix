@@ -1,7 +1,7 @@
 package edu.ftcphoenix.fw.drive.control;
 
-import edu.ftcphoenix.fw.geom.Pose2d;
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
+import edu.ftcphoenix.fw.core.math.MathUtil;
 
 /**
  * Simple heading (yaw) controller used by go-to-pose and tag-aim behaviors.

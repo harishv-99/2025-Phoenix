@@ -3,13 +3,13 @@ package edu.ftcphoenix.fw.field;
 import java.util.Objects;
 import java.util.Set;
 
-import edu.ftcphoenix.fw.geom.Pose3d;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 
 /**
  * Describes the fixed, known placement of AprilTags on a field.
  *
  * <p>This is <strong>field metadata</strong>, not a sensor output. It is used by localization
- * code to convert a camera observation of a tag into a field-centric robot pose estimate.</p>
+ * and other field-aware logic that needs known tag placements.</p>
  *
  * <h2>Field coordinate system (FTC)</h2>
  *

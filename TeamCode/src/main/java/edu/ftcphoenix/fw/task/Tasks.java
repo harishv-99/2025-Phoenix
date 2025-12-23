@@ -3,7 +3,7 @@ package edu.ftcphoenix.fw.task;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Convenience factory and composition helpers for {@link Task} instances.

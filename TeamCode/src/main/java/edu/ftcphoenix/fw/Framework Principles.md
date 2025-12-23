@@ -26,7 +26,7 @@ Phoenix is designed around a few core goals:
     * **Mechanisms**: `Plant`
     * **Behavior over time**: `Task` / `TaskRunner`
 
-   FTC SDK specifics live in adapters, not in your robot logic.
+   FTC SDK specifics live in the `fw.ftc` boundary layer (and `fw.tools`), not in your robot logic.
 
 3. **Beginner-friendly, mentor-powerful**
 
@@ -63,7 +63,7 @@ At the bottom is a tiny hardware abstraction layer:
 * `PositionOutput` – position in native units (servo `0..1`, encoder ticks, etc.).
 * `VelocityOutput` – velocity in native units (ticks/sec, etc.).
 
-The FTC adapter `edu.ftcphoenix.fw.adapters.ftc.FtcHardware` wraps FTC SDK devices into these outputs.
+The FTC adapter `edu.ftcphoenix.fw.ftc.FtcHardware` wraps FTC SDK devices into these outputs.
 
 Most robot code should **not** use these directly.
 
@@ -258,7 +258,7 @@ Phoenix-framed values with `p` (for example, `pFieldToRobotPose`) so it’s obvi
 
 Rule of thumb: if you see `pAtoB.then(pBtoC)`, the result should be `pAtoC`.
 
-This convention is also called out explicitly in the FTC adapter boundary (`edu.ftcphoenix.fw.adapters.ftc.FtcFrames`).
+This convention is also called out explicitly in the FTC adapter boundary (`edu.ftcphoenix.fw.ftc.FtcFrames`).
 
 ### 7.3 Units must appear in the name
 

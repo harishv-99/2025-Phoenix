@@ -4,16 +4,12 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.adapters.ftc.FtcHardware;
-import edu.ftcphoenix.fw.actuation.Plants;
-import edu.ftcphoenix.fw.hal.PositionOutput;
-import edu.ftcphoenix.fw.hal.PowerOutput;
 import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.robot.Subsystem;
-import edu.ftcphoenix.fw.sensing.AprilTagObservation;
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.util.InterpolatingTable1D;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.legacy.robot.Subsystem;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * P2 shooter subsystem: pusher, feeder, and dual-velocity shooter.

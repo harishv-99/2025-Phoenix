@@ -1,13 +1,13 @@
 package edu.ftcphoenix.fw.drive.source;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.input.Axis;
 import edu.ftcphoenix.fw.input.Button;
 import edu.ftcphoenix.fw.input.GamepadDevice;
 import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * {@link DriveSource} that maps gamepad inputs to a robot-centric {@link DriveSignal}

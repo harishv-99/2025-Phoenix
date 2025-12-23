@@ -1,6 +1,6 @@
 package edu.ftcphoenix.fw.localization;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Common interface for components that estimate the robot's pose on the field.

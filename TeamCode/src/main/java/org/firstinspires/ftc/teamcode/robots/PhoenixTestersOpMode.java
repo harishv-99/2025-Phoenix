@@ -3,10 +3,10 @@ package org.firstinspires.ftc.teamcode.robots;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import edu.ftcphoenix.fw.tester.StandardTesters;
-import edu.ftcphoenix.fw.tester.TesterContext;
-import edu.ftcphoenix.fw.tester.TesterSuite;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.tools.tester.StandardTesters;
+import edu.ftcphoenix.fw.tools.tester.TesterContext;
+import edu.ftcphoenix.fw.tools.tester.TesterSuite;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.robots.phoenix.tester.PhoenixRobotTesters;
 
 /**

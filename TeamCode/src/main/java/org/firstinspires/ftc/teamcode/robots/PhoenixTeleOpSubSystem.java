@@ -3,7 +3,7 @@ package org.firstinspires.ftc.teamcode.robots;
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import edu.ftcphoenix.fw.robot.PhoenixTeleOpBase;
+import edu.ftcphoenix.fw.legacy.robot.PhoenixTeleOpBase;
 import edu.ftcphoenix.robots.phoenix_subsystem.PhoenixRobot;
 
 /**

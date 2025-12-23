@@ -3,7 +3,7 @@ package edu.ftcphoenix.fw.input;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 
-import edu.ftcphoenix.fw.util.MathUtil;
+import edu.ftcphoenix.fw.core.math.MathUtil;
 
 /**
  * Continuous input in [-1..+1] or [0..1].

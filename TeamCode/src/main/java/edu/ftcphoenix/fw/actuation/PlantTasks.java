@@ -4,7 +4,7 @@ import java.util.Objects;
 
 import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.task.TaskOutcome;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * Helper methods and builders for creating common {@link Task} patterns

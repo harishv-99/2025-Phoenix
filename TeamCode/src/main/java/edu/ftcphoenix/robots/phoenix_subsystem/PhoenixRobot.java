@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import edu.ftcphoenix.fw.adapters.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.robot.Subsystem;
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.util.LoopClock;
-import edu.ftcphoenix.fw.debug.NullDebugSink;
+import edu.ftcphoenix.fw.legacy.robot.Subsystem;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
 import edu.ftcphoenix.robots.phoenix_subsystem.subsystem.DriveSubsystem;
 import edu.ftcphoenix.robots.phoenix_subsystem.subsystem.ShooterSubsystem;
 import edu.ftcphoenix.robots.phoenix_subsystem.subsystem.VisionSubsystem;

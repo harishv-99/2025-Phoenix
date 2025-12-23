@@ -3,7 +3,7 @@ package edu.ftcphoenix.fw.task;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * A {@link Task} that runs until a condition becomes true, optionally

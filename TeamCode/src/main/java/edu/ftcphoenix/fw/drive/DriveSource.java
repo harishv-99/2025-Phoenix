@@ -1,7 +1,7 @@
 package edu.ftcphoenix.fw.drive;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
-import edu.ftcphoenix.fw.util.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 
 import java.util.Objects;
 import java.util.function.BooleanSupplier;

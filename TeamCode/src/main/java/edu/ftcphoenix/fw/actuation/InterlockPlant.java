@@ -3,7 +3,7 @@ package edu.ftcphoenix.fw.actuation;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
-import edu.ftcphoenix.fw.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 
 /**
  * A {@link Plant} decorator that gates commands based on a boolean condition.
