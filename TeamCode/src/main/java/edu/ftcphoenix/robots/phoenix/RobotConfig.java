@@ -1,5 +1,7 @@
 package edu.ftcphoenix.robots.phoenix;
 
+import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
+
 import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 
@@ -67,6 +69,39 @@ public class RobotConfig {
          * localization/aiming, calibrate and update this value.</p>
          */
         public static final CameraMountConfig cameraMount = CameraMountConfig.identity();
+    }
+
+    /**
+     * Localization-related configuration.
+     *
+     * <p>Phase 1: Pinpoint + AprilTag fusion requires the Pinpoint device name and offsets.
+     * Offsets use the Pinpoint convention (matching the goBILDA docs):</p>
+     * <ul>
+     *   <li><b>forwardPodOffsetLeftInches</b>: how far LEFT of your tracking point the forward (X) pod is (+left, -right)</li>
+     *   <li><b>strafePodOffsetForwardInches</b>: how far FORWARD of your tracking point the strafe (Y) pod is (+forward, -back)</li>
+     * </ul>
+     */
+    public static class Localization {
+
+        /**
+         * goBILDA Pinpoint configuration.
+         *
+         * <p>Distances are in inches to match Phoenix's pose types.</p>
+         */
+        public static final PinpointPoseEstimator.Config pinpoint =
+                PinpointPoseEstimator.Config.defaults()
+                        .useHardwareMapName("odo")
+                        .useOffsets(0.0, 0.0);
+
+        // Advanced options (uncomment if needed):
+        // pinpoint.useEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+        // pinpoint.useCustomEncoderResolutionTicksPerInch(null);
+        // pinpoint.useForwardPodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        // pinpoint.useStrafePodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        // pinpoint.useYawScalar(null);
+        // pinpoint.useResetOnInit(true);
+        // pinpoint.useResetWaitMs(300);
+        // pinpoint.useQuality(0.75);
     }
 
 }

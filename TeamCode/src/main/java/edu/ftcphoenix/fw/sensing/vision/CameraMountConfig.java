@@ -59,6 +59,14 @@ public final class CameraMountConfig {
      */
     private final Pose3d robotToCamera;
 
+
+    /**
+     * A constant identity camera mount (camera at robot origin with no rotation).
+     *
+     * <p>This is safe to share as a singleton because {@code CameraMountConfig} is immutable.</p>
+     */
+    private static final CameraMountConfig IDENTITY = new CameraMountConfig(Pose3d.zero());
+
     private CameraMountConfig(Pose3d robotToCamera) {
         this.robotToCamera = Objects.requireNonNull(robotToCamera, "robotToCamera");
     }
@@ -99,7 +107,7 @@ public final class CameraMountConfig {
      * Convenience: camera mount at robot origin with no rotation.
      */
     public static CameraMountConfig identity() {
-        return new CameraMountConfig(Pose3d.zero());
+        return IDENTITY;
     }
 
     /**

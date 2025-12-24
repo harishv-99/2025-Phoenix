@@ -153,6 +153,62 @@ drivebase.drive(s);
 
 Configuration is via `MecanumDrivebase.Config`. The drivebase makes a **defensive copy** of the config at construction time, so mutating the config object later won’t change an already-created drivebase.
 
+
+
+### 3.4 Config objects
+
+Phoenix uses two common patterns for configuration:
+
+1. **Owner-scoped configs** live as a nested `Owner.Config` class.
+
+   * Use this when the config is only meaningful to that one class.
+   * Examples: `MecanumDrivebase.Config`, `FtcVision.Config`, `PinpointPoseEstimator.Config`.
+   * These are usually simple mutable data objects: start from `defaults()`, tweak the fields you care about, then pass the config into the owner.
+   * Owners should defensively copy configs at construction time when later mutation would be surprising.
+
+2. **Semantic config wrappers** are top-level `*Config` classes.
+
+   * Use this when the config represents a real thing with meaning across multiple systems, and the type name should communicate that meaning.
+   * Example: `CameraMountConfig` (robot→camera extrinsics).
+   * These are often immutable value objects with `of(...)` / `identity()` factory helpers.
+
+Rule of thumb: if you find yourself creating a top-level `XConfig` that is only ever used to configure `X`, it probably wants to be `X.Config` instead.
+
+
+
+#### 3.4.1 Factory naming: `defaults()` vs `identity()` vs `zero()`
+
+Phoenix uses these names intentionally:
+
+- **`defaults()`** means “a reasonable starting configuration for a component.”
+  It’s used for `Owner.Config` classes that collect tuning / hardware options.
+  The values are not “correct for your robot,” they’re just safe to start from.
+  Example: `PinpointPoseEstimator.Config.defaults()`.
+
+- **`identity()`** means “the identity transform.”
+  It’s used when the object conceptually *is a transform between frames* and there is a meaningful
+  identity element (“no translation, no rotation”).
+  Example: `CameraMountConfig.identity()` means the camera is assumed to be at the robot origin and
+  aligned with the robot axes — useful as a placeholder, but you should replace it with a calibrated
+  mount for real accuracy.
+
+- **`zero()`** is used for geometry primitives where the identity transform is also the “all zeros” value.
+  Example: `Pose2d.zero()` / `Pose3d.zero()` represent “no translation, no rotation.”
+
+Rule of thumb: if the thing you’re constructing is *behavior/tuning*, call it `defaults()`.
+If it’s *pure geometry*, prefer `zero()` / `identity()` depending on what’s idiomatic for that type.
+
+### 3.5 Direction and naming conventions
+
+Phoenix coordinates and sign conventions are a contract:
+
+* `Pose2d` / `Pose3d`: **+X forward**, **+Y left**, heading/yaw is **CCW-positive**.
+* Distances are in **inches**.
+* Angles are in **radians**.
+
+**Naming guideline:** prefer *directional words* (`Forward`, `Left`, `Up`, etc.) when a value is not literally a `Pose2d` component.
+
+For example, library boundaries often use parameter names like `xOffset` / `yOffset` that are defined in that library’s local frame. In Phoenix code, prefer names like `offsetLeftInches`, `offsetForwardInches`, or `forwardPodOffsetLeftInches` to make the meaning explicit.
 ---
 
 ## 4. Tasks and macros

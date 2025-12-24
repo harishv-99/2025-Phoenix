@@ -99,19 +99,17 @@ public final class Pose3d {
     }
 
     /**
-     * Returns the identity transform (no translation, no rotation).
+     * A constant zero transform (no translation, no rotation).
+     *
+     * <p>This is safe to share as a singleton because {@code Pose3d} is immutable.</p>
      */
-    public static Pose3d identity() {
-        return new Pose3d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-    }
+    private static final Pose3d ZERO = new Pose3d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
     /**
-     * Alias for {@link #identity()}.
-     *
-     * <p>Some callers conceptually prefer "zero pose" wording.</p>
+     * Returns the zero transform (no translation, no rotation).
      */
     public static Pose3d zero() {
-        return identity();
+        return ZERO;
     }
 
     /**

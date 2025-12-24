@@ -56,6 +56,20 @@ public final class Pose2d {
     public final double headingRad;
 
     /**
+     * A constant zero pose (x=0, y=0, heading=0).
+     *
+     * <p>This is safe to share as a singleton because {@code Pose2d} is immutable.</p>
+     */
+    private static final Pose2d ZERO = new Pose2d(0.0, 0.0, 0.0);
+
+    /**
+     * Returns the zero pose (x=0, y=0, heading=0).
+     */
+    public static Pose2d zero() {
+        return ZERO;
+    }
+
+    /**
      * Constructs a new immutable 2D pose.
      *
      * @param xInches    X position on the floor plane, in inches (forward)

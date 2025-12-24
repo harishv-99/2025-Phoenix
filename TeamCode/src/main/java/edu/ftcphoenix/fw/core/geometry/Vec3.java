@@ -55,10 +55,17 @@ public final class Vec3 {
     }
 
     /**
-     * The zero vector (0,0,0).
+     * A constant zero vector (0,0,0).
+     *
+     * <p>This is safe to share as a singleton because {@code Vec3} is immutable.</p>
+     */
+    private static final Vec3 ZERO = new Vec3(0.0, 0.0, 0.0);
+
+    /**
+     * Returns the zero vector (0,0,0).
      */
     public static Vec3 zero() {
-        return new Vec3(0.0, 0.0, 0.0);
+        return ZERO;
     }
 
     /**

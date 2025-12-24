@@ -59,14 +59,21 @@ public final class Mat3 {
     }
 
     /**
-     * Identity matrix.
+     * A constant identity matrix.
+     *
+     * <p>This is safe to share as a singleton because {@code Mat3} is immutable.</p>
+     */
+    private static final Mat3 IDENTITY = new Mat3(
+            1, 0, 0,
+            0, 1, 0,
+            0, 0, 1
+    );
+
+    /**
+     * Returns the identity matrix.
      */
     public static Mat3 identity() {
-        return new Mat3(
-                1, 0, 0,
-                0, 1, 0,
-                0, 0, 1
-        );
+        return IDENTITY;
     }
 
     /**

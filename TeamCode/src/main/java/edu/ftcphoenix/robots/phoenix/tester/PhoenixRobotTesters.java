@@ -27,6 +27,7 @@ public final class PhoenixRobotTesters {
 
         DrivetrainMotorDirectionTester.register(suite);
         AprilTagLocalizationTesterPhoenix.register(suite);
+        PinpointAprilTagFusionLocalizationTesterPhoenix.register(suite);
 
         // Add future robot-specific testers here, e.g.:
         // IntakeTester.register(suite);
