@@ -14,12 +14,13 @@ import edu.ftcphoenix.fw.tools.tester.ui.ScalarTuner;
  * Generic tester for a configured {@link Servo} that lets you vary servo position.
  *
  * <h2>Selection</h2>
- * If constructed without a name, shows an INIT picker listing configured servos.
+ * If constructed without a name (or the preferred name cannot be resolved), shows a picker listing
+ * configured servos.
  *
  * <h2>Controls (gamepad1)</h2>
  * <ul>
- *   <li><b>INIT (no device selected)</b>: Dpad Up/Down select, A choose, B refresh</li>
- *   <li><b>RUN (device selected)</b>:
+ *   <li><b>PICKER (no device chosen yet)</b>: Dpad Up/Down highlight, A choose, B refresh</li>
+ *   <li><b>RUN (device chosen)</b>:
  *     <ul>
  *       <li>A: enable/disable apply (disabled holds last applied output)</li>
  *       <li>X: invert (position becomes 1 - x)</li>
@@ -27,6 +28,7 @@ import edu.ftcphoenix.fw.tools.tester.ui.ScalarTuner;
  *       <li>Dpad Up/Down: step position</li>
  *       <li>Left stick Y: live override (maps [-1..1] → [0..1])</li>
  *       <li>B: center (0.5)</li>
+ *       <li>BACK: return to picker (change servo)</li>
  *     </ul>
  *   </li>
  * </ul>
@@ -53,7 +55,7 @@ public final class ServoPositionTester extends BaseTeleOpTester {
     /**
      * Create a servo position tester with no preferred device name.
      *
-     * <p>During INIT, a picker menu is shown so you can choose a configured servo.</p>
+     * <p>A picker menu is shown so you can choose a configured servo.</p>
      */
     public ServoPositionTester() {
         this(null);
@@ -83,7 +85,7 @@ public final class ServoPositionTester extends BaseTeleOpTester {
                 ctx.hw,
                 Servo.class,
                 "Select Servo",
-                "Dpad: select | A: choose | B: refresh"
+                "Dpad: highlight | A: choose | B: refresh"
         );
         picker.refresh();
 
@@ -126,6 +128,32 @@ public final class ServoPositionTester extends BaseTeleOpTester {
             if (!ready) return;
             position.setTarget(0.5);
         });
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean onBackPressed() {
+        if (!ready) {
+            return false;
+        }
+
+        // Leave the servo at its last applied position (consistent with onStop()).
+        try {
+            if (servo != null) servo.setPosition(position.lastApplied());
+        } catch (Exception ignored) {
+        }
+
+        ready = false;
+        servo = null;
+        resolveError = null;
+
+        picker.clearChoice();
+        picker.refresh();
+        if (servoName != null && !servoName.isEmpty()) {
+            picker.setPreferredName(servoName);
+        }
+
+        return true;
     }
 
     /** {@inheritDoc} */
@@ -218,7 +246,7 @@ public final class ServoPositionTester extends BaseTeleOpTester {
         position.render(t);
 
         t.addLine(String.format(Locale.US, "AppliedNow=%.3f", applied));
-        t.addLine("Controls: A enable | X invert | START step | dpad +/- | stickY override | B center");
+        t.addLine("Controls: A enable | X invert | START step | dpad +/- | stickY override | B center | BACK picker");
 
         if (servo != null) {
             try {

@@ -14,12 +14,13 @@ import edu.ftcphoenix.fw.tools.tester.ui.ScalarTuner;
  * Generic tester for a configured {@link CRServo} that lets you vary servo power.
  *
  * <h2>Selection</h2>
- * If constructed without a name, shows an INIT picker listing configured CRServos.
+ * If constructed without a name (or the preferred name cannot be resolved), shows a picker listing
+ * configured CRServos.
  *
  * <h2>Controls (gamepad1)</h2>
  * <ul>
- *   <li><b>INIT (no device selected)</b>: Dpad Up/Down select, A choose, B refresh</li>
- *   <li><b>RUN (device selected)</b>:
+ *   <li><b>PICKER (no device chosen yet)</b>: Dpad Up/Down highlight, A choose, B refresh</li>
+ *   <li><b>RUN (device chosen)</b>:
  *     <ul>
  *       <li>A: enable/disable output</li>
  *       <li>X: invert</li>
@@ -27,6 +28,7 @@ import edu.ftcphoenix.fw.tools.tester.ui.ScalarTuner;
  *       <li>Dpad Up/Down: step power</li>
  *       <li>Left stick Y: live override (sets target while moved)</li>
  *       <li>B: zero</li>
+ *       <li>BACK: return to picker (change CRServo)</li>
  *     </ul>
  *   </li>
  * </ul>
@@ -51,7 +53,7 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
     /**
      * Create a CR servo power tester with no preferred device name.
      *
-     * <p>During INIT, a picker menu is shown so you can choose from configured CR servos.</p>
+     * <p>A picker menu is shown so you can choose from configured CR servos.</p>
      */
     public CrServoPowerTester() {
         this(null);
@@ -81,7 +83,7 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
                 ctx.hw,
                 CRServo.class,
                 "Select CRServo",
-                "Dpad: select | A: choose | B: refresh"
+                "Dpad: highlight | A: choose | B: refresh"
         );
         picker.refresh();
 
@@ -115,6 +117,29 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
                 gamepads.p1().b(),        // zero
                 () -> ready
         );
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean onBackPressed() {
+        if (!ready) {
+            return false;
+        }
+
+        // Return to picker state so a different servo can be selected.
+        applyPower(0.0);
+
+        ready = false;
+        servo = null;
+        resolveError = null;
+
+        picker.clearChoice();
+        picker.refresh();
+        if (servoName != null && !servoName.isEmpty()) {
+            picker.setPreferredName(servoName);
+        }
+
+        return true;
     }
 
     /** {@inheritDoc} */
@@ -203,7 +228,7 @@ public final class CrServoPowerTester extends BaseTeleOpTester {
         power.render(t);
 
         t.addLine("");
-        t.addLine("Controls: A enable | X invert | START step | dpad +/- | stickY override | B zero");
+        t.addLine("Controls: A enable | X invert | START step | dpad +/- | stickY override | B zero | BACK picker");
 
         if (servo != null) {
             try {

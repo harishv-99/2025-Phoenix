@@ -11,19 +11,21 @@ import edu.ftcphoenix.fw.tools.tester.ui.SelectionMenu;
  * <ul>
  *   <li><b>Dpad Up/Down</b>: select (menu only)</li>
  *   <li><b>A</b>: enter selected tester (menu only)</li>
- *   <li><b>BACK</b>: return to menu (stops active tester)</li>
+ *   <li><b>BACK</b>: go back (active tester may handle; otherwise returns to menu)</li>
  * </ul>
  *
- * <p>This suite supports INIT-time selections: you can enter a tester during INIT, allow that
- * tester to run its own {@link TeleOpTester#initLoop(double)} (e.g., camera selection), then press
- * Start and continue into RUN without leaving the tester.</p>
+ * <p>
+ * This suite supports selection menus during INIT: you can enter a tester during INIT, allow that
+ * tester to run its own {@link TeleOpTester#initLoop(double)} (for example, a camera picker), then
+ * press Start and continue into RUN without leaving the tester.
+ * </p>
  */
 public final class TesterSuite extends BaseTeleOpTester {
 
     private final SelectionMenu<Supplier<TeleOpTester>> menu =
             new SelectionMenu<Supplier<TeleOpTester>>()
                     .setTitle("Phoenix Tester Menu")
-                    .setHelp("Dpad: select | A: enter | BACK: menu");
+                    .setHelp("Dpad: select | A: enter | BACK: back/exit");
 
     private TeleOpTester active = null;
     private boolean inMenu = true;
@@ -72,9 +74,16 @@ public final class TesterSuite extends BaseTeleOpTester {
                 item -> enter(item.value)
         );
 
-        // BACK always returns to menu (INIT or RUN) if a tester is active.
+        // BACK is treated as navigation:
+        //   1) Offer it to the active tester (for multi-step tester UIs).
+        //   2) If not handled, stop the tester and return to the menu.
         bindings.onPress(gamepads.p1().back(), () -> {
             if (inMenu) return;
+
+            if (active != null && active.onBackPressed()) {
+                return;
+            }
+
             stopActive();
             inMenu = true;
         });
@@ -197,7 +206,7 @@ public final class TesterSuite extends BaseTeleOpTester {
         ctx.telemetry.addLine("");
         ctx.telemetry.addLine(opModeStarted
                 ? "RUNNING: Enter tester with A."
-                : "INIT: Enter a tester with A (it may have its own INIT menu).");
+                : "INIT: Enter a tester with A (it may have its own picker/selection menu)." );
         ctx.telemetry.update();
     }
 }

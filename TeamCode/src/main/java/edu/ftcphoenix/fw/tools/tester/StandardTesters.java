@@ -1,6 +1,7 @@
 package edu.ftcphoenix.fw.tools.tester;
 
 import edu.ftcphoenix.fw.tools.tester.calibration.CameraMountCalibrator;
+import edu.ftcphoenix.fw.tools.tester.localization.AprilTagLocalizationTester;
 import edu.ftcphoenix.fw.tools.tester.hardware.CrServoPowerTester;
 import edu.ftcphoenix.fw.tools.tester.hardware.DcMotorPositionTester;
 import edu.ftcphoenix.fw.tools.tester.hardware.DcMotorPowerTester;
@@ -35,6 +36,13 @@ public final class StandardTesters {
                 "Calib: Camera Mount",
                 "Solve robotToCameraPose using known robot pose + tag layout. Includes camera picker.",
                 CameraMountCalibrator::new
+        );
+
+        // Localization
+        suite.add(
+                "Loc: AprilTag Localization",
+                "Verify AprilTag detections + compute fieldToRobot pose (includes camera picker).",
+                AprilTagLocalizationTester::new
         );
 
         // Hardware - Motors

@@ -16,11 +16,12 @@ import edu.ftcphoenix.fw.tools.tester.ui.IntTuner;
  * {@link DcMotorEx#setVelocity(double)}.
  *
  * <h2>Selection</h2>
- * If constructed without a motor name, shows an INIT picker listing configured motors.
+ * If constructed without a motor name (or the preferred name cannot be resolved), shows a picker
+ * listing configured motors.
  *
  * <h2>Controls (gamepad1)</h2>
  * <ul>
- *   <li><b>INIT (no motor selected)</b>: Dpad Up/Down select, A choose, B refresh</li>
+ *   <li><b>PICKER (no motor chosen yet)</b>: Dpad Up/Down highlight, A choose, B refresh</li>
  *   <li><b>RUN (motor selected)</b>:
  *     <ul>
  *       <li><b>A</b>: enable/disable velocity control</li>
@@ -30,6 +31,7 @@ import edu.ftcphoenix.fw.tools.tester.ui.IntTuner;
  *       <li><b>Right stick Y</b>: smoothly nudge target velocity (hold to change continuously)</li>
  *       <li><b>Y</b>: set target velocity to 0 (does not disable)</li>
  *       <li><b>B</b>: stop (disable + target=0)</li>
+ *       <li><b>BACK</b>: return to picker (change motor)</li>
  *     </ul>
  *   </li>
  * </ul>
@@ -75,7 +77,7 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
     /**
      * Create a DC motor velocity tester with no preferred device name.
      *
-     * <p>During INIT, a picker menu is shown so you can choose a configured motor.</p>
+     * <p>A picker menu is shown so you can choose a configured motor.</p>
      */
     public DcMotorVelocityTester() {
         this(null);
@@ -105,7 +107,7 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
                 ctx.hw,
                 DcMotor.class,
                 "Select Motor",
-                "Dpad: select | A: choose | B: refresh"
+                "Dpad: highlight | A: choose | B: refresh"
         );
         picker.refresh();
 
@@ -185,6 +187,36 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
             }
             stopMotorNow();
         });
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean onBackPressed() {
+        if (!ready) {
+            return false;
+        }
+
+        // Ensure motor is quiet and restore original settings before returning to the picker.
+        if (targetVelTps.isEnabled()) {
+            targetVelTps.toggleEnabled();
+        }
+        targetVelTps.setTarget(0);
+
+        stopMotorNow();
+        restoreOriginalSettings();
+
+        ready = false;
+        motor = null;
+        motorEx = null;
+        resolveError = null;
+
+        picker.clearChoice();
+        picker.refresh();
+        if (motorName != null && !motorName.isEmpty()) {
+            picker.setPreferredName(motorName);
+        }
+
+        return true;
     }
 
     /** {@inheritDoc} */
@@ -419,7 +451,7 @@ public final class DcMotorVelocityTester extends BaseTeleOpTester {
         ));
 
         t.addLine("");
-        t.addLine("Controls: A enable | X dir | START fine/coarse | dpad U/D target | RStickY nudge | Y zero target | B stop");
+        t.addLine("Controls: A enable | X dir | START fine/coarse | dpad U/D target | RStickY nudge | Y zero target | B stop | BACK picker");
 
         t.update();
     }

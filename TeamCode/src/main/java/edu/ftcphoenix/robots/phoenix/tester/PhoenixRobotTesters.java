@@ -26,6 +26,7 @@ public final class PhoenixRobotTesters {
         if (suite == null) return;
 
         DrivetrainMotorDirectionTester.register(suite);
+        AprilTagLocalizationTesterPhoenix.register(suite);
 
         // Add future robot-specific testers here, e.g.:
         // IntakeTester.register(suite);

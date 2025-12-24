@@ -20,12 +20,14 @@ import edu.ftcphoenix.fw.input.binding.Bindings;
  * <p>Intended usage pattern:
  * <ul>
  *   <li>Tester is constructed with an optional preferred name (may be null/empty)</li>
- *   <li>If no name is provided (or name isn't found), show a picker menu during INIT</li>
+ *   <li>If no name is provided (or name isn't found), show a picker menu so the user can choose a name.</li>
  *   <li>Once chosen, the tester resolves the actual device via {@link HardwareMap#get(Class, String)}</li>
  * </ul>
  *
  * <p><b>Important:</b> HardwareMap enumeration/lookup may initialize devices and can take time.
- * Call {@link #refresh()} and perform device lookups during INIT / initLoop.</p>
+ * Call {@link #refresh()} and perform device lookups while you are in a picker screen (typically
+ * from {@code init()} / {@code initLoop()}). Avoid doing repeated enumeration while actively
+ * commanding actuators.</p>
  */
 public final class HardwareNamePicker {
 
@@ -60,7 +62,7 @@ public final class HardwareNamePicker {
     public HardwareNamePicker(HardwareMap hw,
                               Class<? extends HardwareDevice> deviceType,
                               String title) {
-        this(hw, deviceType, title, "Dpad: select | A: choose | B: refresh");
+        this(hw, deviceType, title, "Dpad: highlight | A: choose | B: refresh");
     }
 
     /**

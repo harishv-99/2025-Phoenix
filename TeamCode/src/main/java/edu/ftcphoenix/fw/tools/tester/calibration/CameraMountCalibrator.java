@@ -27,14 +27,33 @@ import edu.ftcphoenix.fw.tools.tester.ui.SelectionMenu;
  * </ul>
  *
  * <h2>Camera selection</h2>
- * If constructed without a camera name (or with an empty name), this tester shows an INIT menu
- * listing configured webcams and lets you select one before calibration starts.
+ * <p>
+ * If constructed without a camera name (or if the preferred camera cannot be initialized), this
+ * tester shows a camera picker listing configured webcams and lets you choose one before
+ * calibration begins.
+ * </p>
  *
  * <h2>Core math</h2>
  * <pre>
  * fieldToTagPose = fieldToRobotPose · robotToCameraPose · cameraToTagPose
  * => robotToCameraPose = inv(fieldToRobotPose) · fieldToTagPose · inv(cameraToTagPose)
  * </pre>
+ *
+ * <h2>Controls (gamepad1)</h2>
+ * <ul>
+ *   <li><b>PICKER (no camera chosen yet)</b>: Dpad Up/Down highlight, A choose, B refresh</li>
+ *   <li><b>CALIBRATE (camera chosen)</b>:
+ *     <ul>
+ *       <li>Y/X: increment/decrement tag ID</li>
+ *       <li>A: capture sample (average mount)</li>
+ *       <li>B: clear captured samples</li>
+ *       <li>Dpad: adjust known robot pose (XY)</li>
+ *       <li>LB/RB: adjust known robot yaw</li>
+ *       <li>START: fine/coarse step</li>
+ *       <li>BACK: return to camera picker (change camera)</li>
+ *     </ul>
+ *   </li>
+ * </ul>
  */
 public final class CameraMountCalibrator extends BaseTeleOpTester {
 
@@ -62,7 +81,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     private final SelectionMenu<String> cameraMenu =
             new SelectionMenu<String>()
                     .setTitle("Select Camera")
-                    .setHelp("Dpad: select | A: choose | B: refresh");
+                    .setHelp("Dpad: highlight | A: choose | B: refresh");
 
     private int selectedTagId = DEFAULT_TAG_ID;
     private Pose3d fieldToRobotPose = DEFAULT_P_FIELD_TO_ROBOT;
@@ -79,8 +98,8 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     /**
      * Create a calibrator with default settings.
      *
-     * <p>This constructor does not force a specific camera name. During INIT, the tester will
-     * present a menu of configured webcams so you can choose one.</p>
+     * <p>This constructor does not force a specific camera name. The tester will present a camera
+     * picker menu of configured webcams so you can choose one.</p>
      */
     public CameraMountCalibrator() {
         this(null, null, DEFAULT_MAX_AGE_SEC);
@@ -211,6 +230,32 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
 
     /** {@inheritDoc} */
     @Override
+    public boolean onBackPressed() {
+        if (!visionReady) {
+            return false;
+        }
+
+        // Return to the camera picker. This allows you to re-select the webcam without leaving
+        // the tester suite.
+        visionReady = false;
+        visionInitError = null;
+
+        tagSensor = null;
+
+        lastRobotToCameraSample = null;
+        lastObservedCameraToTag = null;
+        lastPredictedCameraToTag = null;
+
+        avg.clear();
+
+        // Rebuild menu entries and keep the last chosen camera highlighted.
+        refreshCameraList();
+
+        return true;
+    }
+
+    /** {@inheritDoc} */
+    @Override
     protected void onInitLoop(double dtSec) {
         if (!visionReady) {
             renderCameraPicker();
@@ -294,6 +339,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         t.addLine("Chosen: " + (selectedCameraName == null ? "(none)" : selectedCameraName));
         t.addLine("Press A to choose a camera and initialize vision.");
         t.addLine("Press B to refresh camera list.");
+        t.addLine("Press BACK to exit to the tester menu.");
 
         if (visionInitError != null) {
             t.addLine("");
@@ -344,7 +390,7 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
                 "Camera=%s | TagId=%d | Step=%s | MaxAge=%.0f ms",
                 selectedCameraName, selectedTagId, fineSteps ? "FINE" : "COARSE", maxAgeSec * 1000.0
         ));
-        t.addLine("Controls: Y/X tagId | A capture | B clear | dpad XY | LB/RB yaw | START step");
+        t.addLine("Controls: Y/X tagId | A capture | B clear | dpad XY | LB/RB yaw | START step | BACK camera picker");
 
         t.addLine("");
         t.addLine("Known robot pose (fieldToRobotPose):");

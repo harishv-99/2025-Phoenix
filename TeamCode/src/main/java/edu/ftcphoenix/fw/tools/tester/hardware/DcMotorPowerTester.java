@@ -15,7 +15,8 @@ import edu.ftcphoenix.fw.tools.tester.ui.ScalarTuner;
  * Generic tester for a configured {@link DcMotor}/{@link DcMotorEx} that lets you vary motor power.
  *
  * <h2>Selection</h2>
- * If constructed without a motor name, shows an INIT picker listing configured motors.
+ * If constructed without a motor name (or the preferred name cannot be resolved), shows a picker
+ * listing configured motors.
  *
  * <h2>Controls (gamepad1)</h2>
  * <ul>
@@ -52,7 +53,7 @@ public final class DcMotorPowerTester extends BaseTeleOpTester {
     /**
      * Create a DC motor power tester with no preferred device name.
      *
-     * <p>During INIT, a picker menu is shown so you can choose a configured motor.</p>
+     * <p>A picker menu is shown so you can choose a configured motor.</p>
      */
     public DcMotorPowerTester() {
         this(null);
@@ -124,25 +125,31 @@ public final class DcMotorPowerTester extends BaseTeleOpTester {
                 () -> ready
         );
 
-        // BACK: return to picker so you can change motors easily.
-        bindings.onPress(gamepads.p1().back(), () -> {
-            if (!ready) return;
-
-            applyPower(0.0);
-
-            // Return to picker state
-            ready = false;
-            motor = null;
-            motorEx = null;
-            resolveError = null;
-
-            picker.clearChoice();
-            picker.refresh();
-            if (motorName != null && !motorName.isEmpty()) {
-                picker.setPreferredName(motorName);
-            }
-        });
     }
+    /** {@inheritDoc} */
+    @Override
+    public boolean onBackPressed() {
+        if (!ready) {
+            return false;
+        }
+
+        // Return to picker state so a different motor can be selected.
+        applyPower(0.0);
+
+        ready = false;
+        motor = null;
+        motorEx = null;
+        resolveError = null;
+
+        picker.clearChoice();
+        picker.refresh();
+        if (motorName != null && !motorName.isEmpty()) {
+            picker.setPreferredName(motorName);
+        }
+
+        return true;
+    }
+
 
     /** {@inheritDoc} */
     @Override
