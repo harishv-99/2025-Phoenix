@@ -72,8 +72,27 @@ public final class GoToPoseTask implements Task {
          */
         public double maxNoPoseSec = 0.25;
 
-        /** Creates a new {@code Config} with default values. */
-        public Config() {
+        private Config() {
+            // Defaults assigned in field initializers.
+        }
+
+        /**
+         * Create a new config instance with Phoenix defaults.
+         */
+        public static Config defaults() {
+            return new Config();
+        }
+
+        /**
+         * Deep copy of this config.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.positionTolInches = this.positionTolInches;
+            c.headingTolRad = this.headingTolRad;
+            c.timeoutSec = this.timeoutSec;
+            c.maxNoPoseSec = this.maxNoPoseSec;
+            return c;
         }
     }
 
@@ -116,7 +135,9 @@ public final class GoToPoseTask implements Task {
         this.cfg = Objects.requireNonNull(cfg, "cfg");
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start(LoopClock clock) {
         started = true;
@@ -131,7 +152,9 @@ public final class GoToPoseTask implements Task {
         drivebase.stop();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void update(LoopClock clock) {
         if (finished) {
@@ -207,34 +230,46 @@ public final class GoToPoseTask implements Task {
         drivebase.drive(cmd);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean isComplete() {
         return finished;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public TaskOutcome getOutcome() {
         return finished ? outcome : TaskOutcome.NOT_DONE;
     }
 
-    /** @return the target pose this task is driving toward. */
+    /**
+     * @return the target pose this task is driving toward.
+     */
     public Pose2d getTargetPose() {
         return targetPose;
     }
 
-    /** @return the most recent position error magnitude in inches. */
+    /**
+     * @return the most recent position error magnitude in inches.
+     */
     public double getLastPosErrorInches() {
         return lastPosErrorInches;
     }
 
-    /** @return the most recent absolute heading error in radians. */
+    /**
+     * @return the most recent absolute heading error in radians.
+     */
     public double getLastHeadingErrorRad() {
         return lastHeadingErrorRad;
     }
 
-    /** @return the total elapsed time in seconds since this task started. */
+    /**
+     * @return the total elapsed time in seconds since this task started.
+     */
     public double getElapsedSec() {
         return elapsedSec;
     }

@@ -12,6 +12,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.YawPitchRollAngles;
 import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
+import org.firstinspires.ftc.vision.apriltag.AprilTagLibrary;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.Collections;
@@ -102,12 +103,44 @@ public final class FtcVision {
         public double sdkPitchRadOffset = 0.0;
 
         /**
+         * Optional tag library override for the FTC AprilTag processor.
+         *
+         * <p>When {@code null}, Phoenix defaults to
+         * {@link AprilTagGameDatabase#getCurrentGameTagLibrary()}.
+         * Set this when you are using custom-printed tags (different IDs and/or sizes).</p>
+         */
+        public AprilTagLibrary tagLibrary = null;
+
+        private Config() {
+            // Defaults set via field initializers.
+        }
+
+        /**
+         * Create a new configuration instance with Phoenix defaults.
+         */
+        public static Config defaults() {
+            return new Config();
+        }
+
+        /**
+         * Convenience helper to attach a tag library override.
+         *
+         * @param library AprilTag library to use (may be {@code null} to use current game library)
+         * @return this config for chaining
+         */
+        public Config withTagLibrary(AprilTagLibrary library) {
+            this.tagLibrary = library;
+            return this;
+        }
+
+
+        /**
          * Convenience helper to attach a camera mount without call-site boilerplate.
          *
          * @param mount camera mount (may be {@code null} to clear)
          * @return this config for chaining
          */
-        public Config useCameraMount(CameraMountConfig mount) {
+        public Config withCameraMount(CameraMountConfig mount) {
             this.cameraMount = mount;
             return this;
         }
@@ -118,9 +151,21 @@ public final class FtcVision {
          * @param resolution requested resolution (may be {@code null} to use default)
          * @return this config for chaining
          */
-        public Config useCameraResolution(Size resolution) {
+        public Config withCameraResolution(Size resolution) {
             this.cameraResolution = resolution;
             return this;
+        }
+
+        /**
+         * Deep copy of this config.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.cameraResolution = this.cameraResolution;
+            c.cameraMount = this.cameraMount;
+            c.sdkPitchRadOffset = this.sdkPitchRadOffset;
+            c.tagLibrary = this.tagLibrary;
+            return c;
         }
     }
 
@@ -136,7 +181,7 @@ public final class FtcVision {
      * @return a ready-to-use {@link AprilTagSensor}
      */
     public static AprilTagSensor aprilTags(HardwareMap hw, String cameraName) {
-        return aprilTags(hw, cameraName, new Config());
+        return aprilTags(hw, cameraName, Config.defaults());
     }
 
     /**
@@ -160,7 +205,7 @@ public final class FtcVision {
 
         // Configure the AprilTag processor: current-game library, inches + radians for pose.
         AprilTagProcessor.Builder tagBuilder = new AprilTagProcessor.Builder()
-                .setTagLibrary(AprilTagGameDatabase.getCurrentGameTagLibrary())
+                .setTagLibrary(cfg.tagLibrary != null ? cfg.tagLibrary : AprilTagGameDatabase.getCurrentGameTagLibrary())
                 .setOutputUnits(DistanceUnit.INCH, AngleUnit.RADIANS);
 
         // Optional: apply Phoenix camera extrinsics so FTC can compute robotPose.
@@ -252,13 +297,17 @@ public final class FtcVision {
             this.processor = Objects.requireNonNull(processor, "processor");
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public AprilTagObservation bestAny(double maxAgeSec) {
             return selectBest(null, maxAgeSec);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public AprilTagObservation best(Set<Integer> idsOfInterest, double maxAgeSec) {
             Objects.requireNonNull(idsOfInterest, "idsOfInterest");
@@ -268,27 +317,35 @@ public final class FtcVision {
             return selectBest(idsOfInterest, maxAgeSec);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public AprilTagObservation best(int id, double maxAgeSec) {
             return best(Collections.singleton(id), maxAgeSec);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasFreshAny(double maxAgeSec) {
             AprilTagObservation obs = bestAny(maxAgeSec);
             return obs.isFresh(maxAgeSec);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasFresh(Set<Integer> idsOfInterest, double maxAgeSec) {
             AprilTagObservation obs = best(idsOfInterest, maxAgeSec);
             return obs.isFresh(maxAgeSec);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasFresh(int id, double maxAgeSec) {
             AprilTagObservation obs = best(id, maxAgeSec);

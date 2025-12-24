@@ -308,4 +308,4 @@ Task feedPusher = SequenceTask.of(pusherLoad, pusherShoot, pusherRetract);
 
     * “shoot N balls” (repeat the single-ball macro in a `SequenceTask`), and/or
     * add a *min-range / max-range* check before starting the macro, and/or
-    * pass `cameraMount` into `FtcVision.aprilTags(..., cfg)` via `new FtcVision.Config().useCameraMount(cameraMount)` if you want the FTC SDK’s robot-pose estimation path enabled (separate from TagAim).
+    * pass `cameraMount` into `FtcVision.aprilTags(..., cfg)` via `FtcVision.Config.defaults().withCameraMount(cameraMount)` if you want the FTC SDK’s robot-pose estimation path enabled (separate from TagAim).

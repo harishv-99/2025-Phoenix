@@ -31,26 +31,38 @@ public final class GoToPoseTasks {
         // Position control
         // ----------------
 
-        /** Proportional gain for position (inches -> inches/sec). */
+        /**
+         * Proportional gain for position (inches -> inches/sec).
+         */
         public double kPos = 0.05;
 
-        /** Maximum commanded forward speed (ips). */
+        /**
+         * Maximum commanded forward speed (ips).
+         */
         public double maxAxialInchesPerSec = 40.0;
 
-        /** Maximum commanded leftward strafe speed (ips). */
+        /**
+         * Maximum commanded leftward strafe speed (ips).
+         */
         public double maxLateralInchesPerSec = 40.0;
 
         // --------------
         // Heading control
         // --------------
 
-        /** Proportional gain for heading (rad -> rad/sec). */
+        /**
+         * Proportional gain for heading (rad -> rad/sec).
+         */
         public double kHeading = 3.0;
 
-        /** Maximum commanded angular speed (rad/sec). */
+        /**
+         * Maximum commanded angular speed (rad/sec).
+         */
         public double maxOmegaRadPerSec = Math.toRadians(180.0);
 
-        /** Strategy for choosing desired heading while driving. */
+        /**
+         * Strategy for choosing desired heading while driving.
+         */
         public HeadingStrategy headingStrategy = HeadingStrategies.faceFinalHeading();
 
         // -----------------
@@ -60,15 +72,45 @@ public final class GoToPoseTasks {
         public double positionToleranceInches = 1.0;
         public double headingToleranceRad = Math.toRadians(5.0);
 
-        /** Hard timeout for the overall task. */
+        /**
+         * Hard timeout for the overall task.
+         */
         public double timeoutSec = 3.0;
 
-        /** How long we will wait for pose before timing out. */
+        /**
+         * How long we will wait for pose before timing out.
+         */
         public double maxNoPoseSec = 0.25;
 
-        /** @return a new config with Phoenix defaults. */
+        private Config() {
+            // Defaults assigned in field initializers.
+        }
+
+        /**
+         * @return a new config with Phoenix defaults.
+         */
         public static Config defaults() {
             return new Config();
+        }
+
+        /**
+         * Deep copy of this config.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.kPos = this.kPos;
+            c.maxAxialInchesPerSec = this.maxAxialInchesPerSec;
+            c.maxLateralInchesPerSec = this.maxLateralInchesPerSec;
+
+            c.kHeading = this.kHeading;
+            c.maxOmegaRadPerSec = this.maxOmegaRadPerSec;
+            c.headingStrategy = this.headingStrategy;
+
+            c.positionToleranceInches = this.positionToleranceInches;
+            c.headingToleranceRad = this.headingToleranceRad;
+            c.timeoutSec = this.timeoutSec;
+            c.maxNoPoseSec = this.maxNoPoseSec;
+            return c;
         }
     }
 
@@ -91,13 +133,13 @@ public final class GoToPoseTasks {
         final Config c = (cfg != null) ? cfg : Config.defaults();
 
         // Position controller config.
-        GoToPoseController.Config posCfg = new GoToPoseController.Config();
+        GoToPoseController.Config posCfg = GoToPoseController.Config.defaults();
         posCfg.kPPosition = c.kPos;
         posCfg.maxAxialInchesPerSec = c.maxAxialInchesPerSec;
         posCfg.maxLateralInchesPerSec = c.maxLateralInchesPerSec;
 
         // Heading controller config.
-        HeadingController.Config headingCfg = new HeadingController.Config();
+        HeadingController.Config headingCfg = HeadingController.Config.defaults();
         headingCfg.kP = c.kHeading;
         headingCfg.maxOmegaRadPerSec = c.maxOmegaRadPerSec;
 
@@ -109,7 +151,7 @@ public final class GoToPoseTasks {
         GoToPoseController controller = new GoToPoseController(posCfg, headingStrategy, headingCtrl);
 
         // Task completion / safety config.
-        GoToPoseTask.Config taskCfg = new GoToPoseTask.Config();
+        GoToPoseTask.Config taskCfg = GoToPoseTask.Config.defaults();
         taskCfg.positionTolInches = c.positionToleranceInches;
         taskCfg.headingTolRad = c.headingToleranceRad;
         taskCfg.timeoutSec = c.timeoutSec;
@@ -118,7 +160,9 @@ public final class GoToPoseTasks {
         return new GoToPoseTask(poseEstimator, controller, drivebase, fieldRobotTargetPose, taskCfg);
     }
 
-    /** Convenience overload that uses {@link Config#defaults()}. */
+    /**
+     * Convenience overload that uses {@link Config#defaults()}.
+     */
     public static Task goToPoseFieldRelative(
             final MecanumDrivebase drivebase,
             final PoseEstimator poseEstimator,
@@ -177,7 +221,9 @@ public final class GoToPoseTasks {
         return goToPoseFieldRelative(drivebase, poseEstimator, fieldRobotTargetPose, cfg);
     }
 
-    /** Convenience overload that uses {@link Config#defaults()}. */
+    /**
+     * Convenience overload that uses {@link Config#defaults()}.
+     */
     public static Task goToPoseTagRelative(
             final MecanumDrivebase drivebase,
             final PoseEstimator poseEstimator,

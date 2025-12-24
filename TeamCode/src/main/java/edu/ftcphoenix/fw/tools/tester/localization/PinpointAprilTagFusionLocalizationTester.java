@@ -3,6 +3,7 @@ package edu.ftcphoenix.fw.tools.tester.localization;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
+import org.firstinspires.ftc.vision.apriltag.AprilTagLibrary;
 
 import java.util.Collections;
 import java.util.Locale;
@@ -11,6 +12,7 @@ import java.util.Set;
 import edu.ftcphoenix.fw.core.geometry.Pose2d;
 import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.ftc.FtcGameTagLayout;
+import edu.ftcphoenix.fw.field.TagLayout;
 import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 import edu.ftcphoenix.fw.localization.PoseEstimate;
@@ -59,13 +61,16 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
     private final PinpointPoseEstimator.Config pinpointCfg;
     private final OdometryTagFusionPoseEstimator.Config fusionCfg;
 
+    private final TagLayout layoutOverride;
+    private final AprilTagLibrary tagLibraryOverride;
+
     private HardwareNamePicker cameraPicker;
     private String selectedCameraName = null;
 
     private boolean ready = false;
     private String initError = null;
 
-    private FtcGameTagLayout layout;
+    private TagLayout layout;
 
     // Vision pieces
     private AprilTagSensor tagSensor;
@@ -82,18 +87,30 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
     public PinpointAprilTagFusionLocalizationTester(String preferredCameraName,
                                                     CameraMountConfig cameraMount,
                                                     PinpointPoseEstimator.Config pinpointCfg) {
-        this(preferredCameraName, cameraMount, pinpointCfg, new OdometryTagFusionPoseEstimator.Config());
+        this(preferredCameraName, cameraMount, pinpointCfg, OdometryTagFusionPoseEstimator.Config.defaults());
     }
 
     public PinpointAprilTagFusionLocalizationTester(String preferredCameraName,
                                                     CameraMountConfig cameraMount,
                                                     PinpointPoseEstimator.Config pinpointCfg,
                                                     OdometryTagFusionPoseEstimator.Config fusionCfg) {
-        this.preferredCameraName = preferredCameraName;
-        this.cameraMount = (cameraMount != null) ? cameraMount : CameraMountConfig.identity();
-        this.pinpointCfg = (pinpointCfg != null) ? pinpointCfg : PinpointPoseEstimator.Config.defaults();
-        this.fusionCfg = (fusionCfg != null) ? fusionCfg : new OdometryTagFusionPoseEstimator.Config();
+        this(preferredCameraName, cameraMount, pinpointCfg, fusionCfg, null, null);
     }
+
+    public PinpointAprilTagFusionLocalizationTester(String preferredCameraName,
+                                                    CameraMountConfig cameraMount,
+                                                    PinpointPoseEstimator.Config pinpointCfg,
+                                                    OdometryTagFusionPoseEstimator.Config fusionCfg,
+                                                    TagLayout layoutOverride,
+                                                    AprilTagLibrary tagLibraryOverride) {
+        this.preferredCameraName = preferredCameraName;
+        this.cameraMount = cameraMount;
+        this.pinpointCfg = pinpointCfg != null ? pinpointCfg : PinpointPoseEstimator.Config.defaults();
+        this.fusionCfg = fusionCfg != null ? fusionCfg : OdometryTagFusionPoseEstimator.Config.defaults();
+        this.layoutOverride = layoutOverride;
+        this.tagLibraryOverride = tagLibraryOverride;
+    }
+
 
     @Override
     public String name() {
@@ -236,14 +253,20 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
 
         try {
             // Vision
-            FtcVision.Config cfg = new FtcVision.Config().useCameraMount(cameraMount);
+            FtcVision.Config cfg = FtcVision.Config.defaults()
+                    .withCameraMount(cameraMount);
+            if (tagLibraryOverride != null) {
+                cfg.withTagLibrary(tagLibraryOverride);
+            }
             tagSensor = FtcVision.aprilTags(ctx.hw, selectedCameraName, cfg);
 
             // Odometry
             odomEstimator = new PinpointPoseEstimator(ctx.hw, pinpointCfg);
 
             // Field layout (current game)
-            layout = new FtcGameTagLayout(AprilTagGameDatabase.getCurrentGameTagLibrary());
+            layout = (layoutOverride != null)
+                    ? layoutOverride
+                    : new FtcGameTagLayout(AprilTagGameDatabase.getCurrentGameTagLibrary());
 
             rebuildTargetAndEstimators();
 
@@ -272,8 +295,8 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
 
         target = new TagTarget(tagSensor, ids, DEFAULT_MAX_AGE_SEC);
 
-        TagOnlyPoseEstimator.Config tagCfg = new TagOnlyPoseEstimator.Config();
-        tagCfg.cameraMount = cameraMount;
+        TagOnlyPoseEstimator.Config tagCfg = TagOnlyPoseEstimator.Config.defaults()
+                .withCameraMount(cameraMount);
         tagCfg.maxAbsBearingRad = 0.0;
         visionEstimator = new TagOnlyPoseEstimator(target, layout, tagCfg);
 

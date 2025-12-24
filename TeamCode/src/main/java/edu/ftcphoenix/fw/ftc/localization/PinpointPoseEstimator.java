@@ -57,7 +57,9 @@ import edu.ftcphoenix.fw.localization.PoseResetter;
  */
 public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter {
 
-    /** Phoenix standard unit for field poses. */
+    /**
+     * Phoenix standard unit for field poses.
+     */
     private static final DistanceUnit CONFIG_DISTANCE_UNIT = DistanceUnit.INCH;
 
     /**
@@ -78,7 +80,9 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
      */
     public static final class Config {
 
-        /** FTC hardware configuration name of the Pinpoint device (commonly "odo"). */
+        /**
+         * FTC hardware configuration name of the Pinpoint device (commonly "odo").
+         */
         public String hardwareMapName = "odo";
 
         // --------------------------------------------------------------------
@@ -115,28 +119,42 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         // Hardware behavior
         // --------------------------------------------------------------------
 
-        /** If true, reset Pinpoint pose + IMU during estimator construction. */
+        /**
+         * If true, reset Pinpoint pose + IMU during estimator construction.
+         */
         public boolean resetOnInit = true;
 
-        /** Time to wait after reset (milliseconds). */
+        /**
+         * Time to wait after reset (milliseconds).
+         */
         public long resetWaitMs = 300;
 
-        /** Built-in goBILDA odometry pod preset. */
+        /**
+         * Built-in goBILDA odometry pod preset.
+         */
         public GoBildaPinpointDriver.GoBildaOdometryPods encoderPods =
                 GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD;
 
-        /** Custom encoder resolution in <b>ticks per inch</b>. If non-null, overrides {@link #encoderPods}. */
+        /**
+         * Custom encoder resolution in <b>ticks per inch</b>. If non-null, overrides {@link #encoderPods}.
+         */
         public Double customEncoderResolutionTicksPerInch = null;
 
-        /** Direction for the forward (X) pod encoder. */
+        /**
+         * Direction for the forward (X) pod encoder.
+         */
         public GoBildaPinpointDriver.EncoderDirection forwardPodDirection =
                 GoBildaPinpointDriver.EncoderDirection.FORWARD;
 
-        /** Direction for the strafe (Y) pod encoder. */
+        /**
+         * Direction for the strafe (Y) pod encoder.
+         */
         public GoBildaPinpointDriver.EncoderDirection strafePodDirection =
                 GoBildaPinpointDriver.EncoderDirection.FORWARD;
 
-        /** Optional yaw scalar. If null, uses the driver default / factory calibration. */
+        /**
+         * Optional yaw scalar. If null, uses the driver default / factory calibration.
+         */
         public Double yawScalar = null;
 
         /**
@@ -151,7 +169,9 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
             // Defaults assigned in field initializers.
         }
 
-        /** Create a new config instance with Phoenix defaults. */
+        /**
+         * Create a new config instance with Phoenix defaults.
+         */
         public static Config defaults() {
             return new Config();
         }
@@ -160,8 +180,8 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Convenience factory for the common case.
          *
-         * @param hardwareMapName FTC hardware configuration name
-         * @param forwardPodOffsetLeftInches left/right offset of forward pod (+left)
+         * @param hardwareMapName              FTC hardware configuration name
+         * @param forwardPodOffsetLeftInches   left/right offset of forward pod (+left)
          * @param strafePodOffsetForwardInches forward/back offset of strafe pod (+forward)
          */
         public static Config of(
@@ -179,7 +199,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set the hardware map name.
          */
-        public Config useHardwareMapName(String hardwareMapName) {
+        public Config withHardwareMapName(String hardwareMapName) {
             this.hardwareMapName = hardwareMapName;
             return this;
         }
@@ -187,7 +207,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set both offsets.
          */
-        public Config useOffsets(double forwardPodOffsetLeftInches, double strafePodOffsetForwardInches) {
+        public Config withOffsets(double forwardPodOffsetLeftInches, double strafePodOffsetForwardInches) {
             this.forwardPodOffsetLeftInches = forwardPodOffsetLeftInches;
             this.strafePodOffsetForwardInches = strafePodOffsetForwardInches;
             return this;
@@ -197,7 +217,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set whether to reset pose + IMU during construction.
          */
-        public Config useResetOnInit(boolean resetOnInit) {
+        public Config withResetOnInit(boolean resetOnInit) {
             this.resetOnInit = resetOnInit;
             return this;
         }
@@ -205,7 +225,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set the wait time after a reset (milliseconds).
          */
-        public Config useResetWaitMs(long resetWaitMs) {
+        public Config withResetWaitMs(long resetWaitMs) {
             this.resetWaitMs = resetWaitMs;
             return this;
         }
@@ -213,7 +233,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set the built-in goBILDA odometry pod preset.
          */
-        public Config useEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods pods) {
+        public Config withEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods pods) {
             this.encoderPods = pods;
             return this;
         }
@@ -223,19 +243,23 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
          *
          * <p>Set to {@code null} to use {@link #encoderPods} instead.</p>
          */
-        public Config useCustomEncoderResolutionTicksPerInch(Double ticksPerInch) {
+        public Config withCustomEncoderResolutionTicksPerInch(Double ticksPerInch) {
             this.customEncoderResolutionTicksPerInch = ticksPerInch;
             return this;
         }
 
-        /** Fluent helper: set direction for the forward (X) pod encoder. */
-        public Config useForwardPodDirection(GoBildaPinpointDriver.EncoderDirection dir) {
+        /**
+         * Fluent helper: set direction for the forward (X) pod encoder.
+         */
+        public Config withForwardPodDirection(GoBildaPinpointDriver.EncoderDirection dir) {
             this.forwardPodDirection = dir;
             return this;
         }
 
-        /** Fluent helper: set direction for the strafe (Y) pod encoder. */
-        public Config useStrafePodDirection(GoBildaPinpointDriver.EncoderDirection dir) {
+        /**
+         * Fluent helper: set direction for the strafe (Y) pod encoder.
+         */
+        public Config withStrafePodDirection(GoBildaPinpointDriver.EncoderDirection dir) {
             this.strafePodDirection = dir;
             return this;
         }
@@ -245,7 +269,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
          *
          * <p>Set to {@code null} to use the driver default / factory calibration.</p>
          */
-        public Config useYawScalar(Double yawScalar) {
+        public Config withYawScalar(Double yawScalar) {
             this.yawScalar = yawScalar;
             return this;
         }
@@ -253,12 +277,14 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set a quality score used by fusion/debug (0..1).
          */
-        public Config useQuality(double quality) {
+        public Config withQuality(double quality) {
             this.quality = quality;
             return this;
         }
 
-        /** Create a deep copy of this config. */
+        /**
+         * Create a deep copy of this config.
+         */
         public Config copy() {
             Config c = defaults();
             c.hardwareMapName = this.hardwareMapName;

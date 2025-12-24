@@ -3,6 +3,7 @@ package edu.ftcphoenix.fw.tools.tester.calibration;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
+import org.firstinspires.ftc.vision.apriltag.AprilTagLibrary;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,13 +62,12 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     private static final double DEFAULT_MAX_AGE_SEC = 0.35;
     private static final int DEFAULT_TAG_ID = 1;
 
-    private static final Pose3d DEFAULT_P_FIELD_TO_ROBOT =
-            new Pose3d(0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0);
+    private static final Pose3d DEFAULT_P_FIELD_TO_ROBOT = Pose3d.zero();
 
     // Injected configuration
     private final String preferredCameraName;   // may be null/empty to trigger picker
     private final TagLayout layoutOverride;     // may be null => FTC game db
+    private final AprilTagLibrary tagLibraryOverride; // optional; null -> use current game library
     private final double maxAgeSec;
 
     // Runtime state
@@ -119,23 +119,46 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     /**
      * Create a calibrator with full configuration control.
      *
-     * @param cameraName configured webcam name in the FTC Robot Configuration (nullable/blank to use picker)
+     * @param cameraName     configured webcam name in the FTC Robot Configuration (nullable/blank to use picker)
      * @param layoutOverride optional field {@link TagLayout}; if null, the current FTC game database is used
-     * @param maxAgeSec maximum age (seconds) for tag observations before they are treated as stale
+     * @param maxAgeSec      maximum age (seconds) for tag observations before they are treated as stale
      */
     public CameraMountCalibrator(String cameraName, TagLayout layoutOverride, double maxAgeSec) {
+        this(cameraName, layoutOverride, null, maxAgeSec);
+    }
+
+    /**
+     * Creates a camera mount calibration tester with an optional tag layout + tag library override.
+     *
+     * <p>This is useful when calibrating in a non-game environment using a printed tag (custom ID/size),
+     * while still reusing Phoenix's calibrator flow.</p>
+     *
+     * @param cameraName         camera name in the hardware map (or {@code null} to pick at runtime)
+     * @param layoutOverride     optional tag layout to use instead of the current game layout
+     * @param tagLibraryOverride optional AprilTag library override (controls tag size/IDs for detection)
+     * @param maxAgeSec          maximum acceptable tag observation age in seconds
+     */
+    public CameraMountCalibrator(String cameraName,
+                                 TagLayout layoutOverride,
+                                 AprilTagLibrary tagLibraryOverride,
+                                 double maxAgeSec) {
         this.preferredCameraName = cameraName;
         this.layoutOverride = layoutOverride;
+        this.tagLibraryOverride = tagLibraryOverride;
         this.maxAgeSec = maxAgeSec;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String name() {
         return "Camera Mount Calibrator";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onInit() {
         // Layout
@@ -228,7 +251,9 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         ensureVisionReady();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean onBackPressed() {
         if (!visionReady) {
@@ -254,7 +279,9 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         return true;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onInitLoop(double dtSec) {
         if (!visionReady) {
@@ -265,7 +292,9 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         updateSolveAndTelemetry();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onLoop(double dtSec) {
         if (!visionReady) {
@@ -284,17 +313,24 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         if (visionReady) return;
         if (selectedCameraName == null || selectedCameraName.isEmpty()) return;
 
-        visionInitError = null;
-
         try {
-            tagSensor = FtcVision.aprilTags(ctx.hw, selectedCameraName);
+            // Build AprilTag processor config. We intentionally do NOT set a camera mount here,
+            // because this tester is used to *calibrate* the robot->camera pose.
+            FtcVision.Config aprilCfg = FtcVision.Config.defaults()
+                    .withTagLibrary(tagLibraryOverride);
+
+            tagSensor = FtcVision.aprilTags(ctx.hw, selectedCameraName, aprilCfg);
+
+            // Layout selection happens in onInit(); do not rebuild it here.
             visionReady = true;
-        } catch (Exception ex) {
-            visionReady = false;
+            visionInitError = null;
+        } catch (Exception e) {
             tagSensor = null;
-            visionInitError = ex.getClass().getSimpleName() + ": " + ex.getMessage();
+            visionReady = false;
+            visionInitError = "Failed to start AprilTag camera: " + e.getMessage();
         }
     }
+
 
     private void refreshCameraList() {
         List<String> names = enumerateWebcamNames();

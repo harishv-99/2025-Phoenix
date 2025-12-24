@@ -44,10 +44,25 @@ public final class HeadingController {
          */
         public double maxOmegaRadPerSec = Math.toRadians(180.0);
 
+        private Config() {
+            // Defaults assigned in field initializers.
+        }
+
         /**
-         * Creates a new config with default values.
+         * Create a new config instance with Phoenix defaults.
          */
-        public Config() {
+        public static Config defaults() {
+            return new Config();
+        }
+
+        /**
+         * Deep copy of this config.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.kP = this.kP;
+            c.maxOmegaRadPerSec = this.maxOmegaRadPerSec;
+            return c;
         }
     }
 

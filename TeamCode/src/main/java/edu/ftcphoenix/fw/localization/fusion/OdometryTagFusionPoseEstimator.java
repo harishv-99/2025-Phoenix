@@ -30,34 +30,82 @@ import edu.ftcphoenix.fw.localization.PoseResetter;
  */
 public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResetter {
 
-    /** Configuration for the fusion behavior. */
+    /**
+     * Configuration for the fusion behavior.
+     */
     public static final class Config {
-        /** Reject vision measurements older than this (seconds). */
+        /**
+         * Reject vision measurements older than this (seconds).
+         */
         public double maxVisionAgeSec = 0.25;
 
-        /** Reject vision measurements with quality below this (0..1). */
+        /**
+         * Reject vision measurements with quality below this (0..1).
+         */
         public double minVisionQuality = 0.05;
 
-        /** How aggressively to correct x/y toward the vision measurement (scaled by vision quality). */
+        /**
+         * How aggressively to correct x/y toward the vision measurement (scaled by vision quality).
+         */
         public double visionPositionGain = 0.25;
 
-        /** How aggressively to correct heading toward the vision measurement (scaled by vision quality). */
+        /**
+         * How aggressively to correct heading toward the vision measurement (scaled by vision quality).
+         */
         public double visionHeadingGain = 0.35;
 
-        /** Reject vision corrections that jump more than this distance (inches). */
+        /**
+         * Reject vision corrections that jump more than this distance (inches).
+         */
         public double maxVisionPositionJumpIn = 24.0;
 
-        /** Reject vision corrections that jump more than this heading delta (radians). */
+        /**
+         * Reject vision corrections that jump more than this heading delta (radians).
+         */
         public double maxVisionHeadingJumpRad = Math.toRadians(60.0);
 
-        /** If true, the estimator may initialize from a fresh vision measurement. */
+        /**
+         * If true, the estimator may initialize from a fresh vision measurement.
+         */
         public boolean allowVisionInitialize = true;
 
-        /** If true, push the fused pose back into the odometry estimator when it supports resets. */
+        /**
+         * If true, push the fused pose back into the odometry estimator when it supports resets.
+         */
         public boolean pushCorrectionsToOdometry = true;
 
-        /** How long (seconds) a recently-accepted vision measurement should boost the reported quality. */
+        /**
+         * How long (seconds) a recently-accepted vision measurement should boost the reported quality.
+         */
         public double visionConfidenceHoldSec = 0.75;
+
+        private Config() {
+            // Defaults assigned in field initializers.
+        }
+
+        /**
+         * Create a new config instance with Phoenix defaults.
+         */
+        public static Config defaults() {
+            return new Config();
+        }
+
+        /**
+         * Deep copy of this config.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.maxVisionAgeSec = this.maxVisionAgeSec;
+            c.minVisionQuality = this.minVisionQuality;
+            c.visionPositionGain = this.visionPositionGain;
+            c.visionHeadingGain = this.visionHeadingGain;
+            c.maxVisionPositionJumpIn = this.maxVisionPositionJumpIn;
+            c.maxVisionHeadingJumpRad = this.maxVisionHeadingJumpRad;
+            c.allowVisionInitialize = this.allowVisionInitialize;
+            c.pushCorrectionsToOdometry = this.pushCorrectionsToOdometry;
+            c.visionConfidenceHoldSec = this.visionConfidenceHoldSec;
+            return c;
+        }
     }
 
     private final PoseEstimator odometry;
@@ -79,7 +127,7 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
     private int rejectedVisionCount = 0;
 
     public OdometryTagFusionPoseEstimator(PoseEstimator odometry, PoseEstimator vision) {
-        this(odometry, vision, new Config());
+        this(odometry, vision, Config.defaults());
     }
 
     public OdometryTagFusionPoseEstimator(PoseEstimator odometry, PoseEstimator vision, Config cfg) {
@@ -91,10 +139,12 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
         }
         this.odometry = odometry;
         this.vision = vision;
-        this.cfg = cfg != null ? cfg : new Config();
+        this.cfg = cfg != null ? cfg : Config.defaults();
     }
 
-    /** Enables/disables vision corrections (odometry integration still runs). */
+    /**
+     * Enables/disables vision corrections (odometry integration still runs).
+     */
     public void setVisionEnabled(boolean enabled) {
         this.visionEnabled = enabled;
     }
@@ -103,12 +153,16 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
         return visionEnabled;
     }
 
-    /** The timestamp (clock.nowSec) when vision was last accepted, or NaN if never. */
+    /**
+     * The timestamp (clock.nowSec) when vision was last accepted, or NaN if never.
+     */
     public double getLastVisionAcceptedSec() {
         return lastVisionAcceptedSec;
     }
 
-    /** Last accepted vision pose (planarized). */
+    /**
+     * Last accepted vision pose (planarized).
+     */
     public Pose3d getLastVisionPose() {
         return lastVisionPose;
     }

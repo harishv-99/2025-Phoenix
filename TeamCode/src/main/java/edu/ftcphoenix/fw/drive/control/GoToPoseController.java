@@ -65,8 +65,26 @@ public final class GoToPoseController {
          */
         public double maxLateralInchesPerSec = 40.0;
 
-        /** Creates a new {@code Config} with default values. */
-        public Config() {
+        private Config() {
+            // Defaults assigned in field initializers.
+        }
+
+        /**
+         * Create a new config instance with Phoenix defaults.
+         */
+        public static Config defaults() {
+            return new Config();
+        }
+
+        /**
+         * Deep copy of this config.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.kPPosition = this.kPPosition;
+            c.maxAxialInchesPerSec = this.maxAxialInchesPerSec;
+            c.maxLateralInchesPerSec = this.maxLateralInchesPerSec;
+            return c;
         }
     }
 

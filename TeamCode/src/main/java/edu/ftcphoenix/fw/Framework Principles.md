@@ -175,7 +175,6 @@ Phoenix uses two common patterns for configuration:
 Rule of thumb: if you find yourself creating a top-level `XConfig` that is only ever used to configure `X`, it probably wants to be `X.Config` instead.
 
 
-
 #### 3.4.1 Factory naming: `defaults()` vs `identity()` vs `zero()`
 
 Phoenix uses these names intentionally:
@@ -197,6 +196,43 @@ Phoenix uses these names intentionally:
 
 Rule of thumb: if the thing you’re constructing is *behavior/tuning*, call it `defaults()`.
 If it’s *pure geometry*, prefer `zero()` / `identity()` depending on what’s idiomatic for that type.
+
+
+#### 3.4.2 Constructing configs: prefer `defaults()` over `new`
+
+For **owner-scoped configs** (`Owner.Config`), Phoenix intentionally standardizes on a factory method:
+
+- Create configs with `Owner.Config.defaults()`
+- Do **not** instantiate them directly with `new Owner.Config()`
+
+Why this matters:
+
+- It keeps call sites uniform and easy to grep.
+- It lets us change how defaults are produced later (copy-on-write, versioned defaults, etc.) without changing user code.
+- It avoids the "half the code uses `new`, half uses `defaults()`" drift that makes refactors noisy.
+
+Implementation rule:
+
+- `Owner.Config` constructors should be `private`, and each config should provide `public static Config defaults()`.
+
+
+#### 3.4.3 Naming config helpers: `withX(...)` / `withoutX()`
+
+Most Phoenix config tuning is done by directly setting public fields:
+
+```java
+MecanumDrivebase.Config cfg = MecanumDrivebase.Config.defaults();
+cfg.maxOmega = 0.8;
+cfg.maxAxial = 1.0;
+```
+
+Sometimes, a config wants convenience helpers (usually when toggling a feature requires setting multiple related fields).
+When Phoenix provides those helpers, the naming convention is:
+
+- `withX(...)` to enable/apply something
+- `withoutX()` to disable/clear something
+
+Phoenix avoids `useX(...)` in config APIs. If you see a `useX(...)` method, it should be renamed to `withX(...)` for consistency.
 
 ### 3.5 Direction and naming conventions
 

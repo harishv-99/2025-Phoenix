@@ -1,5 +1,6 @@
 package edu.ftcphoenix.robots.phoenix;
 
+import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 
 import edu.ftcphoenix.fw.core.hal.Direction;
@@ -19,6 +20,24 @@ public class RobotConfig {
 
         public static final String nameMotorBackRight = "backRightMotor";
         public static final Direction directionMotorBackRight = Direction.REVERSE;
+
+
+        /**
+         * Convenience wiring bundle for framework helpers/testers that want to instantiate a mecanum drive.
+         */
+        public static Drives.MecanumWiring mecanumWiring() {
+            Drives.MecanumWiring w = new Drives.MecanumWiring();
+            w.frontLeftName = nameMotorFrontLeft;
+            w.frontLeftDirection = directionMotorFrontLeft;
+            w.frontRightName = nameMotorFrontRight;
+            w.frontRightDirection = directionMotorFrontRight;
+            w.backLeftName = nameMotorBackLeft;
+            w.backLeftDirection = directionMotorBackLeft;
+            w.backRightName = nameMotorBackRight;
+            w.backRightDirection = directionMotorBackRight;
+            return w;
+
+        }
     }
 
     public static class Shooter {
@@ -59,7 +78,9 @@ public class RobotConfig {
      */
     public static class Vision {
 
-        /** FTC Robot Configuration name of the webcam used for AprilTag vision. */
+        /**
+         * FTC Robot Configuration name of the webcam used for AprilTag vision.
+         */
         public static final String nameWebcam = "Webcam 1";
 
         /**
@@ -90,18 +111,18 @@ public class RobotConfig {
          */
         public static final PinpointPoseEstimator.Config pinpoint =
                 PinpointPoseEstimator.Config.defaults()
-                        .useHardwareMapName("odo")
-                        .useOffsets(0.0, 0.0);
+                        .withHardwareMapName("odo")
+                        .withOffsets(0.0, 0.0);
 
         // Advanced options (uncomment if needed):
-        // pinpoint.useEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
-        // pinpoint.useCustomEncoderResolutionTicksPerInch(null);
-        // pinpoint.useForwardPodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
-        // pinpoint.useStrafePodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
-        // pinpoint.useYawScalar(null);
-        // pinpoint.useResetOnInit(true);
-        // pinpoint.useResetWaitMs(300);
-        // pinpoint.useQuality(0.75);
+        // pinpoint.withEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+        // pinpoint.withCustomEncoderResolutionTicksPerInch(null);
+        // pinpoint.withForwardPodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        // pinpoint.withStrafePodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        // pinpoint.withYawScalar(null);
+        // pinpoint.withResetOnInit(true);
+        // pinpoint.withResetWaitMs(300);
+        // pinpoint.withQuality(0.75);
     }
 
 }

@@ -86,6 +86,40 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
          * Camera mount extrinsics in the robot frame.
          */
         public CameraMountConfig cameraMount = CameraMountConfig.identity();
+
+        private Config() {
+            // Defaults assigned in field initializers.
+        }
+
+        /**
+         * Create a new configuration instance with Phoenix defaults.
+         */
+        public static Config defaults() {
+            return new Config();
+        }
+
+        /**
+         * Convenience helper: set the camera mount extrinsics.
+         *
+         * <p>
+         * This uses the framework-wide config naming convention: optional fluent helpers are
+         * named {@code withX(...)} / {@code withoutX()} (never {@code useX(...)}).
+         * </p>
+         */
+        public Config withCameraMount(CameraMountConfig mount) {
+            this.cameraMount = mount;
+            return this;
+        }
+
+        /**
+         * Deep copy of this configuration.
+         */
+        public Config copy() {
+            Config c = new Config();
+            c.maxAbsBearingRad = this.maxAbsBearingRad;
+            c.cameraMount = this.cameraMount;
+            return c;
+        }
     }
 
     private final TagTarget target;
@@ -103,12 +137,12 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
      *
      * @param target tracked tag target (must be updated once per loop before this estimator update)
      * @param layout field tag layout providing tag poses
-     * @param cfg    configuration parameters (must not be {@code null})
+     * @param cfg    configuration parameters (may be {@code null} to use {@link Config#defaults()})
      */
     public TagOnlyPoseEstimator(TagTarget target, TagLayout layout, Config cfg) {
         this.target = Objects.requireNonNull(target, "target");
         this.layout = Objects.requireNonNull(layout, "layout");
-        this.cfg = Objects.requireNonNull(cfg, "cfg");
+        this.cfg = (cfg != null) ? cfg : Config.defaults();
 
         if (this.cfg.cameraMount == null) {
             this.cfg.cameraMount = CameraMountConfig.identity();
@@ -117,7 +151,9 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
         this.lastEstimate = PoseEstimate.noPose(0.0);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void update(LoopClock clock) {
         Objects.requireNonNull(clock, "clock");
@@ -176,7 +212,9 @@ public final class TagOnlyPoseEstimator implements PoseEstimator {
         this.lastEstimate = estimate;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public PoseEstimate getEstimate() {
         return lastEstimate;
