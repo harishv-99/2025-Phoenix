@@ -57,7 +57,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         /**
          * Optional mecanum wiring. If null, the tester won't drive the robot.
          */
-        public Drives.MecanumWiring mecanumWiring = null;
+        public Drives.MecanumWiringConfig mecanumWiring = null;
 
         /**
          * Optional mecanum tuning config (only used when {@link #mecanumWiring} is non-null).
@@ -87,7 +87,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
          * If AprilTag assist is enabled and no tag is currently visible, the tester can
          * auto-rotate to search for any known-pose tag (as defined by {@link #tagLayout}).
          */
-        public boolean autoSearchForTagAtStart = true;
+        public boolean enableAutoTagSearchAtStart = true;
 
         /**
          * Maximum amount of rotation (radians) to spend searching for a tag.
@@ -111,7 +111,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
          * If true, after an auto-rotation reaches {@link #targetTurnRad}, the tester will
          * optionally continue rotating a bit longer to reacquire a tag pose (for assist/recenter).
          */
-        public boolean autoSearchForTagAtEnd = true;
+        public boolean enableAutoTagSearchAtEnd = true;
 
         /**
          * Maximum extra rotation (radians) allowed while searching for a tag at the end of auto-sample.
@@ -125,7 +125,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
          * <p>This is especially useful for auto-turning on imperfect flooring where the robot drifts
          * laterally while rotating. Re-centering reduces bias from real translation during the turn.</p>
          */
-        public boolean allowPostRotateRecenter = true;
+        public boolean enablePostRotateRecenter = true;
 
         /**
          * Manual translation scale in recenter mode.
@@ -135,7 +135,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         /**
          * If true, use AprilTags to estimate and subtract real translation during the sample.
          */
-        public boolean useAprilTagsAssist = false;
+        public boolean enableAprilTagAssist = false;
 
         /**
          * Preferred webcam name for AprilTag assist. If null, a camera picker is shown.
@@ -143,7 +143,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         public String preferredCameraName = null;
 
         /**
-         * Required when {@link #useAprilTagsAssist} is true.
+         * Required when {@link #enableAprilTagAssist} is true.
          */
         public CameraMountConfig cameraMount = null;
 
@@ -186,16 +186,16 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
             c.autoOmegaCmd = this.autoOmegaCmd;
             c.targetTurnRad = this.targetTurnRad;
 
-            c.autoSearchForTagAtStart = this.autoSearchForTagAtStart;
+            c.enableAutoTagSearchAtStart = this.enableAutoTagSearchAtStart;
             c.tagSearchMaxTurnRad = this.tagSearchMaxTurnRad;
             c.tagSearchOmegaCmd = this.tagSearchOmegaCmd;
             c.tagSearchStableFrames = this.tagSearchStableFrames;
-            c.autoSearchForTagAtEnd = this.autoSearchForTagAtEnd;
+            c.enableAutoTagSearchAtEnd = this.enableAutoTagSearchAtEnd;
             c.tagEndSearchMaxExtraTurnRad = this.tagEndSearchMaxExtraTurnRad;
-            c.allowPostRotateRecenter = this.allowPostRotateRecenter;
+            c.enablePostRotateRecenter = this.enablePostRotateRecenter;
             c.recenterTranslationScale = this.recenterTranslationScale;
 
-            c.useAprilTagsAssist = this.useAprilTagsAssist;
+            c.enableAprilTagAssist = this.enableAprilTagAssist;
             c.preferredCameraName = this.preferredCameraName;
             c.cameraMount = this.cameraMount;
             c.tagLayout = this.tagLayout;
@@ -304,9 +304,9 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         }
 
         // Optional AprilTag assist
-        if (cfg.useAprilTagsAssist) {
+        if (cfg.enableAprilTagAssist) {
             if (cfg.cameraMount == null) {
-                throw new IllegalArgumentException("cameraMount is required when useAprilTagsAssist=true");
+                throw new IllegalArgumentException("cameraMount is required when enableAprilTagAssist=true");
             }
 
             layout = (cfg.tagLayout != null)
@@ -589,7 +589,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         clearLastResults();
 
         // Prefer to align Pinpoint to a vision pose if we have one.
-        if (cfg.useAprilTagsAssist && tagEstimator != null) {
+        if (cfg.enableAprilTagAssist && tagEstimator != null) {
             PoseEstimate tagEst = tagEstimator.getEstimate();
             if (tagEst.hasPose) {
                 startSampleInternal(auto, tagEst.toPose2d());
@@ -598,8 +598,8 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         }
 
         // If no tag right now, optionally auto-search for one.
-        if (cfg.useAprilTagsAssist
-                && cfg.autoSearchForTagAtStart
+        if (cfg.enableAprilTagAssist
+                && cfg.enableAutoTagSearchAtStart
                 && drive != null
                 && tagEstimator != null) {
             phase = Phase.SEARCH_TAG_START;
@@ -646,8 +646,8 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     private void transitionAfterRotation() {
         // If this was an auto sample and we want to reacquire a tag at the end, do that first.
         if (autoSample
-                && cfg.useAprilTagsAssist
-                && cfg.autoSearchForTagAtEnd
+                && cfg.enableAprilTagAssist
+                && cfg.enableAutoTagSearchAtEnd
                 && drive != null
                 && tagEstimator != null
                 && startTagPose != null) {
@@ -665,7 +665,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     }
 
     private void transitionToPostRecenterOrFinish() {
-        if (cfg.allowPostRotateRecenter) {
+        if (cfg.enablePostRotateRecenter) {
             phase = Phase.POST_RECENTER;
         } else {
             finishSampleAndCompute();
@@ -694,7 +694,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         double deltaHeading = headingUnwrapper.getUnwrappedRad() - startHeadingUnwrappedRad;
 
         // AprilTag assist: subtract real translation
-        if (cfg.useAprilTagsAssist && tagEstimator != null && startTagPose != null) {
+        if (cfg.enableAprilTagAssist && tagEstimator != null && startTagPose != null) {
             PoseEstimate tagEst = tagEstimator.getEstimate();
             if (tagEst.hasPose) {
                 Pose2d endTagPose = tagEst.toPose2d();
@@ -750,7 +750,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     }
 
     private void ensureAprilTagAssistReady() {
-        if (!cfg.useAprilTagsAssist) return;
+        if (!cfg.enableAprilTagAssist) return;
         if (tagSensor != null) return;
         if (selectedCameraName == null) return;
 
@@ -794,7 +794,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
             ctx.telemetry.addData("Tag search stable", String.format(Locale.US, "%d/%d", tagStableFrames, cfg.tagSearchStableFrames));
         }
 
-        if (cfg.useAprilTagsAssist) {
+        if (cfg.enableAprilTagAssist) {
             String cam = (selectedCameraName != null) ? selectedCameraName : "<select webcam>";
             ctx.telemetry.addData("Tag assist", true);
             ctx.telemetry.addData("Webcam", cam);
@@ -833,7 +833,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                 if (drive == null) {
                     ctx.telemetry.addLine("(No drive configured) You will rotate the robot by hand.");
                 }
-                if (cfg.useAprilTagsAssist) {
+                if (cfg.enableAprilTagAssist) {
                     ctx.telemetry.addLine("Tip: if a known-pose tag is visible, the tester will align Pinpoint to it.");
                 }
                 break;
@@ -853,7 +853,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                         ctx.telemetry.addLine("Rotate the robot by hand. Press A when done.");
                     }
                 }
-                if (cfg.allowPostRotateRecenter) {
+                if (cfg.enablePostRotateRecenter) {
                     ctx.telemetry.addLine("After you stop rotation: you can recenter, then press A to compute.");
                 } else {
                     ctx.telemetry.addLine("Press A to compute immediately when rotation is complete.");
@@ -872,7 +872,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                 } else {
                     ctx.telemetry.addLine("(No drive configured) You can physically reposition the robot.");
                 }
-                if (cfg.useAprilTagsAssist && startTagPose != null && latestTagPose != null) {
+                if (cfg.enableAprilTagAssist && startTagPose != null && latestTagPose != null) {
                     double dxToStart = startTagPose.xInches - latestTagPose.xInches;
                     double dyToStart = startTagPose.yInches - latestTagPose.yInches;
                     ctx.telemetry.addData(
@@ -896,7 +896,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                     String.format(Locale.US, "%.1f", Math.toDegrees(lastDeltaHeadingRad))
             );
 
-            if (cfg.useAprilTagsAssist) {
+            if (cfg.enableAprilTagAssist) {
                 ctx.telemetry.addData("  Tag start/end", (lastHadTagStart ? "Y" : "N") + "/" + (lastHadTagEnd ? "Y" : "N"));
             }
 

@@ -213,7 +213,7 @@ Why this matters:
 
 Implementation rule:
 
-- `Owner.Config` constructors should be `private`, and each config should provide `public static Config defaults()`.
+- `Owner.Config` (and other owner-scoped nested `*Config` classes, like `Drives.MecanumWiringConfig`) constructors should be `private`, and each config should provide `public static ... defaults()`.
 
 
 #### 3.4.3 Naming config helpers: `withX(...)` / `withoutX()`
@@ -233,6 +233,29 @@ When Phoenix provides those helpers, the naming convention is:
 - `withoutX()` to disable/clear something
 
 Phoenix avoids `useX(...)` in config APIs. If you see a `useX(...)` method, it should be renamed to `withX(...)` for consistency.
+
+
+
+#### 3.4.4 Boolean naming in configs
+
+Phoenix tries to make boolean flags read clearly at the call site (especially inside `if (...)`).
+
+**Rule:** In config objects, booleans should usually be named as *feature toggles*:
+
+- Prefer `enableX` for “turn this behavior on/off.”
+- Avoid `useX` (it's ambiguous and tends to drift into inconsistent meaning).
+- Avoid negative booleans like `disableX` when possible — prefer a positive `enableX` and flip the default if needed.
+
+Examples:
+
+- ✅ `enableAprilTagAssist`
+- ✅ `enableInitializeFromVision`
+- ✅ `enableResetOnInit`
+- ❌ `useAprilTagsAssist`
+- ❌ `disableVisionInit`
+
+If a boolean is genuinely a *permission* (“this action is allowed”), `allowX` is acceptable — but try to keep that rare and obvious.
+
 
 ### 3.5 Direction and naming conventions
 

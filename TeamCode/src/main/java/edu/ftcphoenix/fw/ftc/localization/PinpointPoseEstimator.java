@@ -122,7 +122,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * If true, reset Pinpoint pose + IMU during estimator construction.
          */
-        public boolean resetOnInit = true;
+        public boolean enableResetOnInit = true;
 
         /**
          * Time to wait after reset (milliseconds).
@@ -217,8 +217,8 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
         /**
          * Fluent helper: set whether to reset pose + IMU during construction.
          */
-        public Config withResetOnInit(boolean resetOnInit) {
-            this.resetOnInit = resetOnInit;
+        public Config withResetOnInit(boolean enableResetOnInit) {
+            this.enableResetOnInit = enableResetOnInit;
             return this;
         }
 
@@ -292,7 +292,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
             c.forwardPodOffsetLeftInches = this.forwardPodOffsetLeftInches;
             c.strafePodOffsetForwardInches = this.strafePodOffsetForwardInches;
 
-            c.resetOnInit = this.resetOnInit;
+            c.enableResetOnInit = this.enableResetOnInit;
             c.resetWaitMs = this.resetWaitMs;
 
             c.encoderPods = this.encoderPods;
@@ -315,7 +315,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
             dbg.addData(p + ".hardwareMapName", hardwareMapName)
                     .addData(p + ".forwardPodOffsetLeftInches", forwardPodOffsetLeftInches)
                     .addData(p + ".strafePodOffsetForwardInches", strafePodOffsetForwardInches)
-                    .addData(p + ".resetOnInit", resetOnInit)
+                    .addData(p + ".enableResetOnInit", enableResetOnInit)
                     .addData(p + ".resetWaitMs", resetWaitMs)
                     .addData(p + ".encoderPods", encoderPods)
                     .addData(p + ".customEncoderResolutionTicksPerInch", customEncoderResolutionTicksPerInch)
@@ -370,7 +370,7 @@ public final class PinpointPoseEstimator implements PoseEstimator, PoseResetter 
             odo.setEncoderDirections(this.cfg.forwardPodDirection, this.cfg.strafePodDirection);
         }
 
-        if (this.cfg.resetOnInit) {
+        if (this.cfg.enableResetOnInit) {
             odo.resetPosAndIMU();
             if (this.cfg.resetWaitMs > 0) {
                 try {

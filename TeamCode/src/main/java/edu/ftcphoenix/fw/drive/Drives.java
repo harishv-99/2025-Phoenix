@@ -102,7 +102,7 @@ public final class Drives {
      * <p>This bundles motor names and directions into a single object so robot configs and testers
      * can pass wiring around without picking among multiple factory overloads.</p>
      */
-    public static final class MecanumWiring {
+    public static final class MecanumWiringConfig {
 
         /**
          * Motor config name for the front-left motor.
@@ -144,31 +144,51 @@ public final class Drives {
          */
         public Direction backRightDirection = Direction.REVERSE;
 
+        private MecanumWiringConfig() {
+            // Defaults assigned in field initializers.
+        }
+
         /**
-         * Returns a new wiring instance populated with Phoenix's default motor names and directions.
+         * Returns a new wiring config instance populated with Phoenix's default motor names and directions.
          */
-        public static MecanumWiring defaults() {
-            return new MecanumWiring();
+        public static MecanumWiringConfig defaults() {
+            return new MecanumWiringConfig();
+        }
+
+        /**
+         * Deep copy of this wiring config.
+         */
+        public MecanumWiringConfig copy() {
+            MecanumWiringConfig c = new MecanumWiringConfig();
+            c.frontLeftName = this.frontLeftName;
+            c.frontRightName = this.frontRightName;
+            c.backLeftName = this.backLeftName;
+            c.backRightName = this.backRightName;
+            c.frontLeftDirection = this.frontLeftDirection;
+            c.frontRightDirection = this.frontRightDirection;
+            c.backLeftDirection = this.backLeftDirection;
+            c.backRightDirection = this.backRightDirection;
+            return c;
         }
     }
 
     /**
-     * Creates a mecanum drivebase from a {@link MecanumWiring} bundle.
+     * Creates a mecanum drivebase from a {@link MecanumWiringConfig} bundle.
      *
      * <p>This is a convenience overload that uses {@link MecanumDrivebase.Config#defaults()}.</p>
      */
-    public static MecanumDrivebase mecanum(HardwareMap hw, MecanumWiring wiring) {
+    public static MecanumDrivebase mecanum(HardwareMap hw, MecanumWiringConfig wiring) {
         return mecanum(hw, wiring, MecanumDrivebase.Config.defaults());
     }
 
     /**
-     * Creates a mecanum drivebase from a {@link MecanumWiring} bundle and a drive config.
+     * Creates a mecanum drivebase from a {@link MecanumWiringConfig} bundle and a drive config.
      *
      * @param hw     hardware map
      * @param wiring motor names/directions
      * @param config mecanum drive config (if null, {@link MecanumDrivebase.Config#defaults()} is used)
      */
-    public static MecanumDrivebase mecanum(HardwareMap hw, MecanumWiring wiring, MecanumDrivebase.Config config) {
+    public static MecanumDrivebase mecanum(HardwareMap hw, MecanumWiringConfig wiring, MecanumDrivebase.Config config) {
         if (wiring == null) {
             throw new IllegalArgumentException("wiring is required");
         }

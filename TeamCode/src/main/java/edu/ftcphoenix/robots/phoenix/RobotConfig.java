@@ -25,8 +25,8 @@ public class RobotConfig {
         /**
          * Convenience wiring bundle for framework helpers/testers that want to instantiate a mecanum drive.
          */
-        public static Drives.MecanumWiring mecanumWiring() {
-            Drives.MecanumWiring w = new Drives.MecanumWiring();
+        public static Drives.MecanumWiringConfig mecanumWiring() {
+            Drives.MecanumWiringConfig w = Drives.MecanumWiringConfig.defaults();
             w.frontLeftName = nameMotorFrontLeft;
             w.frontLeftDirection = directionMotorFrontLeft;
             w.frontRightName = nameMotorFrontRight;

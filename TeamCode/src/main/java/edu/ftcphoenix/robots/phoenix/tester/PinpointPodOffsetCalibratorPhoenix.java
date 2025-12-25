@@ -28,7 +28,7 @@ public final class PinpointPodOffsetCalibratorPhoenix {
                     cfg.mecanumWiring = RobotConfig.DriveTrain.mecanumWiring();
 
                     // Enable AprilTag assist by default (it still works if no tags are visible).
-                    cfg.useAprilTagsAssist = true;
+                    cfg.enableAprilTagAssist = true;
                     cfg.preferredCameraName = RobotConfig.Vision.nameWebcam;
                     cfg.cameraMount = RobotConfig.Vision.cameraMount;
 

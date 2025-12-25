@@ -67,12 +67,12 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
         /**
          * If true, the estimator may initialize from a fresh vision measurement.
          */
-        public boolean allowVisionInitialize = true;
+        public boolean enableInitializeFromVision = true;
 
         /**
          * If true, push the fused pose back into the odometry estimator when it supports resets.
          */
-        public boolean pushCorrectionsToOdometry = true;
+        public boolean enablePushFusedPoseToOdometry = true;
 
         /**
          * How long (seconds) a recently-accepted vision measurement should boost the reported quality.
@@ -101,8 +101,8 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
             c.visionHeadingGain = this.visionHeadingGain;
             c.maxVisionPositionJumpIn = this.maxVisionPositionJumpIn;
             c.maxVisionHeadingJumpRad = this.maxVisionHeadingJumpRad;
-            c.allowVisionInitialize = this.allowVisionInitialize;
-            c.pushCorrectionsToOdometry = this.pushCorrectionsToOdometry;
+            c.enableInitializeFromVision = this.enableInitializeFromVision;
+            c.enablePushFusedPoseToOdometry = this.enablePushFusedPoseToOdometry;
             c.visionConfidenceHoldSec = this.visionConfidenceHoldSec;
             return c;
         }
@@ -188,12 +188,12 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
 
         // If we are not initialized yet, pick an initial pose.
         if (!initialized) {
-            if (visionEnabled && cfg.allowVisionInitialize && isVisionAcceptable(visEst, nowSec)) {
+            if (visionEnabled && cfg.enableInitializeFromVision && isVisionAcceptable(visEst, nowSec)) {
                 fusedPose = planarize(visEst.fieldToRobotPose);
                 initialized = true;
 
                 // Align odometry if possible.
-                if (cfg.pushCorrectionsToOdometry && odometry instanceof PoseResetter) {
+                if (cfg.enablePushFusedPoseToOdometry && odometry instanceof PoseResetter) {
                     ((PoseResetter) odometry).setPose(fusedPose.toPose2d());
                 }
 
@@ -253,7 +253,7 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
                         0.0);
 
                 // Keep the odometry aligned if possible.
-                if (cfg.pushCorrectionsToOdometry && odometry instanceof PoseResetter) {
+                if (cfg.enablePushFusedPoseToOdometry && odometry instanceof PoseResetter) {
                     ((PoseResetter) odometry).setPose(fusedPose.toPose2d());
                 }
 
@@ -303,7 +303,7 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
             lastOdomPose = fusedPose;
         }
 
-        if (cfg.pushCorrectionsToOdometry && odometry instanceof PoseResetter) {
+        if (cfg.enablePushFusedPoseToOdometry && odometry instanceof PoseResetter) {
             ((PoseResetter) odometry).setPose(pose);
         }
     }
