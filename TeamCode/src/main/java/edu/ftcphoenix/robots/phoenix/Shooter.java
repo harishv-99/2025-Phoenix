@@ -4,6 +4,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.actuation.PlantTasks;
@@ -227,4 +228,30 @@ public class Shooter {
         plantShooter.stop();
         plantTransfer.stop();
     }
+
+
+    /**
+     * Debug helper: emit shooter state and delegate to each plant.
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "shooter" : prefix;
+
+        dbg.addLine(p)
+                .addData(p + ".velocity", velocity)
+                .addData(p + ".isShooterOn", isShooterOn);
+
+        if (plantShooter != null) {
+            plantShooter.debugDump(dbg, p + ".plantShooter");
+        }
+        if (plantTransfer != null) {
+            plantTransfer.debugDump(dbg, p + ".plantTransfer");
+        }
+        if (plantPusher != null) {
+            plantPusher.debugDump(dbg, p + ".plantPusher");
+        }
+    }
+
 }

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.input.Button;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
@@ -300,4 +301,43 @@ public final class Bindings {
             }
         }
     }
+
+
+    /**
+     * Debug helper: emit binding counts and the current state of toggle/while-held bindings.
+     *
+     * <p>Bindings are intentionally "fire and forget" (they store actions), so this debug output is
+     * mainly about verifying button wiring and toggle/edge behavior.</p>
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "bindings" : prefix;
+
+        dbg.addLine(p)
+                .addData(p + ".pressCount", pressBindings.size())
+                .addData(p + ".releaseCount", releaseBindings.size())
+                .addData(p + ".whileHeldCount", whileHeldBindings.size())
+                .addData(p + ".toggleCount", toggleBindings.size())
+                .addData(p + ".lastUpdatedCycle", lastUpdatedCycle);
+
+        for (int i = 0; i < whileHeldBindings.size(); i++) {
+            WhileHeldBinding b = whileHeldBindings.get(i);
+            String bp = p + ".whileHeld" + i;
+            dbg.addData(bp + ".held", b.button.isHeld())
+                    .addData(bp + ".onPress", b.button.onPress())
+                    .addData(bp + ".onRelease", b.button.onRelease())
+                    .addData(bp + ".hasOnReleaseAction", b.onRelease != null);
+        }
+
+        for (int i = 0; i < toggleBindings.size(); i++) {
+            ToggleBinding b = toggleBindings.get(i);
+            String tp = p + ".toggle" + i;
+            dbg.addData(tp + ".toggled", b.button.isToggled())
+                    .addData(tp + ".held", b.button.isHeld())
+                    .addData(tp + ".onPress", b.button.onPress());
+        }
+    }
+
 }

@@ -80,4 +80,17 @@ public final class ControlFrames {
     public ControlFrames withAimFrame(Pose2d robotToAimFrame) {
         return new ControlFrames(this.robotToTranslationFrame, robotToAimFrame);
     }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String toString() {
+        return "ControlFrames{" +
+                "robotToTranslationFrame=" + robotToTranslationFrame +
+                ", robotToAimFrame=" + robotToAimFrame +
+                '}';
+    }
+
 }

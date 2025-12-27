@@ -3,6 +3,7 @@ package edu.ftcphoenix.fw.task;
 import java.util.ArrayList;
 import java.util.List;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
@@ -65,7 +66,9 @@ public final class ParallelAllTask implements Task {
         return new ParallelAllTask(list);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start(LoopClock clock) {
         if (started) {
@@ -85,7 +88,9 @@ public final class ParallelAllTask implements Task {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void update(LoopClock clock) {
         if (!started || finished) {
@@ -106,7 +111,9 @@ public final class ParallelAllTask implements Task {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean isComplete() {
         return finished;
@@ -149,6 +156,38 @@ public final class ParallelAllTask implements Task {
         // children may still report UNKNOWN or SUCCESS, but since no timeout
         // occurred we consider the group successful for control-flow purposes.
         return TaskOutcome.SUCCESS;
+    }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "parallelAll" : prefix;
+
+        int completeCount = 0;
+        for (int i = 0; i < tasks.size(); i++) {
+            if (tasks.get(i).isComplete()) {
+                completeCount++;
+            }
+        }
+
+        dbg.addData(p + ".started", started)
+                .addData(p + ".finished", finished)
+                .addData(p + ".size", tasks.size())
+                .addData(p + ".completeCount", completeCount)
+                .addData(p + ".complete", isComplete())
+                .addData(p + ".outcome", getOutcome());
+
+        for (int i = 0; i < tasks.size(); i++) {
+            Task t = tasks.get(i);
+            String childPrefix = p + ".child" + i;
+            t.debugDump(dbg, childPrefix);
+        }
     }
 
     // --------------------------------------------------------------------

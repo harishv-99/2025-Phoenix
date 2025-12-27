@@ -55,6 +55,30 @@ Phoenix is designed around a few core goals:
    Phoenix treats documentation as a first-class feature: Javadocs should be “mouse-over quality,”
    and the Markdown guides should stay in sync with the real APIs and examples.
 
+   Phoenix also treats **debuggability** as a first-class feature: a good `debugDump(...)` (and in some cases a good `toString()`) is **live documentation**.
+
+   **Rule of thumb:**
+
+   * Use **`toString()`** for small, mostly-immutable *value objects* and configs where a compact one-line representation is helpful (examples: `Pose2d`, `Pose3d`, `DriveSignal`, `ChassisSpeeds`, `CameraMountConfig`, small `Owner.Config` objects).
+   * Use **`debugDump(DebugSink dbg, String prefix)`** for loop-updated and/or stateful objects (things that have `update(...)`, own hardware, or own other objects): `Plant`, `PoseEstimator`, `DriveSource` / `DriveOverlay`, `Task`s, controllers, subsystems.
+
+   **When both exist:**
+
+   * `toString()` should answer “what is this object?” (identity + key config).
+   * `debugDump()` should answer “what is this object doing right now?” (live state: current targets, errors, timers, modes, enable flags).
+
+   **`debugDump(...)` conventions:**
+
+   * Accept a nullable sink and do nothing if `dbg == null`.
+   * Use stable keys: `prefix + ".fieldName"` (avoid changing key names).
+   * Keep it safe to call every loop: no exceptions, no blocking, no expensive work.
+   * Prefer delegating: call `child.debugDump(dbg, prefix + ".child")` for owned components.
+
+   **`toString()` conventions:**
+
+   * Keep it short (single line).
+   * Avoid huge nested output; if it wants to be multi-line or you want nested structure, prefer `debugDump(...)`.
+
 7. **Fail fast with actionable errors**
 
    When something is misconfigured, Phoenix should throw early (often at build-time) with an

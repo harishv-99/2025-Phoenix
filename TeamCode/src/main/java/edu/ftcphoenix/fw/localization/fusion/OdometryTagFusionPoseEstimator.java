@@ -4,6 +4,7 @@ import edu.ftcphoenix.fw.core.geometry.Pose2d;
 import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.core.math.MathUtil;
 import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.localization.PoseEstimate;
 import edu.ftcphoenix.fw.localization.PoseEstimator;
 import edu.ftcphoenix.fw.localization.PoseResetter;
@@ -343,4 +344,39 @@ public class OdometryTagFusionPoseEstimator implements PoseEstimator, PoseResett
                 0.0,
                 0.0);
     }
+
+
+    /**
+     * Debug helper: emit current fusion state and recent vision gating statistics.
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "fusion" : prefix;
+
+        dbg.addLine(p)
+                .addData(p + ".initialized", initialized)
+                .addData(p + ".visionEnabled", visionEnabled)
+                .addData(p + ".acceptedVisionCount", acceptedVisionCount)
+                .addData(p + ".rejectedVisionCount", rejectedVisionCount)
+                .addData(p + ".lastVisionAcceptedSec", lastVisionAcceptedSec)
+                .addData(p + ".cfg.maxVisionAgeSec", cfg.maxVisionAgeSec)
+                .addData(p + ".cfg.minVisionQuality", cfg.minVisionQuality)
+                .addData(p + ".cfg.visionPositionGain", cfg.visionPositionGain)
+                .addData(p + ".cfg.visionHeadingGain", cfg.visionHeadingGain)
+                .addData(p + ".cfg.maxVisionPositionJumpIn", cfg.maxVisionPositionJumpIn)
+                .addData(p + ".cfg.maxVisionHeadingJumpRad", cfg.maxVisionHeadingJumpRad)
+                .addData(p + ".cfg.enableInitializeFromVision", cfg.enableInitializeFromVision)
+                .addData(p + ".cfg.enablePushFusedPoseToOdometry", cfg.enablePushFusedPoseToOdometry)
+                .addData(p + ".cfg.visionConfidenceHoldSec", cfg.visionConfidenceHoldSec)
+                .addData(p + ".fusedPose", fusedPose)
+                .addData(p + ".lastOdomPose", lastOdomPose)
+                .addData(p + ".lastVisionPose", lastVisionPose)
+                .addData(p + ".lastEstimate", lastEstimate);
+
+        odometry.debugDump(dbg, p + ".odometry");
+        vision.debugDump(dbg, p + ".vision");
+    }
+
 }

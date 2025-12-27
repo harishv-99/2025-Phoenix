@@ -17,6 +17,9 @@ import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.core.math.MathUtil;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 04: Shooter with Interpolation Table (manual "distance")</h1>
@@ -160,6 +163,11 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
 
     private final LoopClock clock = new LoopClock();
 
+    // Debug/telemetry adapter (DebugSink -> FTC Telemetry)
+    private static final boolean DEBUG = true;
+    private DebugSink dbg = NullDebugSink.INSTANCE;
+
+
     private Gamepads gamepads;
     private Bindings bindings;
 
@@ -179,9 +187,13 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
     // OpMode lifecycle
     // ----------------------------------------------------------------------
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void init() {
+        dbg = DEBUG ? new FtcTelemetryDebugSink(telemetry) : NullDebugSink.INSTANCE;
+
         // 1) Inputs
         gamepads = Gamepads.create(gamepad1, gamepad2);
         bindings = new Bindings();
@@ -202,9 +214,10 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
         // 4) Bindings: shooter enable + distance adjust
 
         // LB: toggle shooter on/off.
-        bindings.onPress(
+        bindings.onToggle(
                 gamepads.p1().leftBumper(),
-                () -> shooterEnabled = !shooterEnabled
+                () -> shooterEnabled = true,
+                () -> shooterEnabled = false
         );
 
         // D-pad UP: increase "distance".
@@ -231,13 +244,17 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void loop() {
         // --- 1) Clock ---
@@ -269,22 +286,28 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
 
         // Update shooter plant once per loop.
         shooter.update(dtSec);
+        // --- 5) Debug / Telemetry ---
+        dbg.addLine("FW Example 04: Shooter Interpolated");
 
-        // --- 5) Telemetry ---
-        telemetry.addLine("FW Example 04: Shooter Interpolated");
-        telemetry.addLine("Drive (axial / lateral / omega)")
-                .addData("axial", lastDrive.axial)
-                .addData("lateral", lastDrive.lateral)
-                .addData("omega", lastDrive.omega);
+        clock.debugDump(dbg, "clock");
+        gamepads.debugDump(dbg, "pads");
+        bindings.debugDump(dbg, "bindings");
 
-        telemetry.addLine("Shooter interpolation")
-                .addData("enabled", shooterEnabled)
-                .addData("distanceIn", distanceInches)
-                .addData("targetVelNative", lastShooterTarget);
+        stickDrive.debugDump(dbg, "driveSrc");
+        dbg.addData("drive.cmd", driveCmd);
+        drivebase.debugDump(dbg, "drivebase");
+
+        dbg.addData("shooterEnabled", shooterEnabled);
+        dbg.addData("distanceIn", distanceInches);
+        dbg.addData("shooterTargetNative", lastShooterTarget);
+        shooter.debugDump(dbg, "shooter");
+
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void stop() {
         shooterEnabled = false;

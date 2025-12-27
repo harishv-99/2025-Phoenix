@@ -1,5 +1,6 @@
 package edu.ftcphoenix.fw.localization;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
@@ -49,7 +50,42 @@ public interface PoseEstimator {
      * recent {@code update()}.</p>
      *
      * @return the latest {@link PoseEstimate}; callers should check
-     *         {@link PoseEstimate#hasPose} before using the pose for control
+     * {@link PoseEstimate#hasPose} before using the pose for control
      */
     PoseEstimate getEstimate();
+
+
+    /**
+     * Debug helper: emit a compact summary of the most recent estimate.
+     *
+     * <p>Implementations with meaningful internal state should override this method
+     * to expose richer telemetry (sources, residuals, gating decisions, etc.).</p>
+     *
+     * @param dbg    debug sink (may be {@code null}; if null, no output is produced)
+     * @param prefix base key prefix, e.g. "localizer"
+     */
+    default void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "poseEstimator" : prefix;
+
+        PoseEstimate est = getEstimate();
+        dbg.addData(p + ".class", getClass().getSimpleName());
+
+        if (est == null) {
+            dbg.addData(p + ".hasPose", false);
+            return;
+        }
+
+        dbg.addData(p + ".hasPose", est.hasPose)
+                .addData(p + ".quality", est.quality)
+                .addData(p + ".ageSec", est.ageSec)
+                .addData(p + ".timestampSec", est.timestampSec);
+
+        if (est.hasPose) {
+            dbg.addData(p + ".fieldToRobotPose", est.fieldToRobotPose);
+        }
+    }
+
 }

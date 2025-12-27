@@ -5,6 +5,7 @@ import java.util.function.DoubleSupplier;
 import java.util.function.DoubleUnaryOperator;
 
 import edu.ftcphoenix.fw.actuation.Plant;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 
 /**
  * Controller that maps a continuous input value (e.g., sensor reading) into
@@ -52,6 +53,10 @@ public final class FunctionController {
     private final Plant plant;
     private final DoubleSupplier input;
     private final DoubleUnaryOperator mapping;
+
+    // Debug: last sampled input and computed target (set during update()).
+    private double lastInput = Double.NaN;
+    private double lastTarget = Double.NaN;
 
     /**
      * Construct a {@link FunctionController}.
@@ -116,6 +121,8 @@ public final class FunctionController {
     public void update(double dtSec) {
         double x = input.getAsDouble();
         double target = mapping.applyAsDouble(x);
+        lastInput = x;
+        lastTarget = target;
         plant.setTarget(target);
         plant.update(dtSec);
     }
@@ -128,6 +135,8 @@ public final class FunctionController {
      */
     public void reset() {
         plant.reset();
+        lastInput = Double.NaN;
+        lastTarget = Double.NaN;
     }
 
     /**
@@ -143,4 +152,22 @@ public final class FunctionController {
     public double peekInput() {
         return input.getAsDouble();
     }
+
+
+    /**
+     * Debug helper: emit the last sampled input/target and delegate to the wrapped plant.
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "functionCtrl" : prefix;
+
+        dbg.addLine(p)
+                .addData(p + ".lastInput", lastInput)
+                .addData(p + ".lastTarget", lastTarget);
+
+        plant.debugDump(dbg, p + ".plant");
+    }
+
 }

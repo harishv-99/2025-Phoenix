@@ -2,6 +2,7 @@ package edu.ftcphoenix.fw.task;
 
 import java.util.function.Consumer;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
@@ -82,7 +83,9 @@ public final class RunForSecondsTask implements Task {
         this.onFinish = onFinish;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start(LoopClock clock) {
         if (started) {
@@ -108,7 +111,9 @@ public final class RunForSecondsTask implements Task {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void update(LoopClock clock) {
         if (!started || finished) {
@@ -128,19 +133,43 @@ public final class RunForSecondsTask implements Task {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean isComplete() {
         return finished;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public TaskOutcome getOutcome() {
         if (!finished) {
             return TaskOutcome.NOT_DONE;
         }
         return TaskOutcome.SUCCESS;
+    }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "runForSeconds" : prefix;
+
+        dbg.addData(p + ".durationSec", durationSec)
+                .addData(p + ".started", started)
+                .addData(p + ".finished", finished)
+                .addData(p + ".remainingSec", getRemainingSec())
+                .addData(p + ".hasOnStart", onStart != null)
+                .addData(p + ".hasOnUpdate", onUpdate != null)
+                .addData(p + ".hasOnFinish", onFinish != null);
     }
 
     /**

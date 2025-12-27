@@ -147,12 +147,25 @@ public final class TaskRunner {
         }
         String p = (prefix == null || prefix.isEmpty()) ? "tasks" : prefix;
 
-        dbg.addData(p + ".queueSize", queue.size())
-                .addData(p + ".hasCurrent", current != null);
+        dbg.addLine(p)
+                .addData(p + ".queueSize", queue.size())
+                .addData(p + ".hasCurrent", current != null)
+                .addData(p + ".lastUpdatedCycle", lastUpdatedCycle);
 
         if (current != null) {
-            dbg.addData(p + ".currentClass", current.getClass().getSimpleName())
-                    .addData(p + ".currentComplete", current.isComplete());
+            dbg.addData(p + ".currentName", current.getDebugName())
+                    .addData(p + ".currentClass", current.getClass().getSimpleName())
+                    .addData(p + ".currentComplete", current.isComplete())
+                    .addData(p + ".currentOutcome", current.getOutcome());
+
+            // Let the active task expose richer debug info if it wants.
+            current.debugDump(dbg, p + ".current");
+        }
+
+        if (!queue.isEmpty()) {
+            Task next = queue.get(0);
+            dbg.addData(p + ".nextName", next.getDebugName())
+                    .addData(p + ".nextClass", next.getClass().getSimpleName());
         }
     }
 }

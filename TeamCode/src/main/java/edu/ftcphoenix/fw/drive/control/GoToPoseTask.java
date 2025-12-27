@@ -4,6 +4,7 @@ import java.util.Objects;
 
 import edu.ftcphoenix.fw.drive.ChassisSpeeds;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.geometry.Pose2d;
 import edu.ftcphoenix.fw.localization.PoseEstimate;
 import edu.ftcphoenix.fw.localization.PoseEstimator;
@@ -112,6 +113,9 @@ public final class GoToPoseTask implements Task {
     // For optional debugging/telemetry.
     private double lastPosErrorInches = 0.0;
     private double lastHeadingErrorRad = 0.0;
+    private boolean lastHasPose = false;
+    private Pose2d lastRobotPose = Pose2d.zero();
+    private ChassisSpeeds lastCmd = ChassisSpeeds.zero();
 
     /**
      * Creates a new {@code GoToPoseTask}.
@@ -174,6 +178,7 @@ public final class GoToPoseTask implements Task {
         // Hard timeout.
         if (elapsedSec > cfg.timeoutSec) {
             drivebase.stop();
+            lastCmd = ChassisSpeeds.zero();
             finished = true;
             outcome = TaskOutcome.TIMEOUT;
             return;
@@ -182,9 +187,13 @@ public final class GoToPoseTask implements Task {
         // Get the latest pose estimate.
         PoseEstimate estimate = poseEstimator.getEstimate();
 
+        lastHasPose = estimate.hasPose;
+
         if (!estimate.hasPose) {
             // No usable pose; stop the drive and wait up to maxNoPoseSec.
             drivebase.stop();
+
+            lastCmd = ChassisSpeeds.zero();
 
             if (cfg.maxNoPoseSec <= 0.0) {
                 finished = true;
@@ -206,6 +215,8 @@ public final class GoToPoseTask implements Task {
         // PoseEstimate.fieldToRobotPose is Pose3d; drivetrain control is planar, so project to Pose2d.
         Pose2d robotPose = estimate.toPose2d();
 
+        lastRobotPose = robotPose;
+
         // Compute position and heading errors.
         lastPosErrorInches = robotPose.distanceTo(targetPose);
         lastHeadingErrorRad = Math.abs(robotPose.headingErrorTo(targetPose));
@@ -214,6 +225,7 @@ public final class GoToPoseTask implements Task {
         if (lastPosErrorInches <= cfg.positionTolInches
                 && lastHeadingErrorRad <= cfg.headingTolRad) {
             drivebase.stop();
+            lastCmd = ChassisSpeeds.zero();
             finished = true;
             outcome = TaskOutcome.SUCCESS;
             return;
@@ -225,6 +237,8 @@ public final class GoToPoseTask implements Task {
 
         // Use the controller to generate a chassis-speed command.
         ChassisSpeeds cmd = controller.update(robotPose, targetPose, omegaFF);
+
+        lastCmd = cmd;
 
         // Apply to drivebase (best-effort mapping to motor power).
         drivebase.drive(cmd);
@@ -245,6 +259,38 @@ public final class GoToPoseTask implements Task {
     public TaskOutcome getOutcome() {
         return finished ? outcome : TaskOutcome.NOT_DONE;
     }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "goToPose" : prefix;
+
+        dbg.addData(p + ".started", started)
+                .addData(p + ".finished", finished)
+                .addData(p + ".outcome", getOutcome())
+                .addData(p + ".elapsedSec", elapsedSec)
+                .addData(p + ".noPoseElapsedSec", noPoseElapsedSec)
+                .addData(p + ".lastHasPose", lastHasPose)
+                .addData(p + ".targetPose", targetPose)
+                .addData(p + ".robotPose", lastRobotPose)
+                .addData(p + ".posErrorInches", lastPosErrorInches)
+                .addData(p + ".headingErrorRad", lastHeadingErrorRad)
+                .addData(p + ".cmd", lastCmd)
+                .addData(p + ".cfg.positionTolInches", cfg.positionTolInches)
+                .addData(p + ".cfg.headingTolRad", cfg.headingTolRad)
+                .addData(p + ".cfg.timeoutSec", cfg.timeoutSec)
+                .addData(p + ".cfg.maxNoPoseSec", cfg.maxNoPoseSec);
+
+        poseEstimator.debugDump(dbg, p + ".poseEstimator");
+        drivebase.debugDump(dbg, p + ".drivebase");
+    }
+
 
     /**
      * @return the target pose this task is driving toward.

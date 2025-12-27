@@ -20,6 +20,9 @@ import edu.ftcphoenix.fw.task.SequenceTask;
 import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 03: Shooter Macro (Tasks + PlantTasks)</h1>
@@ -185,6 +188,11 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
 
     private final LoopClock clock = new LoopClock();
 
+    // Debug/telemetry adapter (DebugSink -> FTC Telemetry)
+    private static final boolean DEBUG = true;
+    private DebugSink dbg = NullDebugSink.INSTANCE;
+
+
     private Gamepads gamepads;
     private Bindings bindings;
 
@@ -206,9 +214,13 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
     // OpMode lifecycle
     // ----------------------------------------------------------------------
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void init() {
+        dbg = DEBUG ? new FtcTelemetryDebugSink(telemetry) : NullDebugSink.INSTANCE;
+
         // === 1) Inputs ===
         gamepads = Gamepads.create(gamepad1, gamepad2);
         bindings = new Bindings();
@@ -263,13 +275,17 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void loop() {
         // --- 1) Clock ---
@@ -301,19 +317,29 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
         shooter.update(dtSec);
         transfer.update(dtSec);
         pusher.update(dtSec);
+        // --- 6) Debug / Telemetry ---
+        dbg.addLine("FW Example 03: Shooter Macro");
 
-        // --- 6) Telemetry ---
-        telemetry.addLine("FW Example 03: Shooter Macro");
-        telemetry.addLine("Drive (axial / lateral / omega)")
-                .addData("axial", lastDrive.axial)
-                .addData("lateral", lastDrive.lateral)
-                .addData("omega", lastDrive.omega);
-        telemetry.addLine("Macros")
-                .addData("hasActive", macroRunner.hasActiveTask());
+        clock.debugDump(dbg, "clock");
+        gamepads.debugDump(dbg, "pads");
+        bindings.debugDump(dbg, "bindings");
+
+        macroRunner.debugDump(dbg, "macro");
+
+        stickDrive.debugDump(dbg, "driveSrc");
+        dbg.addData("drive.cmd", driveCmd);
+        drivebase.debugDump(dbg, "drivebase");
+
+        shooter.debugDump(dbg, "shooter");
+        transfer.debugDump(dbg, "transfer");
+        pusher.debugDump(dbg, "pusher");
+
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void stop() {
         cancelShootMacros();

@@ -4,6 +4,7 @@ import com.qualcomm.robotcore.hardware.Gamepad;
 
 import java.util.Objects;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
@@ -106,4 +107,21 @@ public final class Gamepads {
     public void clearButtons() {
         Button.clearRegistered();
     }
+
+
+    /**
+     * Debug helper: emit player 1 & player 2 input state.
+     *
+     * <p>This is useful when verifying axis sign conventions and button edge detection.</p>
+     */
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "gamepads" : prefix;
+        dbg.addLine(p);
+        p1.debugDump(dbg, p + ".p1");
+        p2.debugDump(dbg, p + ".p2");
+    }
+
 }

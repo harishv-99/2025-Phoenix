@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
+import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
@@ -106,7 +107,9 @@ public final class SequenceTask implements Task {
         return new SequenceTask(list);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start(LoopClock clock) {
         started = true;
@@ -114,7 +117,9 @@ public final class SequenceTask implements Task {
         advanceToNextTask(clock);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void update(LoopClock clock) {
         if (!started) {
@@ -138,7 +143,9 @@ public final class SequenceTask implements Task {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean isComplete() {
         // Finished when we've advanced past the last child.
@@ -178,6 +185,33 @@ public final class SequenceTask implements Task {
             }
         }
         return TaskOutcome.SUCCESS;
+    }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void debugDump(DebugSink dbg, String prefix) {
+        if (dbg == null) {
+            return;
+        }
+        String p = (prefix == null || prefix.isEmpty()) ? "sequence" : prefix;
+
+        dbg.addData(p + ".started", started)
+                .addData(p + ".size", tasks.size())
+                .addData(p + ".index", index)
+                .addData(p + ".complete", isComplete())
+                .addData(p + ".outcome", getOutcome());
+
+        Task current = getCurrentTask();
+        if (current != null) {
+            dbg.addData(p + ".currentName", current.getDebugName())
+                    .addData(p + ".currentComplete", current.isComplete())
+                    .addData(p + ".currentOutcome", current.getOutcome());
+
+            current.debugDump(dbg, p + ".current");
+        }
     }
 
     /**

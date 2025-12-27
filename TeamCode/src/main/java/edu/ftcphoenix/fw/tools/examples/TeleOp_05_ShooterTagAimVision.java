@@ -31,6 +31,9 @@ import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
 import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 05: Shooter + DriveGuidance Auto-Aim + Vision Distance</h1>
@@ -113,6 +116,11 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     private final LoopClock clock = new LoopClock();
 
+    // Debug/telemetry adapter (DebugSink -> FTC Telemetry)
+    private static final boolean DEBUG = true;
+    private DebugSink dbg = NullDebugSink.INSTANCE;
+
+
     private Gamepads gamepads;
     private Bindings bindings;
 
@@ -146,6 +154,8 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
      */
     @Override
     public void init() {
+        dbg = DEBUG ? new FtcTelemetryDebugSink(telemetry) : NullDebugSink.INSTANCE;
+
         // 1) Inputs
         gamepads = Gamepads.create(gamepad1, gamepad2);
         bindings = new Bindings();
@@ -207,15 +217,10 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         shooter.setTarget(0.0);
 
         // 5) Bindings: shooter toggle.
-        bindings.onPress(
+        bindings.onToggle(
                 gamepads.p1().a(),
-                new Runnable() {
-                    /** {@inheritDoc} */
-                    @Override
-                    public void run() {
-                        shooterEnabled = !shooterEnabled;
-                    }
-                }
+                () -> shooterEnabled = true,
+                () -> shooterEnabled = false
         );
 
         telemetry.addLine("FW Example 05: Shooter DriveGuidance Vision");
@@ -282,26 +287,22 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // Shooter plant executes whatever target we just decided above
         shooter.update(dtSec);
+        // 5) Report (debugDump)
+        dbg.addLine("FW Example 05: Shooter Guidance Aim Vision");
 
-        // 5) Report (telemetry only, no behavior changes)
-        telemetry.addLine("FW Example 05: Shooter Guidance Aim Vision");
+        clock.debugDump(dbg, "clock");
+        gamepads.debugDump(dbg, "pads");
+        bindings.debugDump(dbg, "bindings");
 
-        telemetry.addLine("Drive (axial / lateral / omega)")
-                .addData("axial", lastDrive.axial)
-                .addData("lateral", lastDrive.lateral)
-                .addData("omega", lastDrive.omega);
+        scoringTarget.debugDump(dbg, "tag", cameraMount);
 
-        telemetry.addLine("Tag observation")
-                .addData("hasTarget", lastHasTarget)
-                .addData("id", lastTagId)
-                .addData("rangeIn", lastTagRangeInches)
-                .addData("cameraBearingRad", lastCameraBearingRad)
-                .addData("robotBearingRad", lastRobotBearingRad)
-                .addData("ageSec", lastTagAgeSec);
+        dbg.addData("shooter.enabled", shooterEnabled);
+        dbg.addData("shooter.targetVelNative", lastShooterTargetVel);
+        shooter.debugDump(dbg, "shooter");
 
-        telemetry.addLine("Shooter")
-                .addData("enabled", shooterEnabled)
-                .addData("targetVelNative", lastShooterTargetVel);
+        driveWithAim.debugDump(dbg, "driveSrc");
+        dbg.addData("drive.cmd", cmd);
+        drivebase.debugDump(dbg, "drivebase");
 
         telemetry.update();
     }

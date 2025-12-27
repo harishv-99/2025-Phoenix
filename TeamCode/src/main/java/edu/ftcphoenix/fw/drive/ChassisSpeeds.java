@@ -19,18 +19,26 @@ import edu.ftcphoenix.fw.core.math.MathUtil;
  */
 public final class ChassisSpeeds {
 
-    /** Forward velocity in the robot frame, in inches/sec (+ forward). */
+    /**
+     * Forward velocity in the robot frame, in inches/sec (+ forward).
+     */
     public final double vxRobotIps;
 
-    /** Leftward velocity in the robot frame, in inches/sec (+ left). */
+    /**
+     * Leftward velocity in the robot frame, in inches/sec (+ left).
+     */
     public final double vyRobotIps;
 
-    /** Angular velocity about +Z, in rad/sec (+ CCW). */
+    /**
+     * Angular velocity about +Z, in rad/sec (+ CCW).
+     */
     public final double omegaRobotRadPerSec;
 
     private static final ChassisSpeeds ZERO = new ChassisSpeeds(0.0, 0.0, 0.0);
 
-    /** @return a zero-velocity command. */
+    /**
+     * @return a zero-velocity command.
+     */
     public static ChassisSpeeds zero() {
         return ZERO;
     }
@@ -38,8 +46,8 @@ public final class ChassisSpeeds {
     /**
      * Construct a robot-centric chassis velocity command.
      *
-     * @param vxRobotIps forward velocity in the robot frame (inches/sec; + forward)
-     * @param vyRobotIps leftward velocity in the robot frame (inches/sec; + left)
+     * @param vxRobotIps          forward velocity in the robot frame (inches/sec; + forward)
+     * @param vyRobotIps          leftward velocity in the robot frame (inches/sec; + left)
      * @param omegaRobotRadPerSec angular velocity about +Z (rad/sec; + CCW)
      */
     public ChassisSpeeds(double vxRobotIps, double vyRobotIps, double omegaRobotRadPerSec) {
@@ -52,7 +60,7 @@ public final class ChassisSpeeds {
      * Return a new command with translation and rotation scaled independently.
      *
      * @param translationScale scale applied to {@link #vxRobotIps} and {@link #vyRobotIps}
-     * @param omegaScale scale applied to {@link #omegaRobotRadPerSec}
+     * @param omegaScale       scale applied to {@link #omegaRobotRadPerSec}
      * @return a new scaled chassis velocity command
      */
     public ChassisSpeeds scaled(double translationScale, double omegaScale) {
@@ -66,8 +74,8 @@ public final class ChassisSpeeds {
     /**
      * Clamp each component independently to the given absolute maxima.
      *
-     * @param maxVxAbsIps maximum absolute value allowed for {@link #vxRobotIps} (inches/sec)
-     * @param maxVyAbsIps maximum absolute value allowed for {@link #vyRobotIps} (inches/sec)
+     * @param maxVxAbsIps          maximum absolute value allowed for {@link #vxRobotIps} (inches/sec)
+     * @param maxVyAbsIps          maximum absolute value allowed for {@link #vyRobotIps} (inches/sec)
      * @param maxOmegaAbsRadPerSec maximum absolute value allowed for {@link #omegaRobotRadPerSec} (rad/sec)
      * @return a new clamped chassis velocity command
      */
@@ -78,4 +86,18 @@ public final class ChassisSpeeds {
                 MathUtil.clamp(omegaRobotRadPerSec, -Math.abs(maxOmegaAbsRadPerSec), Math.abs(maxOmegaAbsRadPerSec))
         );
     }
+
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public String toString() {
+        return "ChassisSpeeds{" +
+                "vxRobotIps=" + vxRobotIps +
+                ", vyRobotIps=" + vyRobotIps +
+                ", omegaRobotRadPerSec=" + omegaRobotRadPerSec +
+                '}';
+    }
+
 }

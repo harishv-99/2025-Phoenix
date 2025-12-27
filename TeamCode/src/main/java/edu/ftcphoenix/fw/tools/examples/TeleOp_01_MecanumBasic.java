@@ -11,6 +11,9 @@ import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 01: Basic Mecanum TeleOp</h1>
@@ -35,6 +38,11 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
 public final class TeleOp_01_MecanumBasic extends OpMode {
 
     private final LoopClock clock = new LoopClock();
+
+    // Debug/telemetry adapter (DebugSink -> FTC Telemetry)
+    private static final boolean DEBUG = true;
+    private DebugSink dbg = NullDebugSink.INSTANCE;
+
     private Gamepads gamepads;
 
     private MecanumDrivebase drivebase;
@@ -42,9 +50,13 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
 
     private DriveSignal lastDrive = DriveSignal.zero();
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void init() {
+        dbg = DEBUG ? new FtcTelemetryDebugSink(telemetry) : NullDebugSink.INSTANCE;
+
         clock.reset(getRuntime());
 
         gamepads = Gamepads.create(gamepad1, gamepad2);
@@ -56,13 +68,17 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void loop() {
         // --- 1) Clock ---
@@ -78,17 +94,22 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         // --- 4) Actuation: update drivebase timing, then send command ---
         drivebase.update(clock);
         drivebase.drive(cmd);
+        // --- 5) Debug / Telemetry ---
+        dbg.addLine("FW Example 01: Mecanum Basic");
 
-        // --- 5) Telemetry ---
-        telemetry.addLine("FW Example 01: Mecanum Basic");
-        telemetry.addLine("Drive (axial / lateral / omega)")
-                .addData("axial", lastDrive.axial)
-                .addData("lateral", lastDrive.lateral)
-                .addData("omega", lastDrive.omega);
+        clock.debugDump(dbg, "clock");
+        gamepads.debugDump(dbg, "pads");
+
+        stickDrive.debugDump(dbg, "driveSrc");
+        dbg.addData("drive.cmd", cmd);
+        drivebase.debugDump(dbg, "drivebase");
+
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void stop() {
         drivebase.stop();

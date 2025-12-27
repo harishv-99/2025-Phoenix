@@ -36,6 +36,9 @@ import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
 import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 06: Shooter + DriveGuidance Auto-Aim + Vision Distance + Macro</h1>
@@ -167,6 +170,11 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
     private final LoopClock clock = new LoopClock();
 
+    // Debug/telemetry adapter (DebugSink -> FTC Telemetry)
+    private static final boolean DEBUG = true;
+    private DebugSink dbg = NullDebugSink.INSTANCE;
+
+
     private Gamepads gamepads;
     private Bindings bindings;
 
@@ -208,6 +216,8 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
      */
     @Override
     public void init() {
+        dbg = DEBUG ? new FtcTelemetryDebugSink(telemetry) : NullDebugSink.INSTANCE;
+
         // 1) Inputs
         gamepads = Gamepads.create(gamepad1, gamepad2);
         bindings = new Bindings();
@@ -360,37 +370,26 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         pusher.update(dtSec);
 
         // ------------------------------------------------------------------
-        // 5) Report (telemetry only; no behavior changes)
-        // ------------------------------------------------------------------
-        AprilTagObservation obs = scoringTarget.last();
-        lastHasTarget = obs.hasTarget;
-        lastTagRangeInches = obs.cameraRangeInches();
-        lastCameraBearingRad = obs.cameraBearingRad();
-        lastRobotBearingRad = obs.hasTarget
-                ? CameraMountLogic.robotBearingRad(obs, cameraMount)
-                : 0.0;
-        lastTagAgeSec = obs.ageSec;
-        lastTagId = obs.id;
+        // 5) Report (debugDump)
+        dbg.addLine("FW Example 06: Shooter Guidance Macro Vision");
 
-        telemetry.addLine("FW Example 06: Shooter Guidance Macro Vision");
+        clock.debugDump(dbg, "clock");
+        gamepads.debugDump(dbg, "pads");
+        bindings.debugDump(dbg, "bindings");
 
-        telemetry.addLine("Drive (axial / lateral / omega)")
-                .addData("axial", lastDrive.axial)
-                .addData("lateral", lastDrive.lateral)
-                .addData("omega", lastDrive.omega);
+        scoringTarget.debugDump(dbg, "tag", cameraMount);
 
-        telemetry.addLine("Tag observation")
-                .addData("hasTarget", lastHasTarget)
-                .addData("id", lastTagId)
-                .addData("rangeIn", lastTagRangeInches)
-                .addData("cameraBearingRad", lastCameraBearingRad)
-                .addData("robotBearingRad", lastRobotBearingRad)
-                .addData("ageSec", lastTagAgeSec);
+        macroRunner.debugDump(dbg, "macro");
+        dbg.addData("macro.status", lastMacroStatus);
+        dbg.addData("macro.targetVelNative", lastShooterMacroTargetVel);
 
-        telemetry.addLine("Macro")
-                .addData("active", macroRunner.hasActiveTask())
-                .addData("status", lastMacroStatus)
-                .addData("targetVelNative", lastShooterMacroTargetVel);
+        driveWithAim.debugDump(dbg, "driveSrc");
+        dbg.addData("drive.cmd", cmd);
+        drivebase.debugDump(dbg, "drivebase");
+
+        shooter.debugDump(dbg, "shooter");
+        transfer.debugDump(dbg, "transfer");
+        pusher.debugDump(dbg, "pusher");
 
         telemetry.update();
     }
