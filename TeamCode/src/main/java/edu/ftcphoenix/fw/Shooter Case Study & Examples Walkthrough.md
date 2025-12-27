@@ -8,8 +8,8 @@ The examples live in `edu.ftcphoenix.fw.tools.examples.*`:
 * **TeleOp_02_ShooterBasic** – basic “modes” + plants
 * **TeleOp_03_ShooterMacro** – one-button macro using `TaskRunner` + `PlantTasks`
 * **TeleOp_04_ShooterInterpolated** – distance → velocity via `InterpolatingTable1D`
-* **TeleOp_05_ShooterTagAimVision** – AprilTag distance + TagAim (manual drive + auto-omega)
-* **TeleOp_06_ShooterTagAimMacroVision** – combines TagAim + vision distance + macro
+* **TeleOp_05_ShooterTagAimVision** – AprilTag distance + DriveGuidance (manual drive + auto-omega)
+* **TeleOp_06_ShooterTagAimMacroVision** – combines DriveGuidance + vision distance + macro
 
 ---
 
@@ -179,7 +179,7 @@ shooter.setTarget(shooterEnabled ? targetVel : 0.0);
 
 ---
 
-## Example 05: Shooter + TagAim + Vision Distance
+## Example 05: Shooter + DriveGuidance Auto-Aim + Vision Distance
 
 **File:** `TeleOp_05_ShooterTagAimVision`
 
@@ -187,7 +187,7 @@ shooter.setTarget(shooterEnabled ? targetVel : 0.0);
 
 * How to get AprilTag observations through the FTC adapter: `FtcVision.aprilTags(...)`.
 * How `TagTarget` tracks the “best” tag across loops with an age constraint.
-* How `TagAim.teleOpAim(...)` wraps a base `DriveSource` and overrides only **omega** while a button is held.
+* How a `DriveGuidance` plan becomes a `DriveOverlay` that overrides only **omega** while a button is held.
 * How to compute shooter velocity from **tag distance** using the same interpolation-table idea from Example 04.
 
 ### Wiring
@@ -206,11 +206,25 @@ CameraMountConfig cameraMount = CameraMountConfig.of(
 );
 
 DriveSource baseDrive = GamepadDriveSource.teleOpMecanumStandard(gamepads);
-DriveSource driveWithAim = TagAim.teleOpAim(
+
+// Convert TagTarget → generic robot-relative observation.
+ObservationSource2d scoringObs = ObservationSources.aprilTag(scoringTarget, cameraMount);
+
+DriveGuidancePlan aimPlan = DriveGuidance.plan()
+        .aimTo()
+            // Aim at the center of whichever scoring tag is currently observed.
+            .lookAtTagPointInches(0.0, 0.0)
+            .doneAimTo()
+        .feedback()
+            .observation(scoringObs)
+            .doneFeedback()
+        .build();
+
+DriveSource driveWithAim = DriveGuidance.overlayOn(
         baseDrive,
-        gamepads.p1().leftBumper(),
-        scoringTarget,
-        cameraMount
+        () -> gamepads.p1().leftBumper().isHeld(),
+        aimPlan,
+        DriveOverlayMask.OMEGA_ONLY
 );
 ```
 
@@ -241,9 +255,9 @@ if (shooterEnabled && obs.hasTarget) {
 
 ---
 
-## Example 06: TagAim + Vision Distance + Macro
+## Example 06: DriveGuidance Auto-Aim + Vision Distance + Macro
 
-**File:** `TeleOp_06_ShooterTagAimMacroVision`
+**File:** `TeleOp_06_ShooterTagAimMacroVision` (auto-aim is now implemented with `DriveGuidance`)
 
 ### What it teaches
 
@@ -308,4 +322,4 @@ Task feedPusher = SequenceTask.of(pusherLoad, pusherShoot, pusherRetract);
 
     * “shoot N balls” (repeat the single-ball macro in a `SequenceTask`), and/or
     * add a *min-range / max-range* check before starting the macro, and/or
-    * pass `cameraMount` into `FtcVision.aprilTags(..., cfg)` via `FtcVision.Config.defaults().withCameraMount(cameraMount)` if you want the FTC SDK’s robot-pose estimation path enabled (separate from TagAim).
+    * pass `cameraMount` into `FtcVision.aprilTags(..., cfg)` via `FtcVision.Config.defaults().withCameraMount(cameraMount)` if you want the FTC SDK’s robot-pose estimation path enabled (separate from DriveGuidance).

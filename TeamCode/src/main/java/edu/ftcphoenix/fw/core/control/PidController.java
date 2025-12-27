@@ -42,7 +42,7 @@ package edu.ftcphoenix.fw.core.control;
  *   <li>Call {@link #reset()} when changing modes or after large setpoint
  *       jumps, to clear integral and derivative state.</li>
  *   <li>Wrap this interface into higher-level classes that manage setpoints
- *       and sensors (for example, a {@code TagAimController}).</li>
+ *       and sensors (for example, a drive guidance / auto-aim helper).</li>
  * </ul>
  */
 public interface PidController {

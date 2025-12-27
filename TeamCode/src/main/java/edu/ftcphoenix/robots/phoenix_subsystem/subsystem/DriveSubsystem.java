@@ -55,13 +55,8 @@ public final class DriveSubsystem implements Subsystem {
                 driveCfg
         );
 
-        // Stick drive with custom slow-mode scale.
-        GamepadDriveSource.Config stickCfg = GamepadDriveSource.Config.defaults()
-                .withSlow(gamepads.p1().rightBumper(),
-                        MULT_SLOWDOWN, MULT_SLOWDOWN);
-        DriveSource sticks = GamepadDriveSource.teleOpMecanum(
-                gamepads,
-                stickCfg);
+        // Stick drive with slow-mode scale.
+        DriveSource sticks = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         this.driveSource = sticks;
 

@@ -390,4 +390,4 @@ A good rule of thumb:
 * The core task classes – `InstantTask`, `RunForSecondsTask`, `WaitUntilTask`, `SequenceTask`, `ParallelAllTask` – are there when you need lower‑level control.
 * TeleOp macros and Autonomous routines both use the same task patterns; only the triggers change (buttons vs. init/start).
 
-Once you are comfortable with these patterns, you can layer in more advanced pieces like vision, TagAim, and interpolated shooter speeds – they all compose naturally on top of the same Task/Plant/Drive structure.
+Once you are comfortable with these patterns, you can layer in more advanced pieces like vision, DriveGuidance (auto-aim / go-to), and interpolated shooter speeds – they all compose naturally on top of the same Task/Plant/Drive structure.

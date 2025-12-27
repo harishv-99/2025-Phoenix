@@ -13,16 +13,20 @@ import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.guidance.DriveGuidance;
+import edu.ftcphoenix.fw.drive.guidance.DriveGuidancePlan;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
+import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
+import edu.ftcphoenix.fw.sensing.observation.ObservationSources;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
-import edu.ftcphoenix.fw.drive.assist.TagAim;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.core.time.LoopClock;
@@ -56,7 +60,8 @@ public final class PhoenixRobot {
     private CameraMountConfig cameraMountConfig;
     private AprilTagSensor tagSensor;
     private TagTarget scoringTarget;
-    private TagAim.Config aimConfig;
+    private DriveGuidancePlan aimPlan;
+    private DriveGuidancePlan.Tuning aimTuning;
 
 
     // ----------------------------------------------------------------------
@@ -79,9 +84,9 @@ public final class PhoenixRobot {
      * It is intended to be constructed once in an OpMode {@code init()} method.</p>
      *
      * @param hardwareMap FTC hardware map
-     * @param telemetry FTC telemetry sink
-     * @param gamepad1 primary driver controller
-     * @param gamepad2 secondary operator controller
+     * @param telemetry   FTC telemetry sink
+     * @param gamepad1    primary driver controller
+     * @param gamepad2    secondary operator controller
      */
     public PhoenixRobot(HardwareMap hardwareMap, Telemetry telemetry, Gamepad gamepad1, Gamepad gamepad2) {
         this.hardwareMap = hardwareMap;
@@ -121,34 +126,45 @@ public final class PhoenixRobot {
         // --- Use the standard TeleOp stick mapping for mecanum.
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
-        // ---
-        cameraMountConfig = CameraMountConfig.of(
-                0,
-                0,
-                0,
-                0,
-                0,
-                0
-        );
-        tagSensor = FtcVision.aprilTags(hardwareMap, "Webcam 1");
+        // --- Vision ---
+        cameraMountConfig = RobotConfig.Vision.cameraMount;
+        tagSensor = FtcVision.aprilTags(hardwareMap, RobotConfig.Vision.nameWebcam);
 
         // Track scoring tags with a freshness window.
         scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, 0.5);
 
-        // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
-        aimConfig = TagAim.Config.defaults();
-        aimConfig.kp = 1;
-        aimConfig.deadbandRad = Math.toRadians(0.25);
-        driveWithAim = TagAim.teleOpAim(
+        // --- Drive guidance (replaces TagAim): hold P2 LB to auto-aim omega at the best scoring tag.
+        // Use the framework's helper so robot code stays simple.
+        // (This updates the TagTarget each loop and converts the latest AprilTag measurement into a
+        // robot-relative planar observation used by DriveGuidance.)
+        ObservationSource2d obs2d = ObservationSources.aprilTag(scoringTarget, cameraMountConfig);
+
+        // Tuning for the auto-aim assist. Start with defaults and tweak only what you need.
+        aimTuning = DriveGuidancePlan.Tuning.defaults()
+                .withAimKp(1.0)            // how strongly we turn toward the target
+                .withAimDeadbandDeg(0.25); // stop turning when we're within this many degrees
+
+        aimPlan = DriveGuidance.plan()
+                .aimTo()
+                .tagCenter()
+                .doneAimTo()
+                .tuning(aimTuning)
+                .feedback()
+                .observation(obs2d, 0.50, 0.0)
+                .lossPolicy(DriveGuidancePlan.LossPolicy.PASS_THROUGH)
+                .doneFeedback()
+                .build();
+
+        driveWithAim = DriveGuidance.overlayOn(
                 stickDrive,
-                gamepads.p2().leftBumper(),
-                scoringTarget,
-                cameraMountConfig,
-                aimConfig
+                gamepads.p2().leftBumper()::isHeld,
+                aimPlan,
+                DriveOverlayMask.OMEGA_ONLY
         );
 
         telemetry.addLine("Phoenix TeleOp with AutoAim");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");
+        telemetry.addLine("P2 LB: auto-aim at scoring tag");
         telemetry.update();
 
         // Create bindings
@@ -172,21 +188,19 @@ public final class PhoenixRobot {
 
         bindings.whileHeld(gamepads.p2().leftBumper(),
                 () -> {
-            AprilTagObservation obs = scoringTarget.last();
-            if (obs.hasTarget) {
-                taskRunnerTeleOp.enqueue(shooter.instantSetVelocityByDist(obs.cameraRangeInches()));
-            }
+                    AprilTagObservation obs = scoringTarget.last();
+                    if (obs.hasTarget) {
+                        taskRunnerTeleOp.enqueue(shooter.instantSetVelocityByDist(obs.cameraRangeInches()));
+                    }
                 });
 
         bindings.toggle(gamepads.p2().rightBumper(),
                 (isOn) -> {
-            if (isOn) {
-                taskRunnerTeleOp.enqueue(shooter.instantStartShooter());
-            }
-
-            else {
-                taskRunnerTeleOp.enqueue(shooter.instantStopShooter());
-            }
+                    if (isOn) {
+                        taskRunnerTeleOp.enqueue(shooter.instantStartShooter());
+                    } else {
+                        taskRunnerTeleOp.enqueue(shooter.instantStopShooter());
+                    }
                 });
 
         bindings.onPress(gamepads.p2().dpadUp(),
@@ -238,7 +252,7 @@ public final class PhoenixRobot {
         if (!taskRunnerTeleOp.hasActiveTask()) {
         }
 
-        // --- 4) Drive: TagAim-wrapped drive source (LB may override omega) ---
+        // --- 4) Drive: guidance overlay (P2 LB may override omega) ---
         DriveSignal cmd = driveWithAim.get(clock);
         drivebase.update(clock);
         drivebase.drive(cmd);
@@ -251,12 +265,11 @@ public final class PhoenixRobot {
 //        driveWithAim.debugDump(dbg, "driveWAim");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
-            if (Math.abs(scoringTarget.robotBearingRad(cameraMountConfig)) <= (aimConfig.deadbandRad * 5))
+            if (Math.abs(scoringTarget.robotBearingRad(cameraMountConfig)) <= (aimTuning.aimDeadbandRad * 5))
                 telemetry.addLine(">>> AIMED <<<");
-            telemetry.addData("id", obs.id);
-            telemetry.addData("dist", obs.cameraRangeInches());
-            telemetry.addData("dist", obs.cameraRangeInches());
-            telemetry.addData("bearing", Math.toDegrees(obs.cameraBearingRad()));
+            telemetry.addData("tagId", obs.id);
+            telemetry.addData("distIn", obs.cameraRangeInches());
+            telemetry.addData("bearingDeg", Math.toDegrees(obs.cameraBearingRad()));
         }
 
         telemetry.update();

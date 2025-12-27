@@ -15,16 +15,20 @@ import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.guidance.DriveGuidance;
+import edu.ftcphoenix.fw.drive.guidance.DriveGuidancePlan;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
+import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
+import edu.ftcphoenix.fw.sensing.observation.ObservationSources;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
-import edu.ftcphoenix.fw.drive.assist.TagAim;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.task.ParallelAllTask;
 import edu.ftcphoenix.fw.task.SequenceTask;
@@ -34,14 +38,14 @@ import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
- * <h1>Example 06: Shooter + TagAim + Vision Distance + Macro</h1>
+ * <h1>Example 06: Shooter + DriveGuidance Auto-Aim + Vision Distance + Macro</h1>
  *
  * <p>This example combines:</p>
  *
  * <ol>
  *   <li><b>Mecanum drive</b> via {@link Drives#mecanum} +
  *       {@link GamepadDriveSource#teleOpMecanumSlowRb(Gamepads)}.</li>
- *   <li><b>Tag-based auto-aim</b> via TagAim – hold LB to face a scoring tag.</li>
+ *   <li><b>Tag-based auto-aim</b> via {@link DriveGuidance} (a {@link edu.ftcphoenix.fw.drive.DriveOverlay}) – hold LB to face a scoring tag.</li>
  *   <li><b>Vision-based shooter velocity</b>: AprilTag distance →
  *       {@link InterpolatingTable1D} → shooter velocity (native units).</li>
  *   <li><b>One-button shoot macro</b> (shooter + transfer + pusher)
@@ -50,8 +54,8 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  *
  * <h2>Camera offset note</h2>
  * <p>
- * This example uses {@link CameraMountConfig} so TagAim aims the <b>robot center</b>
- * at the tag even if the camera is not mounted at the robot center.
+ * This example uses {@link CameraMountConfig} so the vision observation is expressed relative to
+ * the <b>robot</b> (not just the camera), even if the camera is mounted off-center.
  * </p>
  *
  * <h2>Driver behavior</h2>
@@ -84,7 +88,7 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  * <p>If Y is pressed but no valid tag is seen, the macro is not started
  * and a status message is shown in telemetry.</p>
  */
-@TeleOp(name = "FW Ex 06: Shooter TagAim Macro Vision", group = "Framework Examples")
+@TeleOp(name = "FW Ex 06: Shooter Guidance Macro Vision", group = "Framework Examples")
 @Disabled
 public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
 
@@ -199,7 +203,9 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
     // OpMode lifecycle
     // ----------------------------------------------------------------------
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void init() {
         // 1) Inputs
@@ -232,13 +238,22 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
                 /*rollRad=*/0.0
         );
 
-        // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
-        // This overload uses cameraMount so the ROBOT CENTER faces the tag, not just the camera.
-        driveWithAim = TagAim.teleOpAim(
+        // Wrap baseDrive with an auto-aim overlay: hold left bumper to auto-aim omega.
+        ObservationSource2d scoringObs = ObservationSources.aprilTag(scoringTarget, cameraMount);
+        DriveGuidancePlan aimPlan = DriveGuidance.plan()
+                .aimTo()
+                .lookAtTagPointInches(0.0, 0.0) // observed tag center
+                .doneAimTo()
+                .feedback()
+                .observation(scoringObs)
+                .doneFeedback()
+                .build();
+
+        driveWithAim = DriveGuidance.overlayOn(
                 baseDrive,
-                gamepads.p1().leftBumper(),
-                scoringTarget,
-                cameraMount
+                () -> gamepads.p1().leftBumper().isHeld(),
+                aimPlan,
+                DriveOverlayMask.OMEGA_ONLY
         );
 
         // 4) Mechanism wiring using Actuators.
@@ -279,22 +294,26 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
                 this::cancelShootMacros
         );
 
-        telemetry.addLine("FW Example 06: Shooter TagAim Macro Vision");
-        telemetry.addLine("Drive: mecanum + TagAim (hold LB to auto-aim)");
-        telemetry.addLine("TagAim: mount-aware (robot center aims at tag)");
+        telemetry.addLine("FW Example 06: Shooter Guidance Macro Vision");
+        telemetry.addLine("Drive: mecanum + (optional) auto-aim overlay (hold LB)");
+        telemetry.addLine("Auto-aim: mount-aware (robot frame aims at tag)");
         telemetry.addLine("Shooter macro:");
         telemetry.addLine("  Y = shoot one ball (vision distance)");
         telemetry.addLine("  B = cancel macro + stop shooter");
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void loop() {
         // ------------------------------------------------------------------
@@ -328,7 +347,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         // ------------------------------------------------------------------
         // 4) Control / Actuate (subsystems)
         // ------------------------------------------------------------------
-        // Drive: TagAim-wrapped drive source (LB may override omega).
+        // Drive: sticks + (optional) auto-aim overlay (LB may override omega).
         DriveSignal cmd = driveWithAim.get(clock).clamped();
         lastDrive = cmd;
 
@@ -353,7 +372,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         lastTagAgeSec = obs.ageSec;
         lastTagId = obs.id;
 
-        telemetry.addLine("FW Example 06: Shooter TagAim Macro Vision");
+        telemetry.addLine("FW Example 06: Shooter Guidance Macro Vision");
 
         telemetry.addLine("Drive (axial / lateral / omega)")
                 .addData("axial", lastDrive.axial)
@@ -376,7 +395,9 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void stop() {
         cancelShootMacros();

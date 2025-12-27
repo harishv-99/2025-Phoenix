@@ -41,7 +41,7 @@ Phoenix is designed around a few core goals:
 
    Drive logic, plants, and tasks are intentionally decoupled so you can swap components:
 
-    * Use `GamepadDriveSource` today, replace with `TagAimDriveSource` tomorrow.
+    * Use `GamepadDriveSource` today, add a `DriveGuidance` overlay tomorrow.
     * Keep the same shooter macro while changing how distance is estimated.
 
 5. **One loop, one heartbeat**
@@ -125,7 +125,7 @@ Phoenix drive is split into two parts:
 A `DriveSource` converts “intent” into a robot-centric `DriveSignal`:
 
 * manual TeleOp: `GamepadDriveSource.teleOpMecanumStandard(pads)`
-* assisted drive: `TagAimDriveSource` (and other sources)
+* assisted drive: `DriveGuidance` overlays (auto-aim, go-to-point, pose lock, etc.)
 * autonomous logic: any custom `DriveSource`
 
 ### 3.2 `DriveSignal` sign conventions are a contract

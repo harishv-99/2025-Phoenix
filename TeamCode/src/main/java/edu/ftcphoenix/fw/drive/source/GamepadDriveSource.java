@@ -17,7 +17,8 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  * <ul>
  *   <li>Mapping gamepad axes to drive intent (axial / lateral / omega).</li>
  *   <li>Stick shaping (deadband + exponent) and scaling (max translate / max omega).</li>
- *   <li>Optional slow mode (separate translation vs omega scaling).</li>
+ *   <li><em>Slow mode</em> is handled externally using {@link DriveSource#scaledWhen} so it can be
+ *       applied consistently to any {@link DriveSource} (not just stick drive).</li>
  * </ul>
  *
  * <h2>Phoenix sign conventions</h2>
@@ -48,10 +49,10 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  * // Default mapping + shaping + slow mode on RB (with practical default slow scales).
  * DriveSource driveSlow = GamepadDriveSource.teleOpMecanumSlowRb(pads);
  *
- * // Or: explicit config (for custom slow button/scales or shaping).
- * GamepadDriveSource.Config cfg = GamepadDriveSource.Config.defaults()
- *         .withSlow(pads.p1().rightBumper(), 0.35, 0.20);
- * DriveSource driveCustom = GamepadDriveSource.teleOpMecanum(pads, cfg);
+ * // Or: explicit config (for custom shaping) plus a slow-mode wrapper.
+ * GamepadDriveSource.Config cfg = GamepadDriveSource.Config.defaults();
+ * DriveSource driveCustom = GamepadDriveSource.teleOpMecanum(pads, cfg)
+ *         .scaledWhen(() -> pads.p1().rightBumper().isHeld(), 0.35, 0.20);
  * }</pre>
  *
  * <h2>Note on shaping</h2>
@@ -63,7 +64,7 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
 public final class GamepadDriveSource implements DriveSource {
 
     /**
-     * Configuration for TeleOp stick shaping and optional slow mode.
+     * Configuration for TeleOp stick shaping.
      *
      * <p>
      * This is a mutable data object. {@link GamepadDriveSource} makes a defensive copy
@@ -104,88 +105,19 @@ public final class GamepadDriveSource implements DriveSource {
          */
         public double rotateScale = 1.0;
 
-        /**
-         * Optional slow-mode enable button. Default: null (slow mode disabled).
-         *
-         * <p>
-         * If null, slow mode is disabled and the slow scales are ignored.
-         * </p>
-         */
-        public Button slowButton = null;
-
-        /**
-         * Translation scale while slow mode is active. Default: 0.35.
-         *
-         * <p>Only used when {@link #slowButton} is non-null.</p>
-         */
-        public double slowTranslateScale = 0.35;
-
-        /**
-         * Omega scale while slow mode is active. Default: 0.20.
-         *
-         * <p>Only used when {@link #slowButton} is non-null.</p>
-         */
-        public double slowOmegaScale = 0.20;
-
         private Config() {
             // Defaults set via field initializers.
         }
 
         /**
-         * Default shaping with slow mode disabled (no button conflicts by default).
+         * Default shaping (Phoenix defaults).
          */
         public static Config defaults() {
             return new Config();
         }
 
         /**
-         * Convenience factory: {@link #defaults()} plus slow mode enabled using the current
-         * default slow scales ({@link #slowTranslateScale} and {@link #slowOmegaScale}).
-         *
-         * <p>
-         * This method intentionally does not hard-code the slow scales so that changing the
-         * default field initializers automatically updates this factory.
-         * </p>
-         */
-        public static Config defaultsWithSlow(Button slowButton) {
-            Config c = defaults();
-            return c.withSlow(slowButton, c.slowTranslateScale, c.slowOmegaScale);
-        }
-
-        /**
-         * Enable slow mode with the given button and scales.
-         *
-         * @param button slow-mode enable button (non-null)
-         * @param translateScale translation scale while slow mode active (0, 1]
-         * @param omegaScale omega scale while slow mode active (0, 1]
-         */
-        public Config withSlow(Button button, double translateScale, double omegaScale) {
-            if (button == null) {
-                throw new IllegalArgumentException("slow button must be non-null");
-            }
-            if (!(translateScale > 0.0 && translateScale <= 1.0)) {
-                throw new IllegalArgumentException("slow translateScale must be in (0,1]");
-            }
-            if (!(omegaScale > 0.0 && omegaScale <= 1.0)) {
-                throw new IllegalArgumentException("slow omegaScale must be in (0,1]");
-            }
-
-            this.slowButton = button;
-            this.slowTranslateScale = translateScale;
-            this.slowOmegaScale = omegaScale;
-            return this;
-        }
-
-        /**
-         * Disable slow mode (clears {@link #slowButton}).
-         */
-        public Config withoutSlow() {
-            this.slowButton = null;
-            return this;
-        }
-
-        /**
-         * Deep copy of this config (note: {@link #slowButton} reference is copied as-is).
+         * Deep copy of this config.
          */
         public Config copy() {
             Config c = new Config();
@@ -195,9 +127,6 @@ public final class GamepadDriveSource implements DriveSource {
             c.translateScale = this.translateScale;
             c.rotateScale = this.rotateScale;
 
-            c.slowButton = this.slowButton;
-            c.slowTranslateScale = this.slowTranslateScale;
-            c.slowOmegaScale = this.slowOmegaScale;
             return c;
         }
     }
@@ -240,11 +169,11 @@ public final class GamepadDriveSource implements DriveSource {
     }
 
     /**
-     * Mecanum TeleOp mapping with custom config (including optional slow mode).
+     * Mecanum TeleOp mapping with custom config (stick shaping only).
      *
      * <p>
-     * Most teams should start with {@link Config#defaults()} and optionally call
-     * {@link Config#withSlow(Button, double, double)}.
+     * Most teams should start with {@link Config#defaults()}. If you want slow mode,
+     * apply it externally using {@link DriveSource#scaledWhen(java.util.function.BooleanSupplier, double, double)}.
      * </p>
      */
     public static DriveSource teleOpMecanum(Gamepads pads, Config cfg) {
@@ -265,14 +194,29 @@ public final class GamepadDriveSource implements DriveSource {
     }
 
     /**
-     * Convenience factory: {@link #teleOpMecanum(Gamepads)} plus slow mode on P1 RB
-     * using the current default slow scales in {@link Config}.
+     * Convenience factory: {@link #teleOpMecanum(Gamepads)} plus slow mode on P1 RB.
+     *
+     * <p>This method exists purely as a beginner-friendly starting point. Internally it is just
+     * {@code teleOpMecanum(pads).scaledWhen(RB, 0.35, 0.20)}.</p>
      */
     public static DriveSource teleOpMecanumSlowRb(Gamepads pads) {
         if (pads == null) {
             throw new IllegalArgumentException("Gamepads is required");
         }
-        return teleOpMecanum(pads, Config.defaultsWithSlow(pads.p1().rightBumper()));
+        Button rb = pads.p1().rightBumper();
+        return teleOpMecanum(pads)
+                .scaledWhen(rb::isHeld, 0.35, 0.20);
+    }
+
+    /**
+     * Convenience: create a drive source from arbitrary axes.
+     *
+     * <p>This is handy for “microdrive” or “nudge” control where you want to drive using
+     * dpad buttons (converted to axes) or triggers, but still reuse the same shaping and scaling
+     * logic as normal stick drive.</p>
+     */
+    public static DriveSource fromAxes(Axis lateralRaw, Axis axialRaw, Axis omegaRaw, Config cfg) {
+        return new GamepadDriveSource(lateralRaw, axialRaw, omegaRaw, cfg);
     }
 
     // ------------------------------------------------------------------------
@@ -287,9 +231,9 @@ public final class GamepadDriveSource implements DriveSource {
      * </p>
      *
      * @param axisLateralRaw raw lateral axis (typically +right)
-     * @param axisAxialRaw axial axis (+forward per {@link GamepadDevice})
-     * @param axisOmegaRaw raw omega axis (typically +clockwise / turn-right)
-     * @param cfg shaping + slow-mode configuration (defensively copied)
+     * @param axisAxialRaw   axial axis (+forward per {@link GamepadDevice})
+     * @param axisOmegaRaw   raw omega axis (typically +clockwise / turn-right)
+     * @param cfg            stick shaping configuration (defensively copied)
      */
     public GamepadDriveSource(Axis axisLateralRaw,
                               Axis axisAxialRaw,
@@ -306,16 +250,6 @@ public final class GamepadDriveSource implements DriveSource {
         }
         if (cfg == null) {
             throw new IllegalArgumentException("GamepadDriveSource.Config is required");
-        }
-
-        // Validate slow-mode parameters if configured.
-        if (cfg.slowButton != null) {
-            if (!(cfg.slowTranslateScale > 0.0 && cfg.slowTranslateScale <= 1.0)) {
-                throw new IllegalArgumentException("slowTranslateScale must be in (0,1]");
-            }
-            if (!(cfg.slowOmegaScale > 0.0 && cfg.slowOmegaScale <= 1.0)) {
-                throw new IllegalArgumentException("slowOmegaScale must be in (0,1]");
-            }
         }
 
         this.axisLateralRaw = axisLateralRaw;
@@ -351,18 +285,14 @@ public final class GamepadDriveSource implements DriveSource {
     // DriveSource implementation
     // ------------------------------------------------------------------------
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public DriveSignal get(LoopClock clock) {
         double ax = axisAxialCmd.get();
         double lat = axisLateralCmd.get();
         double om = axisOmegaCmd.get();
-
-        if (cfg.slowButton != null && cfg.slowButton.isHeld()) {
-            ax *= cfg.slowTranslateScale;
-            lat *= cfg.slowTranslateScale;
-            om *= cfg.slowOmegaScale;
-        }
 
         DriveSignal out = new DriveSignal(ax, lat, om);
         lastSignal = out;
@@ -376,7 +306,7 @@ public final class GamepadDriveSource implements DriveSource {
     /**
      * Dump internal state to a {@link DebugSink}.
      *
-     * @param dbg debug sink to write to (may be {@code null})
+     * @param dbg    debug sink to write to (may be {@code null})
      * @param prefix key prefix for all entries (may be {@code null} or empty)
      */
     public void debugDump(DebugSink dbg, String prefix) {
@@ -400,13 +330,6 @@ public final class GamepadDriveSource implements DriveSource {
         dbg.addData(p + ".cfg.rotateExpo", cfg.rotateExpo);
         dbg.addData(p + ".cfg.translateScale", cfg.translateScale);
         dbg.addData(p + ".cfg.rotateScale", cfg.rotateScale);
-
-        dbg.addData(p + ".slow.configured", cfg.slowButton != null);
-        if (cfg.slowButton != null) {
-            dbg.addData(p + ".slow.translateScale", cfg.slowTranslateScale);
-            dbg.addData(p + ".slow.omegaScale", cfg.slowOmegaScale);
-            dbg.addData(p + ".slow.pressed", cfg.slowButton.isHeld());
-        }
     }
 
     /**

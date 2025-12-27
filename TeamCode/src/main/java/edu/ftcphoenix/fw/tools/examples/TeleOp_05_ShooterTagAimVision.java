@@ -14,29 +14,33 @@ import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.guidance.DriveGuidance;
+import edu.ftcphoenix.fw.drive.guidance.DriveGuidancePlan;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
+import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
+import edu.ftcphoenix.fw.sensing.observation.ObservationSources;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
-import edu.ftcphoenix.fw.drive.assist.TagAim;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
- * <h1>Example 05: Shooter + TagAim + Vision Distance</h1>
+ * <h1>Example 05: Shooter + DriveGuidance Auto-Aim + Vision Distance</h1>
  *
  * <p>This example combines three ideas:</p>
  *
  * <ol>
  *   <li><b>Mecanum drive</b> using {@link Drives#mecanum} +
  *       {@link GamepadDriveSource} (same as Example 01).</li>
- *   <li><b>Tag-based auto-aim</b> using {@link TagAim#teleOpAim}:
+ *   <li><b>Tag-based auto-aim</b> using {@link DriveGuidance} (as a {@link edu.ftcphoenix.fw.drive.DriveOverlay}):
  *     <ul>
  *       <li>Hold a button to override omega and face a scoring AprilTag.</li>
  *       <li>Axial/lateral motion still come from the driver.</li>
@@ -54,11 +58,11 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  *
  * <h2>Camera offset note</h2>
  * <p>
- * This example uses {@link CameraMountConfig} so TagAim aims the <b>robot center</b>
- * at the tag even if the camera is not mounted at the robot center.
+ * This example uses {@link CameraMountConfig} so the vision observation is expressed relative to
+ * the <b>robot</b> (not just the camera), even if the camera is mounted off-center.
  * </p>
  */
-@TeleOp(name = "FW Ex 05: Shooter TagAim Vision", group = "Framework Examples")
+@TeleOp(name = "FW Ex 05: Shooter Guidance Aim Vision", group = "Framework Examples")
 @Disabled
 public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
@@ -137,7 +141,9 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
     private double lastShooterTargetVel = 0.0;
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void init() {
         // 1) Inputs
@@ -169,14 +175,26 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
                 /*rollRad=*/0.0
         );
 
-        // Wrap baseDrive with TagAim: hold left bumper to auto-aim omega.
+        // Build a vision-only auto-aim plan and overlay it on top of stick driving.
         //
-        // This overload uses cameraMount so the ROBOT CENTER faces the tag, not just the camera.
-        driveWithAim = TagAim.teleOpAim(
+        // ObservationSources.aprilTag(...) handles mount compensation so the ROBOT CENTER faces the
+        // tag (not just the camera).
+        ObservationSource2d scoringObs = ObservationSources.aprilTag(scoringTarget, cameraMount);
+
+        DriveGuidancePlan aimPlan = DriveGuidance.plan()
+                .aimTo()
+                .lookAtTagPointInches(0.0, 0.0) // tag center (observed tag ID)
+                .doneAimTo()
+                .feedback()
+                .observation(scoringObs)
+                .doneFeedback()
+                .build();
+
+        driveWithAim = DriveGuidance.overlayOn(
                 baseDrive,
-                gamepads.p1().leftBumper(),
-                scoringTarget,
-                cameraMount
+                () -> gamepads.p1().leftBumper().isHeld(),
+                aimPlan,
+                DriveOverlayMask.OMEGA_ONLY
         );
 
         // 4) Shooter wiring using Actuators.
@@ -200,20 +218,24 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
                 }
         );
 
-        telemetry.addLine("FW Example 05: Shooter TagAim Vision");
-        telemetry.addLine("Drive: mecanum + TagAim (hold LB to auto-aim)");
+        telemetry.addLine("FW Example 05: Shooter DriveGuidance Vision");
+        telemetry.addLine("Drive: mecanum + DriveGuidance (hold LB to auto-aim)");
         telemetry.addLine("Shooter: A = toggle on/off");
-        telemetry.addLine("TagAim: mount-aware (robot center aims at tag)");
+        telemetry.addLine("Auto-aim: mount-aware (robot center aims at tag)");
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void start() {
         clock.reset(getRuntime());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void loop() {
         // 1) Clock
@@ -251,7 +273,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // 4) Control / Actuate (subsystems)
 
-        // Drive: TagAim-wrapped drive source
+        // Drive: base sticks + (optional) auto-aim overlay
         DriveSignal cmd = driveWithAim.get(clock).clamped();
         lastDrive = cmd;
 
@@ -262,7 +284,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         shooter.update(dtSec);
 
         // 5) Report (telemetry only, no behavior changes)
-        telemetry.addLine("FW Example 05: Shooter TagAim Vision");
+        telemetry.addLine("FW Example 05: Shooter Guidance Aim Vision");
 
         telemetry.addLine("Drive (axial / lateral / omega)")
                 .addData("axial", lastDrive.axial)
@@ -284,7 +306,9 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         telemetry.update();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void stop() {
         shooterEnabled = false;

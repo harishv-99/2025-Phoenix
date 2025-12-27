@@ -36,6 +36,9 @@ import java.util.function.BooleanSupplier;
  * <ul>
  *   <li>{@link #scaledWhen(BooleanSupplier, double, double)} – conditional slow mode with
  *       separate translation vs rotation scaling.</li>
+ *   <li>{@link #scaled(double, double)} – unconditional scaling (useful for always-on “microdrive”).</li>
+ *   <li>{@link #overlayWhen(BooleanSupplier, DriveOverlay, DriveOverlayMask)} – conditionally
+ *       apply a {@link DriveOverlay} to override one or more components of this source.</li>
  *   <li>{@link #blendedWith(DriveSource, double)} – blend this source with another using
  *       {@link DriveSignal#lerp(DriveSignal, double)}.</li>
  * </ul>
@@ -127,6 +130,126 @@ public interface DriveSource {
     }
 
     /**
+     * Return a new {@link DriveSource} that always scales translation and rotation.
+     *
+     * <p>This is the unconditional sibling of {@link #scaledWhen(BooleanSupplier, double, double)}.
+     * It's useful for building “always slow” sources such as:</p>
+     *
+     * <ul>
+     *   <li>driver 2 D-pad microdrive, or</li>
+     *   <li>a low-speed autonomous nudge source.</li>
+     * </ul>
+     */
+    default DriveSource scaled(double translationScale, double omegaScale) {
+        // Reuse the implementation above without forcing callers to provide a dummy supplier.
+        if (translationScale == 1.0 && omegaScale == 1.0) {
+            return this;
+        }
+        DriveSource self = this;
+        return clock -> self.get(clock).scaled(translationScale, omegaScale);
+    }
+
+    /**
+     * Return a new {@link DriveSource} that conditionally applies a {@link DriveOverlay}.
+     *
+     * <p>When enabled, the overlay's output replaces the corresponding components of this source,
+     * as selected by {@code requestedMask} <em>and</em> the overlay's dynamic mask.</p>
+     *
+     * <p>This is Phoenix's primary “override” mechanism and is intended to be used for both:
+     * </p>
+     * <ul>
+     *   <li>driver assist (e.g., aim overlay overrides omega), and</li>
+     *   <li>multi-driver arbitration (e.g., driver 2 overrides translation while driver 1 still
+     *       controls everything else).</li>
+     * </ul>
+     *
+     * <p>Example: auto-aim overrides rotation while holding a button:</p>
+     * <pre>{@code
+     * DriveSource manual = GamepadDriveSource.teleOpMecanum(pads);
+     * DriveOverlay aim = DriveGuidance.plan()...build().overlay();
+     * DriveSource assisted = manual.overlayWhen(
+     *         () -> pads.p1().x().isPressed(),
+     *         aim,
+     *         DriveOverlayMask.ROTATION);
+     * }</pre>
+     */
+    default DriveSource overlayWhen(BooleanSupplier when, DriveOverlay overlay, DriveOverlayMask requestedMask) {
+        Objects.requireNonNull(when, "when must not be null");
+        Objects.requireNonNull(overlay, "overlay must not be null");
+        Objects.requireNonNull(requestedMask, "requestedMask must not be null");
+
+        DriveSource self = this;
+
+        return new DriveSource() {
+            private boolean lastEnabled = false;
+
+            @Override
+            public DriveSignal get(LoopClock clock) {
+                DriveSignal base = self.get(clock);
+
+                boolean enabled = when.getAsBoolean();
+
+                if (!enabled) {
+                    if (lastEnabled) {
+                        overlay.onDisable(clock);
+                        lastEnabled = false;
+                    }
+                    return base;
+                }
+
+                if (!lastEnabled) {
+                    overlay.onEnable(clock);
+                    lastEnabled = true;
+                }
+
+                DriveOverlayOutput out = overlay.get(clock);
+                if (out == null) {
+                    // Be defensive; treat as “no override”.
+                    return base;
+                }
+
+                DriveOverlayMask eff = out.mask.intersect(requestedMask);
+                if (eff.isNone()) {
+                    return base;
+                }
+
+                double axial = eff.axial ? out.signal.axial : base.axial;
+                double lateral = eff.lateral ? out.signal.lateral : base.lateral;
+                double omega = eff.omega ? out.signal.omega : base.omega;
+
+                return new DriveSignal(axial, lateral, omega);
+            }
+
+            @Override
+            public void debugDump(DebugSink dbg, String prefix) {
+                if (dbg == null) {
+                    return;
+                }
+                String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
+                dbg.addData(p + ".class", getClass().getSimpleName());
+                dbg.addData(p + ".overlay.enabled", lastEnabled);
+                dbg.addData(p + ".overlay.requestedMask", requestedMask.toString());
+                overlay.debugDump(dbg, p + ".overlay");
+                self.debugDump(dbg, p + ".base");
+            }
+        };
+    }
+
+    /**
+     * Convenience overload: requested mask defaults to {@link DriveOverlayMask#ALL}.
+     */
+    default DriveSource overlayWhen(BooleanSupplier when, DriveOverlay overlay) {
+        return overlayWhen(when, overlay, DriveOverlayMask.ALL);
+    }
+
+    /**
+     * Convenience overload: adapt a {@link DriveSource} into an overlay with the given mask.
+     */
+    default DriveSource overlayWhen(BooleanSupplier when, DriveSource override, DriveOverlayMask requestedMask) {
+        return overlayWhen(when, DriveOverlays.fromDriveSource(override, requestedMask), requestedMask);
+    }
+
+    /**
      * Return a new {@link DriveSource} that blends this source with another.
      *
      * <p>The blend is performed using {@link DriveSignal#lerp(DriveSignal, double)} with a fixed
@@ -146,11 +269,12 @@ public interface DriveSource {
      */
     default DriveSource blendedWith(DriveSource other, double alpha) {
         Objects.requireNonNull(other, "other DriveSource must not be null");
+        final double alphaClamped = Math.max(0.0, Math.min(1.0, alpha));
         DriveSource self = this;
         return clock -> {
             DriveSignal a = self.get(clock);
             DriveSignal b = other.get(clock);
-            return a.lerp(b, alpha);
+            return a.lerp(b, alphaClamped);
         };
     }
 }

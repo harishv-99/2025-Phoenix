@@ -83,6 +83,86 @@ public final class Pose2d {
     }
 
     /**
+     * Euclidean length of the translation component in inches.
+     *
+     * <p>This is {@code sqrt(x^2 + y^2)} and ignores {@link #headingRad}.</p>
+     */
+    public double translationNormInches() {
+        return Math.hypot(xInches, yInches);
+    }
+
+    /**
+     * Compose this transform with {@code next} (apply {@code this}, then {@code next}).
+     *
+     * <p>If this pose is A→B and {@code next} is B→C, the result is A→C.</p>
+     *
+     * <p>This is the 2D equivalent of {@link Pose3d#then(Pose3d)} and is
+     * extremely useful when working with:</p>
+     *
+     * <ul>
+     *   <li>Field→robot, robot→camera, camera→target chains, and</li>
+     *   <li>Field layouts (e.g., field→tag, tag→goal-point).</li>
+     * </ul>
+     *
+     * <p><b>Important:</b> Unlike some pose libraries, Phoenix does not normalize
+     * the resulting heading. Call {@link #normalizedHeading()} if you want a
+     * canonical heading in [-π, +π].</p>
+     *
+     * @param next transform to apply after this one (non-null)
+     * @return composed transform
+     */
+    public Pose2d then(Pose2d next) {
+        if (next == null) {
+            throw new IllegalArgumentException("next is required");
+        }
+
+        // 2D rigid transform composition:
+        // p_out = p_this + R(heading_this) * p_next
+        double cos = Math.cos(this.headingRad);
+        double sin = Math.sin(this.headingRad);
+
+        double xOut = this.xInches + cos * next.xInches - sin * next.yInches;
+        double yOut = this.yInches + sin * next.xInches + cos * next.yInches;
+        double headingOut = this.headingRad + next.headingRad;
+        return new Pose2d(xOut, yOut, headingOut);
+    }
+
+    /**
+     * Return the inverse transform.
+     *
+     * <p>If this pose is A→B, the inverse is B→A.</p>
+     *
+     * <p>This is the 2D equivalent of {@link Pose3d#inverse()}.</p>
+     */
+    public Pose2d inverse() {
+        // Inverse of 2D rigid transform:
+        // R_inv = R(-heading)
+        // t_inv = -R_inv * t
+        double cos = Math.cos(this.headingRad);
+        double sin = Math.sin(this.headingRad);
+
+        // R^T * t (since R is orthonormal):
+        double xRt = cos * this.xInches + sin * this.yInches;
+        double yRt = -sin * this.xInches + cos * this.yInches;
+
+        return new Pose2d(-xRt, -yRt, -this.headingRad);
+    }
+
+    /**
+     * Creates a new pose with the same heading but different translation.
+     */
+    public Pose2d withTranslation(double xInches, double yInches) {
+        return new Pose2d(xInches, yInches, headingRad);
+    }
+
+    /**
+     * Creates a new pose with the same translation but different heading.
+     */
+    public Pose2d withHeading(double headingRad) {
+        return new Pose2d(xInches, yInches, headingRad);
+    }
+
+    /**
      * Returns a new {@code Pose2d} with the same x/y but heading wrapped
      * into the range [-pi, +pi].
      *
@@ -146,7 +226,9 @@ public final class Pose2d {
         return MathUtil.wrapToPi(angleRad);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "Pose2d{" +
@@ -154,5 +236,29 @@ public final class Pose2d {
                 ", yInches=" + yInches +
                 ", headingRad=" + headingRad +
                 '}';
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof Pose2d)) return false;
+        Pose2d other = (Pose2d) o;
+        return Double.compare(this.xInches, other.xInches) == 0
+                && Double.compare(this.yInches, other.yInches) == 0
+                && Double.compare(this.headingRad, other.headingRad) == 0;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int hashCode() {
+        long bits = 7L;
+        bits = 31L * bits + Double.doubleToLongBits(xInches);
+        bits = 31L * bits + Double.doubleToLongBits(yInches);
+        bits = 31L * bits + Double.doubleToLongBits(headingRad);
+        return (int) (bits ^ (bits >>> 32));
     }
 }

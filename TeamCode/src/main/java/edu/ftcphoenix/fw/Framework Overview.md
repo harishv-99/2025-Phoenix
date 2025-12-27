@@ -26,7 +26,7 @@ Most robot code should only need imports from these packages:
 Within `drive/`, subpackages are intentionally parallel and predictable:
 
 * `drive.source` — “where drive commands come from” (gamepad, autonomous logic).
-* `drive.assist` — wrappers that *modify* driving (TagAim, heading assist, etc.).
+* `drive.guidance` — driver-assist building blocks (auto-aim, “go-to point”, pose lock, etc.).
 * `drive.control` — closed-loop drive behaviors/controllers/tasks (go-to-pose, heading controllers).
 
 ### Packages that are intentionally “behind the scenes”
@@ -61,9 +61,9 @@ Think of Phoenix as a few thin layers you stack:
 4. **Tasks / Macros** (`fw.task`, plus helpers in other packages)
 
     * `Task`, `TaskRunner`, `Tasks`, `PlantTasks`, `DriveTasks`.
-5. **Drive behavior** (`fw.drive` + `fw.drive.source` + `fw.drive.assist`)
+5. **Drive behavior** (`fw.drive` + `fw.drive.source` + `fw.drive.guidance`)
 
-    * `DriveSource` produces a `DriveSignal` (stick drive, TagAim, etc.).
+    * `DriveSource` produces a `DriveSignal` (stick drive, driver assist overlays, etc.).
 6. **Actuation**
 
     * Drivebase: `MecanumDrivebase`.
@@ -168,7 +168,7 @@ A `DriveSignal` is **robot-centric** and follows Phoenix pose conventions:
 A `DriveSource` produces a `DriveSignal` each loop:
 
 * Manual TeleOp: `GamepadDriveSource`
-* Assisted aiming: `TagAimDriveSource` / `TagAim.teleOpAim(...)`
+* Assisted aiming / guidance: `DriveGuidance` (build a plan) + {@code DriveSource.overlayWhen(...) }
 * Autonomous logic: anything implementing `DriveSource`
 
 `DriveSource` also supports composition helpers (like scaling and blending) via default methods.

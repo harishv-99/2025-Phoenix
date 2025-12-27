@@ -4,7 +4,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import edu.ftcphoenix.fw.core.debug.DebugSink;
-import edu.ftcphoenix.fw.drive.assist.BearingSource.BearingSample;
+import edu.ftcphoenix.fw.sensing.observation.TargetObservation2d;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
@@ -266,30 +266,18 @@ public final class TagTarget {
     }
 
     /**
-     * Convert the current observation into a {@link BearingSample} using camera-centric bearing.
+     * Convert the current observation into a robot-relative planar observation.
      *
-     * <p>This is a convenience for piping tag targeting into {@link edu.ftcphoenix.fw.drive.assist.TagAimController}
-     * or other bearing-based controllers.</p>
-     *
-     * @return a bearing sample; {@code hasTarget} will be false if {@link #hasTarget()} is false
-     */
-    public BearingSample toBearingSample() {
-        if (!lastObs.hasTarget) {
-            return new BearingSample(false, 0.0);
-        }
-        return new BearingSample(true, lastObs.cameraBearingRad());
-    }
-
-    /**
-     * Convert the current observation into a {@link BearingSample} using robot-centric bearing.
+     * <p>This is the preferred representation for drive-assist and “driver guidance” code.
+     * It accounts for camera offset using {@link CameraMountLogic}.</p>
      *
      * @param cameraMount robot→camera extrinsics (must not be {@code null})
-     * @return a robot-centric bearing sample; {@code hasTarget} will be false if {@link #hasTarget()} is false
-     * @throws NullPointerException if {@code cameraMount} is {@code null}
+     * @return a robot-relative observation; {@link TargetObservation2d#hasTarget} will be false if
+     *         {@link #hasTarget()} is false
      */
-    public BearingSample toRobotBearingSample(CameraMountConfig cameraMount) {
+    public TargetObservation2d toRobotObservation2d(CameraMountConfig cameraMount) {
         Objects.requireNonNull(cameraMount, "cameraMount is required");
-        return CameraMountLogic.robotBearingSample(lastObs, cameraMount);
+        return CameraMountLogic.robotObservation2d(lastObs, cameraMount);
     }
 
     /**

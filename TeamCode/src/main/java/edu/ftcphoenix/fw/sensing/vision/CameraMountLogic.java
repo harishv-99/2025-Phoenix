@@ -3,7 +3,7 @@ package edu.ftcphoenix.fw.sensing.vision;
 import java.util.Objects;
 
 import edu.ftcphoenix.fw.core.geometry.Pose3d;
-import edu.ftcphoenix.fw.drive.assist.BearingSource.BearingSample;
+import edu.ftcphoenix.fw.sensing.observation.TargetObservation2d;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
 
 /**
@@ -42,7 +42,7 @@ public final class CameraMountLogic {
      * <p>If {@code mount} is {@code robotToCameraPose} and {@code cameraToTagPose} is camera→tag,
      * then this returns {@code robotToTagPose}.</p>
      *
-     * @param mount        camera mount (robot→camera); must not be null
+     * @param mount           camera mount (robot→camera); must not be null
      * @param cameraToTagPose camera→tag pose; must not be null
      * @return robot→tag pose
      */
@@ -77,19 +77,32 @@ public final class CameraMountLogic {
     }
 
     /**
-     * Convenience: convert an observation into a {@link BearingSample} using robot-centric bearing.
+     * Convert an {@link AprilTagObservation} into a robot-relative planar observation.
      *
-     * @param obs   observation; must not be null
-     * @param mount camera mount; must not be null
-     * @return bearing sample (hasTarget + bearingRad)
+     * <p>This method applies the camera extrinsics from {@code mount} to produce a measurement in the
+     * robot frame. The returned {@link TargetObservation2d} includes full 2D position (forward/left)
+     * and bearing.</p>
+     *
+     * <p>AprilTag observations currently do not expose a separate “quality” metric, so this returns a
+     * default quality of 1.0 and uses {@link AprilTagObservation#ageSec} for {@link TargetObservation2d#ageSec}.</p>
      */
-    public static BearingSample robotBearingSample(AprilTagObservation obs, CameraMountConfig mount) {
+    public static TargetObservation2d robotObservation2d(AprilTagObservation obs, CameraMountConfig mount) {
         Objects.requireNonNull(obs, "obs");
         Objects.requireNonNull(mount, "mount");
 
         if (!obs.hasTarget) {
-            return new BearingSample(false, 0.0);
+            return TargetObservation2d.none();
         }
-        return new BearingSample(true, robotBearingRad(obs, mount));
+
+        Pose3d robotToTag = robotToTagPose(mount, obs.cameraToTagPose);
+        // Preserve tag yaw so tag-relative points can be resolved in the tag frame.
+        return TargetObservation2d.ofRobotRelativePose(
+                obs.id,
+                robotToTag.xInches,
+                robotToTag.yInches,
+                robotToTag.yawRad,
+                1.0,
+                obs.ageSec
+        );
     }
 }
