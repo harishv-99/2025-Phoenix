@@ -30,6 +30,8 @@ import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.task.TaskRunner;
+import edu.ftcphoenix.fw.task.TaskBindings;
+import edu.ftcphoenix.fw.task.Tasks;
 import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
@@ -172,42 +174,38 @@ public final class PhoenixRobot {
     }
 
     private void createBindings() {
-        bindings.onPress(gamepads.p2().y(),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantSetPusherFront()));
+        // Most bindings in TeleOp simply enqueue a Task. TaskBindings removes the
+        // repeated "() -> runner.enqueue(... )" boilerplate.
+        TaskBindings tb = TaskBindings.of(bindings, taskRunnerTeleOp);
 
-        bindings.onPress(gamepads.p2().a(),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantSetPusherBack()));
+        tb.onPress(gamepads.p2().y(), shooter::instantSetPusherFront);
+        tb.onPress(gamepads.p2().a(), shooter::instantSetPusherBack);
 
-        bindings.whileHeld(gamepads.p2().b(),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantStartTransfer(Shooter.TransferDirection.FORWARD)),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantStopTransfer()));
+        // Hold to run transfer; release to stop.
+        tb.onPressAndRelease(
+                gamepads.p2().b(),
+                () -> shooter.instantStartTransfer(Shooter.TransferDirection.FORWARD),
+                shooter::instantStopTransfer
+        );
 
-        bindings.whileHeld(gamepads.p2().x(),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantStartTransfer(Shooter.TransferDirection.BACKWARD)),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantStopTransfer()));
+        tb.onPressAndRelease(
+                gamepads.p2().x(),
+                () -> shooter.instantStartTransfer(Shooter.TransferDirection.BACKWARD),
+                shooter::instantStopTransfer
+        );
 
-        bindings.whileHeld(gamepads.p2().leftBumper(),
-                () -> {
-                    AprilTagObservation obs = scoringTarget.last();
-                    if (obs.hasTarget) {
-                        taskRunnerTeleOp.enqueue(shooter.instantSetVelocityByDist(obs.cameraRangeInches()));
-                    }
-                });
+        // While held: continuously update shooter velocity based on the latest tag range.
+        tb.whileHeld(gamepads.p2().leftBumper(), () -> {
+            AprilTagObservation obs = scoringTarget.last();
+            return obs.hasTarget
+                    ? shooter.instantSetVelocityByDist(obs.cameraRangeInches())
+                    : Tasks.noop();
+        });
 
-        bindings.toggle(gamepads.p2().rightBumper(),
-                (isOn) -> {
-                    if (isOn) {
-                        taskRunnerTeleOp.enqueue(shooter.instantStartShooter());
-                    } else {
-                        taskRunnerTeleOp.enqueue(shooter.instantStopShooter());
-                    }
-                });
+        tb.onToggle(gamepads.p2().rightBumper(), shooter::instantStartShooter, shooter::instantStopShooter);
 
-        bindings.onPress(gamepads.p2().dpadUp(),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantIncreaseVelocity()));
-
-        bindings.onPress(gamepads.p2().dpadDown(),
-                () -> taskRunnerTeleOp.enqueue(shooter.instantDecreaseVelocity()));
+        tb.onPress(gamepads.p2().dpadUp(), shooter::instantIncreaseVelocity);
+        tb.onPress(gamepads.p2().dpadDown(), shooter::instantDecreaseVelocity);
     }
 
     /**

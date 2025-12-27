@@ -60,6 +60,18 @@ Phoenix is designed around a few core goals:
    When something is misconfigured, Phoenix should throw early (often at build-time) with an
    error message that tells a student what to change. Avoid silent no-ops.
 
+8. **Principle-driven evolution (breaking changes are OK)**
+
+   Phoenix optimizes for a coherent, principle-driven API surface — not strict backwards compatibility.
+
+   * If a better design exists, it’s okay to make a breaking change.
+   * Prefer **deleting** legacy paths instead of accumulating deprecations.
+     Keep deprecated code only when there is a concrete reason (external consumers, season support,
+     migration cost that truly can’t be paid immediately, etc.).
+   * Aim for **one obvious way** to do something. If two APIs overlap, choose one and remove the other.
+   * Keep things **parallel** across similar objects:
+     consistent capabilities, consistent method names, consistent argument order, and consistent nouns.
+
 ---
 
 ## 2. Layering: from hardware to behavior

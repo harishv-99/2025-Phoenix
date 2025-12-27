@@ -46,6 +46,19 @@ public final class Bindings {
     }
 
     /**
+     * Simple (button, action) pair for falling-edge release actions.
+     */
+    private static final class ReleaseBinding {
+        final Button button;
+        final Runnable action;
+
+        ReleaseBinding(Button button, Runnable action) {
+            this.button = button;
+            this.action = action;
+        }
+    }
+
+    /**
      * Binding that runs an action every loop while held and optionally once on release.
      */
     private static final class WhileHeldBinding {
@@ -68,7 +81,7 @@ public final class Bindings {
      *
      * <p>For example: if you pass {@code button::isToggled} as a {@code BooleanSupplier} to enable a
      * {@link edu.ftcphoenix.fw.drive.DriveOverlay}, and you also create a binding with
-     * {@link Bindings#toggle(Button, Consumer)}, both will observe the same on/off value.</p>
+     * {@link Bindings#onToggle(Button, Consumer)}, both will observe the same on/off value.</p>
      */
     private static final class ToggleBinding {
         final Button button;
@@ -85,6 +98,7 @@ public final class Bindings {
     // ---------------------------------------------------------------------------------------------
 
     private final List<PressBinding> pressBindings = new ArrayList<>();
+    private final List<ReleaseBinding> releaseBindings = new ArrayList<>();
     private final List<WhileHeldBinding> whileHeldBindings = new ArrayList<>();
     private final List<ToggleBinding> toggleBindings = new ArrayList<>();
 
@@ -105,6 +119,40 @@ public final class Bindings {
                 Objects.requireNonNull(button, "button is required"),
                 Objects.requireNonNull(action, "action is required")
         ));
+    }
+
+    /**
+     * Register an action to run once whenever the given button is released (falling edge).
+     *
+     * <p>This is the mirror of {@link #onPress(Button, Runnable)} and is useful for
+     * "start on press, stop on release" patterns without having to run code every loop
+     * while the button is held.</p>
+     *
+     * @param button button to monitor (non-null)
+     * @param action action to run once per release (non-null)
+     */
+    public void onRelease(Button button, Runnable action) {
+        releaseBindings.add(new ReleaseBinding(
+                Objects.requireNonNull(button, "button is required"),
+                Objects.requireNonNull(action, "action is required")
+        ));
+    }
+
+    /**
+     * Register a "press-and-release" binding: run one action once when the button is pressed,
+     * and a second action once when it is released.
+     *
+     * <p>This is a semantic convenience for the common pattern:
+     * "start something on press, stop it on release" without having to run code every loop
+     * while the button is held.</p>
+     *
+     * <p>Internally this is equivalent to registering both an {@link #onPress(Button, Runnable)}
+     * and an {@link #onRelease(Button, Runnable)} on the same button.</p>
+     */
+    public void onPressAndRelease(Button button, Runnable onPress, Runnable onRelease) {
+        Objects.requireNonNull(button, "button is required");
+        onPress(button, Objects.requireNonNull(onPress, "onPress is required"));
+        onRelease(button, Objects.requireNonNull(onRelease, "onRelease is required"));
     }
 
     /**
@@ -146,7 +194,7 @@ public final class Bindings {
      * <ul>
      *   <li>When you need a {@code BooleanSupplier} (for example: to enable a
      *       {@link edu.ftcphoenix.fw.drive.DriveOverlay}), pass {@code button::isToggled}.</li>
-     *   <li>When you want to run code on each toggle edge, use {@code Bindings.toggle(...)}.</li>
+     *   <li>When you want to run code on each toggle edge, use {@code Bindings.onToggle(...)}.</li>
      * </ul>
      *
      * <p>The toggle state is owned by the button, so the same physical button press toggles
@@ -155,11 +203,35 @@ public final class Bindings {
      * @param button   button to monitor (non-null)
      * @param consumer consumer that receives the new toggle state (non-null)
      */
-    public void toggle(Button button, Consumer<Boolean> consumer) {
+    public void onToggle(Button button, Consumer<Boolean> consumer) {
         toggleBindings.add(new ToggleBinding(
                 Objects.requireNonNull(button, "button is required"),
                 Objects.requireNonNull(consumer, "consumer is required")
         ));
+    }
+
+    /**
+     * Register a toggle with split actions: when the button is pressed, call {@code onEnable}
+     * if the toggle is now on, otherwise call {@code onDisable}.
+     *
+     * <p>This is a convenience overload of {@link #onToggle(Button, Consumer)}.</p>
+     *
+     * @param button    button to monitor (non-null)
+     * @param onEnable  action to run when the toggle becomes enabled (non-null)
+     * @param onDisable action to run when the toggle becomes disabled (non-null)
+     */
+    public void onToggle(Button button, Runnable onEnable, Runnable onDisable) {
+        Objects.requireNonNull(button, "button is required");
+        Objects.requireNonNull(onEnable, "onEnable is required");
+        Objects.requireNonNull(onDisable, "onDisable is required");
+
+        onToggle(button, isOn -> {
+            if (isOn) {
+                onEnable.run();
+            } else {
+                onDisable.run();
+            }
+        });
     }
 
     /**
@@ -169,6 +241,7 @@ public final class Bindings {
      */
     public void clear() {
         pressBindings.clear();
+        releaseBindings.clear();
         whileHeldBindings.clear();
         toggleBindings.clear();
         lastUpdatedCycle = Long.MIN_VALUE;
@@ -194,6 +267,14 @@ public final class Bindings {
         for (int i = 0; i < pressBindings.size(); i++) {
             PressBinding b = pressBindings.get(i);
             if (b.button.onPress()) {
+                b.action.run();
+            }
+        }
+
+        // One-shot release bindings
+        for (int i = 0; i < releaseBindings.size(); i++) {
+            ReleaseBinding b = releaseBindings.get(i);
+            if (b.button.onRelease()) {
                 b.action.run();
             }
         }
