@@ -8,6 +8,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.ftc.FtcVision;
@@ -111,14 +112,7 @@ public final class PhoenixRobot {
         mecanumConfig.maxLateralRatePerSec = 0.01;
         drivebase = Drives.mecanum(
                 hardwareMap,
-                RobotConfig.DriveTrain.nameMotorFrontLeft,
-                RobotConfig.DriveTrain.directionMotorFrontLeft,
-                RobotConfig.DriveTrain.nameMotorFrontRight,
-                RobotConfig.DriveTrain.directionMotorFrontRight,
-                RobotConfig.DriveTrain.nameMotorBackLeft,
-                RobotConfig.DriveTrain.directionMotorBackLeft,
-                RobotConfig.DriveTrain.nameMotorBackRight,
-                RobotConfig.DriveTrain.directionMotorBackRight,
+                RobotConfig.DriveTrain.mecanumWiring(),
                 mecanumConfig);
 
         shooter = new Shooter(hardwareMap, telemetry, gamepads);
@@ -155,9 +149,15 @@ public final class PhoenixRobot {
                 .doneFeedback()
                 .build();
 
+        // Enable condition for the guidance overlay.
+        //
+        // Hold-to-enable is the simplest for drivers. If you prefer a toggle (press once to
+        // enable, press again to disable), use: gamepads.p2().leftBumper()::isToggled
+        BooleanSupplier autoAimEnabled = gamepads.p2().leftBumper()::isHeld;
+
         driveWithAim = DriveGuidance.overlayOn(
                 stickDrive,
-                gamepads.p2().leftBumper()::isHeld,
+                autoAimEnabled,
                 aimPlan,
                 DriveOverlayMask.OMEGA_ONLY
         );

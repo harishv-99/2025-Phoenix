@@ -28,6 +28,10 @@ final class DriveGuidanceOverlay implements DriveOverlay {
     // can keep working even if the tag temporarily drops out of view.
     private int lastObservedTagId = -1;
 
+    // For robot-relative translation targets, capture the translation-frame pose when the
+    // overlay becomes enabled. This allows "move forward N inches" style plans.
+    private Pose2d fieldToTranslationFrameAnchor = null;
+
     // Debug last values.
     private DriveOverlayOutput lastOut = DriveOverlayOutput.zero();
     private String lastMode = "";
@@ -43,6 +47,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         blendTTranslate = 0.0;
         blendTOmega = 0.0;
         lastObservedTagId = -1;
+        fieldToTranslationFrameAnchor = null;
         lastMode = "enabled";
     }
 
@@ -192,6 +197,8 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         dbg.addData(p + ".adaptive.blendTTranslate", blendTTranslate);
         dbg.addData(p + ".adaptive.blendTOmega", blendTOmega);
         dbg.addData(p + ".adaptive.lastObservedTagId", lastObservedTagId);
+        dbg.addData(p + ".robotRelative.translationAnchor",
+                fieldToTranslationFrameAnchor != null ? fieldToTranslationFrameAnchor.toString() : "null");
     }
 
     // ------------------------------------------------------------------------
@@ -318,8 +325,28 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         Pose2d fieldToRobot = est.toPose2d();
         TagLayout layout = cfg.tagLayout;
 
-        Pose2d fieldToTranslatePoint = resolveToFieldPoint(plan.translationTarget, layout);
-        Pose2d fieldToAimPoint = resolveToFieldPoint(plan.aimTarget, layout);
+        // Current controlled-frame poses.
+        Pose2d fieldToTFrame = fieldToRobot.then(plan.controlFrames.robotToTranslationFrame());
+
+        // Resolve translation target.
+        Pose2d fieldToTranslatePoint;
+        if (plan.translationTarget instanceof DriveGuidancePlan.RobotRelativePoint) {
+            DriveGuidancePlan.RobotRelativePoint rr = (DriveGuidancePlan.RobotRelativePoint) plan.translationTarget;
+
+            // Capture the "starting" translation-frame pose once per enable cycle.
+            if (fieldToTranslationFrameAnchor == null) {
+                fieldToTranslationFrameAnchor = fieldToTFrame;
+            }
+
+            fieldToTranslatePoint = fieldToTranslationFrameAnchor.then(new Pose2d(rr.forwardInches, rr.leftInches, 0.0));
+        } else {
+            fieldToTranslatePoint = resolveToFieldPoint(plan.translationTarget, layout);
+        }
+
+        // Resolve aim target (FieldHeading is handled as a non-point target below).
+        Pose2d fieldToAimPoint = (plan.aimTarget instanceof DriveGuidancePlan.FieldHeading)
+                ? null
+                : resolveToFieldPoint(plan.aimTarget, layout);
 
         double axial = 0.0;
         double lateral = 0.0;
@@ -330,8 +357,6 @@ final class DriveGuidanceOverlay implements DriveOverlay {
 
         // --- Translation ---
         if (fieldToTranslatePoint != null) {
-            Pose2d fieldToTFrame = fieldToRobot.then(plan.controlFrames.robotToTranslationFrame());
-
             // Field error vector from translation-frame origin to target point.
             double dxField = fieldToTranslatePoint.xInches - fieldToTFrame.xInches;
             double dyField = fieldToTranslatePoint.yInches - fieldToTFrame.yInches;
@@ -350,7 +375,13 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         }
 
         // --- Omega / Aim ---
-        if (fieldToAimPoint != null) {
+        if (plan.aimTarget instanceof DriveGuidancePlan.FieldHeading) {
+            DriveGuidancePlan.FieldHeading fh = (DriveGuidancePlan.FieldHeading) plan.aimTarget;
+            Pose2d fieldToAimFrame = fieldToRobot.then(plan.controlFrames.robotToAimFrame());
+            double headingErr = Pose2d.wrapToPi(fh.fieldHeadingRad - fieldToAimFrame.headingRad);
+            omega = GuidanceControllers.omegaCmd(headingErr, plan.tuning);
+            canOmega = true;
+        } else if (fieldToAimPoint != null) {
             Pose2d fieldToAimFrame = fieldToRobot.then(plan.controlFrames.robotToAimFrame());
             Pose2d aimFrameToPoint = fieldToAimFrame.inverse().then(fieldToAimPoint);
             double bearingErr = Math.atan2(aimFrameToPoint.yInches, aimFrameToPoint.xInches);
@@ -370,8 +401,13 @@ final class DriveGuidanceOverlay implements DriveOverlay {
     /**
      * Resolve a plan target into a field-coordinate point (x,y,heading=0) if possible.
      *
-     * <p>Returns null when the target cannot be resolved in field space (for example: tag-relative
-     * targets without a {@link TagLayout}, or “observed tag” targets when no tag has been seen yet.)</p>
+     * <p>Returns null when the target cannot be resolved in field space. Examples include:</p>
+     * <ul>
+     *   <li>tag-relative targets without a {@link TagLayout},</li>
+     *   <li>“observed tag” targets when no tag has been seen yet,</li>
+     *   <li>non-point targets such as {@link DriveGuidancePlan.FieldHeading}, and</li>
+     *   <li>robot-relative translation targets ({@link DriveGuidancePlan.RobotRelativePoint}).</li>
+     * </ul>
      */
     private Pose2d resolveToFieldPoint(Object target, TagLayout layout) {
         if (target == null) {

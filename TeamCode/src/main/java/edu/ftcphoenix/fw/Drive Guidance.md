@@ -39,12 +39,32 @@ DriveGuidancePlan aimPlan = DriveGuidance.plan()
         .build();
 ```
 
-### 3) Enable the overlay while a button is held
+### 3) Enable the overlay
+
+Drive overlays take a `BooleanSupplier`. The most common patterns are:
+
+* **Hold to enable** (while the button is held)
+* **Toggle to enable** (press once to turn it on, press again to turn it off)
+
+#### Hold to enable
 
 ```java
 DriveSource drive = DriveGuidance.overlayOn(
         base,
-        () -> gamepads.p1().leftBumper().isHeld(),
+        gamepads.p1().leftBumper()::isHeld,
+        aimPlan,
+        DriveOverlayMask.OMEGA_ONLY
+);
+```
+
+#### Toggle to enable
+
+Use `Button.isToggled()` via a method reference to get a `BooleanSupplier` that flips on each press:
+
+```java
+DriveSource drive = DriveGuidance.overlayOn(
+        base,
+        gamepads.p1().leftBumper()::isToggled,
         aimPlan,
         DriveOverlayMask.OMEGA_ONLY
 );
@@ -54,12 +74,79 @@ That’s it: your driver keeps full stick translation, and the overlay “owns�
 
 ---
 
+## Common recipes
+
+These are small, copy-paste friendly patterns that show up a lot in TeleOp.
+
+### Aim-only: observed tag (vision-only)
+
+```java
+DriveGuidancePlan plan = DriveGuidance.plan()
+        .aimTo().tagCenter().doneAimTo()
+        .feedback().observation(obs).doneFeedback()
+        .build();
+
+DriveSource drive = DriveGuidance.overlayOn(
+        base,
+        gamepads.p2().leftBumper()::isHeld,
+        plan,
+        DriveOverlayMask.OMEGA_ONLY
+);
+```
+
+### Translate + aim: observed tag-relative point (vision-only)
+
+Drive to a point relative to the currently observed tag while also aiming at it.
+
+```java
+DriveGuidancePlan plan = DriveGuidance.plan()
+        .translateTo().tagRelativePointInches(6, 0).doneTranslateTo() // 6" in front of the observed tag
+        .aimTo().tagCenter().doneAimTo()
+        .feedback().observation(obs).doneFeedback()
+        .build();
+```
+
+### Translate + aim: fixed tag ID using field pose (tag may disappear)
+
+If you have localization, you can keep driving/aiming even if the camera loses the tag.
+
+```java
+DriveGuidancePlan plan = DriveGuidance.plan()
+        .translateTo().tagRelativePointInches(1, 6, 0).doneTranslateTo()
+        .aimTo().tagCenter(1).doneAimTo()
+        .feedback().fieldPose(poseEstimator, tagLayout).doneFeedback()
+        .build();
+```
+
+### Aim to an absolute field heading
+
+```java
+DriveGuidancePlan plan = DriveGuidance.plan()
+        .aimTo().fieldHeadingDeg(90).doneAimTo()
+        .feedback().fieldPose(poseEstimator).doneFeedback()
+        .build();
+```
+
+### Robot-relative “nudge” translation
+
+Useful for micro adjustments. Captures the current pose when the overlay turns on.
+
+```java
+DriveGuidancePlan plan = DriveGuidance.plan()
+        .translateTo().robotRelativePointInches(6, 0).doneTranslateTo()
+        .feedback().fieldPose(poseEstimator).doneFeedback()
+        .build();
+```
+
+---
+
 ## What a plan can do
 
 `DriveGuidancePlan` can control up to two degrees of freedom:
 
 * **Translation**: move a point on the robot to a target point
-* **Omega**: rotate the robot so a point on the robot “looks at” a target point
+* **Omega**: rotate the robot so a point on the robot either “looks at” a target point
+  <em>or</em> matches an absolute field heading
 
 You can use either one independently, or both together.
 
@@ -68,10 +155,14 @@ You can use either one independently, or both together.
 * `.translateTo().fieldPointInches(x, y)` — a fixed point on the field
 * `.translateTo().tagRelativePointInches(tagId, forward, left)` — a point in a tag’s coordinate frame
 * `.translateTo().tagRelativePointInches(forward, left)` — a point in the **currently observed** tag’s frame
+* `.translateTo().robotRelativePointInches(forward, left)` — "nudge" by an offset from wherever you are
+  (requires field pose)
 
 ### Aim target
 
 * `.aimTo().lookAtFieldPointInches(x, y)`
+* `.aimTo().fieldHeadingDeg(deg)` / `.aimTo().fieldHeadingRad(rad)` — turn to an absolute field heading
+  (requires field pose)
 * `.aimTo().lookAtTagPointInches(tagId, forward, left)`
 * `.aimTo().lookAtTagPointInches(forward, left)` — **currently observed** tag
 
@@ -160,7 +251,6 @@ DriveGuidancePlan plan = DriveGuidance.plan()
         .translateTo().tagRelativePointInches(1, 6, 0).doneTranslateTo()
         .aimTo().tagCenter(1).doneAimTo()
         .feedback()
-            .autoSelect()
             .fieldPose(poseEstimator, tagLayout)
             .observation(obs)
             .gates(10.0, 14.0, 0.20)   // enter, exit, blend (inches, inches, seconds)

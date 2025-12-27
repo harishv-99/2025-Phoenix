@@ -218,6 +218,12 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     private TagTarget tagTarget;
     private TagOnlyPoseEstimator tagEstimator;
 
+    /**
+     * High-level state machine for the calibration flow.
+     *
+     * <p>The tester is intentionally explicit about phases so telemetry and
+     * control logic stay easy to reason about while students run the procedure.</p>
+     */
     private enum Phase {
         /**
          * Not sampling; just showing live telemetry.

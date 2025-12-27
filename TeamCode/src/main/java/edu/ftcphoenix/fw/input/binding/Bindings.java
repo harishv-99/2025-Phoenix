@@ -32,6 +32,9 @@ public final class Bindings {
     // Binding record types
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * Simple (button, action) pair for rising-edge press actions.
+     */
     private static final class PressBinding {
         final Button button;
         final Runnable action;
@@ -42,6 +45,9 @@ public final class Bindings {
         }
     }
 
+    /**
+     * Binding that runs an action every loop while held and optionally once on release.
+     */
     private static final class WhileHeldBinding {
         final Button button;
         final Runnable whileHeld;
@@ -54,15 +60,23 @@ public final class Bindings {
         }
     }
 
+    /**
+     * Binding that reports a per-button toggle state to a consumer.
+     *
+     * <p>The toggle state is owned by the {@link Button} itself and flips on each rising edge.
+     * This means the same physical button press produces the same toggle state everywhere you read it.
+     *
+     * <p>For example: if you pass {@code button::isToggled} as a {@code BooleanSupplier} to enable a
+     * {@link edu.ftcphoenix.fw.drive.DriveOverlay}, and you also create a binding with
+     * {@link Bindings#toggle(Button, Consumer)}, both will observe the same on/off value.</p>
+     */
     private static final class ToggleBinding {
         final Button button;
         final Consumer<Boolean> consumer;
-        boolean toggled;
 
         ToggleBinding(Button button, Consumer<Boolean> consumer) {
             this.button = button;
             this.consumer = consumer;
-            this.toggled = false;
         }
     }
 
@@ -126,7 +140,17 @@ public final class Bindings {
 
     /**
      * Register a toggle: flip a boolean each time the button is pressed (rising edge) and
-     * deliver the new value to the consumer.
+     * deliver the <em>new</em> value to the consumer.
+     *
+     * <p>This method is the “action” sibling of reading {@link Button#isToggled()}:</p>
+     * <ul>
+     *   <li>When you need a {@code BooleanSupplier} (for example: to enable a
+     *       {@link edu.ftcphoenix.fw.drive.DriveOverlay}), pass {@code button::isToggled}.</li>
+     *   <li>When you want to run code on each toggle edge, use {@code Bindings.toggle(...)}.</li>
+     * </ul>
+     *
+     * <p>The toggle state is owned by the button, so the same physical button press toggles
+     * the same shared on/off value everywhere.</p>
      *
      * @param button   button to monitor (non-null)
      * @param consumer consumer that receives the new toggle state (non-null)
@@ -191,8 +215,7 @@ public final class Bindings {
         for (int i = 0; i < toggleBindings.size(); i++) {
             ToggleBinding b = toggleBindings.get(i);
             if (b.button.onPress()) {
-                b.toggled = !b.toggled;
-                b.consumer.accept(b.toggled);
+                b.consumer.accept(b.button.isToggled());
             }
         }
     }

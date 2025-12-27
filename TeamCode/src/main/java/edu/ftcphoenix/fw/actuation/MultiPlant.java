@@ -41,6 +41,12 @@ final class MultiPlant implements Plant {
         return b.build();
     }
 
+    /**
+     * Small builder for {@link MultiPlant}.
+     *
+     * <p>This is internal framework plumbing used by higher-level builders
+     * (for example {@link Actuators}) to assemble multi-actuator mechanisms.</p>
+     */
     static final class Builder {
         private final List<Plant> plants = new ArrayList<>();
         private final List<Double> scales = new ArrayList<>();
@@ -104,7 +110,9 @@ final class MultiPlant implements Plant {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setTarget(double target) {
         this.target = target;
@@ -113,13 +121,17 @@ final class MultiPlant implements Plant {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public double getTarget() {
         return target;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void update(double dtSec) {
         for (Plant p : plants) {
@@ -127,7 +139,9 @@ final class MultiPlant implements Plant {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void reset() {
         for (Plant p : plants) {
@@ -135,7 +149,9 @@ final class MultiPlant implements Plant {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void stop() {
         for (Plant p : plants) {
@@ -144,7 +160,9 @@ final class MultiPlant implements Plant {
         target = 0.0;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean atSetpoint() {
         for (Plant p : plants) {
@@ -155,7 +173,9 @@ final class MultiPlant implements Plant {
         return true;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean hasFeedback() {
         for (Plant p : plants) {
@@ -166,7 +186,9 @@ final class MultiPlant implements Plant {
         return true;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void debugDump(DebugSink dbg, String prefix) {
         if (dbg == null) {

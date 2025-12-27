@@ -170,7 +170,7 @@ public interface DriveSource {
      * DriveSource assisted = manual.overlayWhen(
      *         () -> pads.p1().x().isPressed(),
      *         aim,
-     *         DriveOverlayMask.ROTATION);
+     *         DriveOverlayMask.OMEGA_ONLY);
      * }</pre>
      */
     default DriveSource overlayWhen(BooleanSupplier when, DriveOverlay overlay, DriveOverlayMask requestedMask) {

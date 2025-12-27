@@ -55,6 +55,8 @@ Think of Phoenix as a few thin layers you stack:
 2. **Input** (`fw.input`)
 
     * `Gamepads`, `GamepadDevice`, `Axis`, `Button`.
+    * `Button` supports edge detection (`onPress`/`onRelease`), <i>and</i> a built-in
+      press-to-toggle state via `Button.isToggled()` (useful when enabling drive overlays).
 3. **Bindings** (`fw.input.binding`)
 
     * `Bindings` turns button edges into actions (often: enqueue a macro).

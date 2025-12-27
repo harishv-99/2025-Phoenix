@@ -14,14 +14,19 @@ import edu.ftcphoenix.fw.core.time.LoopClock;
  * <ol>
  *   <li>Create {@link Button} instances (typically via {@link #of(BooleanSupplier)}).</li>
  *   <li>Once per OpMode loop, call {@link #updateAllRegistered(LoopClock)}.</li>
- *   <li>Query buttons via {@link #onPress()}, {@link #onRelease()}, {@link #isHeld()}.</li>
+ *   <li>Query buttons via {@link #onPress()}, {@link #onRelease()}, {@link #isHeld()}, and {@link #isToggled()}.</li>
  * </ol>
+ *
+ * <p>We implement edge detection inside Phoenix (instead of depending on any particular FTC SDK helper)
+ * so that <b>synthetic buttons</b> (for example: “trigger &gt; 0.5” treated as a button) can behave
+ * exactly the same way as physical buttons.</p>
  *
  * <h2>Edge semantics</h2>
  * <ul>
  *   <li>{@link #onPress()} is true for exactly one loop on a rising edge.</li>
  *   <li>{@link #onRelease()} is true for exactly one loop on a falling edge.</li>
  *   <li>{@link #isHeld()} is true every loop while the button is down.</li>
+ *   <li>{@link #isToggled()} flips on each press and reports the current press-to-toggle state.</li>
  * </ul>
  *
  * <h2>Per-cycle idempotency</h2>
@@ -59,6 +64,32 @@ public interface Button {
      */
     boolean isHeld();
 
+    /**
+     * Press-to-toggle state.
+     *
+     * <p>Each time the button is pressed (rising edge), this state flips between {@code false} and
+     * {@code true}. Phoenix defaults toggles to <em>off</em> ({@code false}).</p>
+     *
+     * <p>This is useful for “click to enable / click to disable” behavior, such as enabling a
+     * {@link edu.ftcphoenix.fw.drive.DriveOverlay} until you press the button again.</p>
+     *
+     * <h2>Usage (enable a drive overlay)</h2>
+     * <pre>{@code
+     * DriveSource drive = DriveGuidance.overlayOn(
+     *         base,
+     *         gamepads.p2().leftBumper()::isToggled, // press-to-toggle enable
+     *         aimPlan,
+     *         DriveOverlayMask.OMEGA_ONLY
+     * );
+     * }</pre>
+     *
+     * <p><b>Important:</b> Toggle state updates during {@link #updateAllRegistered(LoopClock)}, so call
+     * your input update before reading {@link #isToggled()} in the same loop.</p>
+     *
+     * @return current toggle state (default {@code false})
+     */
+    boolean isToggled();
+
     // ---------------------------------------------------------------------------------------------
     // Registry operations
     // ---------------------------------------------------------------------------------------------
@@ -67,8 +98,10 @@ public interface Button {
      * Register a button so it participates in {@link #updateAllRegistered(LoopClock)}.
      *
      * <p>Buttons created via {@link #of(BooleanSupplier)} and {@link #constant(boolean)}
-     * are automatically registered. This method is mainly for advanced cases where you
-     * provide your own {@link Button} implementation.</p>
+     * are automatically registered.</p>
+     *
+     * <p>This method exists for advanced composition (for example: a custom {@link Button}
+     * implementation that still wants to participate in the global update).</p>
      */
     static void register(Button button) {
         Registry.register(button);
@@ -118,7 +151,7 @@ public interface Button {
     /**
      * Convenience: create a button that is always held or always released.
      *
-     * <p>Edges never fire for constant buttons.</p>
+     * <p>Edges never fire for constant buttons, and {@link #isToggled()} will never change.</p>
      */
     static Button constant(boolean held) {
         StatefulButton b = new StatefulButton(() -> held);
@@ -138,6 +171,7 @@ public interface Button {
         private final BooleanSupplier raw;
         private boolean prev;
         private boolean curr;
+        private boolean toggled;
 
         /**
          * @param raw supplier providing the raw "is down" state (non-null)
@@ -150,31 +184,55 @@ public interface Button {
             boolean initial = this.raw.getAsBoolean();
             this.prev = initial;
             this.curr = initial;
+
+            // Toggles default "off".
+            this.toggled = false;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void update() {
             prev = curr;
             curr = raw.getAsBoolean();
+
+            // Press-to-toggle flips on the same rising edge that drives onPress().
+            if (curr && !prev) {
+                toggled = !toggled;
+            }
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean onPress() {
             return curr && !prev;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean onRelease() {
             return !curr && prev;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean isHeld() {
             return curr;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public boolean isToggled() {
+            return toggled;
         }
     }
 

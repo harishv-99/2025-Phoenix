@@ -13,8 +13,19 @@ import edu.ftcphoenix.fw.task.Tasks;
 import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
 import edu.ftcphoenix.fw.core.math.MathUtil;
 
+/**
+ * Phoenix robot shooter subsystem.
+ *
+ * <p>This class wires the shooter-related {@link edu.ftcphoenix.fw.actuation.Plant}s
+ * and exposes small, non-blocking {@link Task} helpers for TeleOp and autonomous.
+ * Methods are named "instantX" to emphasize that they return tasks that can be
+ * scheduled without blocking the main loop.</p>
+ */
 public class Shooter {
 
+    /**
+     * Direction for the transfer (indexer) CR servos.
+     */
     public enum TransferDirection {
         FORWARD,
         BACKWARD
@@ -56,6 +67,9 @@ public class Shooter {
             );
 
 
+    /**
+     * Construct the shooter subsystem and wire all associated hardware.
+     */
     public Shooter(HardwareMap hardwareMap, Telemetry telemetry, Gamepads gamepads) {
         plantPusher = Actuators.plant(hardwareMap)
                 .servo(RobotConfig.Shooter.nameServoPusher,
@@ -83,6 +97,13 @@ public class Shooter {
         velocity = RobotConfig.Shooter.velocityMin;
     }
 
+    /**
+     * Update the target shooter velocity based on an estimated distance.
+     *
+     * @param distance distance to target in inches
+     * @return a task that applies the new velocity immediately if the shooter is on;
+     * otherwise {@link Tasks#noop()}
+     */
     public Task instantSetVelocityByDist(double distance) {
         double velForDist = SHOOTER_VELOCITY_TABLE.interpolate(distance);
         this.velocity = MathUtil.clamp(velForDist,
@@ -96,6 +117,9 @@ public class Shooter {
         return Tasks.noop();
     }
 
+    /**
+     * Increase the configured shooter velocity by one increment.
+     */
     public Task instantIncreaseVelocity() {
         velocity += RobotConfig.Shooter.velocityIncrement;
         velocity = Math.floor(velocity / RobotConfig.Shooter.velocityIncrement) *
@@ -111,6 +135,9 @@ public class Shooter {
         return Tasks.noop();
     }
 
+    /**
+     * Decrease the configured shooter velocity by one increment.
+     */
     public Task instantDecreaseVelocity() {
         velocity -= RobotConfig.Shooter.velocityIncrement;
         velocity = Math.ceil(velocity / RobotConfig.Shooter.velocityIncrement) *
@@ -126,20 +153,32 @@ public class Shooter {
         return Tasks.noop();
     }
 
+    /**
+     * @return current configured shooter velocity (native units)
+     */
     public double getVelocity() {
         return velocity;
     }
 
+    /**
+     * Start (or re-start) the shooter at the currently configured velocity.
+     */
     public Task instantStartShooter() {
         isShooterOn = true;
         return PlantTasks.setInstant(plantShooter, velocity);
     }
 
+    /**
+     * Stop the shooter motor(s).
+     */
     public Task instantStopShooter() {
         isShooterOn = false;
         return PlantTasks.setInstant(plantShooter, 0);
     }
 
+    /**
+     * Move the pusher servo to the "back" (retracted) position.
+     */
     public Task instantSetPusherBack() {
 //        return PlantTasks.holdFor(plantPusher,
 //                RobotConfig.Shooter.targetPusherBack,
@@ -148,6 +187,9 @@ public class Shooter {
                 RobotConfig.Shooter.targetPusherBack);
     }
 
+    /**
+     * Move the pusher servo to the "front" (extended) position.
+     */
     public Task instantSetPusherFront() {
 //        return PlantTasks.holdFor(plantPusher,
 //                RobotConfig.Shooter.targetPusherFront,
@@ -156,6 +198,9 @@ public class Shooter {
                 RobotConfig.Shooter.targetPusherFront);
     }
 
+    /**
+     * Start the transfer (indexer) in the requested direction.
+     */
     public Task instantStartTransfer(TransferDirection direction) {
         switch (direction) {
             case FORWARD:
@@ -167,10 +212,16 @@ public class Shooter {
         throw new IllegalArgumentException("Unknown direction provided!!!");
     }
 
+    /**
+     * Stop the transfer (indexer).
+     */
     public Task instantStopTransfer() {
         return PlantTasks.setInstant(plantTransfer, 0);
     }
 
+    /**
+     * Emergency stop for all shooter-related actuators.
+     */
     public void stop() {
         plantPusher.stop();
         plantShooter.stop();

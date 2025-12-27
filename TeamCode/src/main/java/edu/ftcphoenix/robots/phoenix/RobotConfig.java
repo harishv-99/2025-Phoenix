@@ -6,8 +6,21 @@ import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 
+/**
+ * Centralized robot configuration for the Phoenix example robot.
+ *
+ * <p>This file is intentionally "boring": it stores hardware map names,
+ * directions, and calibration constants in one place so the rest of the robot
+ * code can stay clean and robot-centric.</p>
+ *
+ * <p>Rule of thumb: if you find yourself repeating a device name string or a
+ * mount/offset constant in multiple files, it probably belongs here.</p>
+ */
 public class RobotConfig {
 
+    /**
+     * Drivetrain hardware mapping (motor names + directions).
+     */
     public static class DriveTrain {
         public static final String nameMotorFrontLeft = "frontLeftMotor";
         public static final Direction directionMotorFrontLeft = Direction.REVERSE;
@@ -40,6 +53,12 @@ public class RobotConfig {
         }
     }
 
+    /**
+     * Shooter hardware mapping + basic tuning constants.
+     *
+     * <p>Units for shooter velocity are the motor's native velocity units
+     * (e.g., ticks/sec), because Phoenix plants operate in native units by design.</p>
+     */
     public static class Shooter {
         public static final String nameServoPusher = "pusher";
         public static final Direction directionServoPusher = Direction.FORWARD;

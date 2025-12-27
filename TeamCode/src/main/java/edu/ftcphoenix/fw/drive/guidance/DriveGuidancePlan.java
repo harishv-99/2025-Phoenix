@@ -14,7 +14,8 @@ import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
  * <p>A {@link DriveGuidancePlan} describes:</p>
  * <ul>
  *   <li><b>What you want to do</b>: translate, aim, or both.</li>
- *   <li><b>Where the target is defined</b>: field coordinates or relative to an anchor (e.g. AprilTag).</li>
+ *   <li><b>Where the target is defined</b>: field coordinates, relative to an anchor (e.g. AprilTag),
+ *       or relative to the robot at the moment the overlay is enabled.</li>
  *   <li><b>Which point on the robot is being controlled</b>: robot center or an off-center mechanism.</li>
  *   <li><b>What feedback source is used</b>: observation, field pose, or an adaptive combination.</li>
  * </ul>
@@ -82,6 +83,68 @@ public final class DriveGuidancePlan {
 
         public TagPoint(int tagId, double forwardInches, double leftInches) {
             this.tagId = tagId;
+            this.forwardInches = forwardInches;
+            this.leftInches = leftInches;
+        }
+    }
+
+    /**
+     * Aim target that requests an <b>absolute field heading</b>.
+     *
+     * <p>This is the “turn to heading” sibling of {@link FieldPoint} / {@link TagPoint} aiming.
+     * Instead of aiming at a point, DriveGuidance will rotate the robot until the aim control
+     * frame's heading matches {@link #fieldHeadingRad}.</p>
+     *
+     * <p><b>Important:</b> This target requires {@link Feedback#hasFieldPose()} because it needs a
+     * current robot heading estimate in the field frame. It cannot be solved from observation-only
+     * feedback.</p>
+     *
+     * <p>If you use the default {@link ControlFrames#robotCenter()}, this means “rotate the robot
+     * to this field heading”. If you set an aim frame with a heading offset, the aim frame's
+     * +X axis is what will be aligned to the field heading.</p>
+     */
+    public static final class FieldHeading implements AimTarget {
+
+        /**
+         * Desired heading in the field frame, in radians.
+         */
+        public final double fieldHeadingRad;
+
+        public FieldHeading(double fieldHeadingRad) {
+            this.fieldHeadingRad = fieldHeadingRad;
+        }
+    }
+
+    /**
+     * Translation target defined <b>relative to the robot</b> when the overlay becomes enabled.
+     *
+     * <p>This is intended for “nudge” style behaviors such as:</p>
+     * <ul>
+     *   <li>drive forward 6 inches from wherever you are,</li>
+     *   <li>strafe left 3 inches,</li>
+     *   <li>micro-adjust an intake position without thinking in field coordinates.</li>
+     * </ul>
+     *
+     * <p>Each time the guidance overlay is enabled, it captures the current field pose of the
+     * <b>translation control frame</b> (see {@link ControlFrames#robotToTranslationFrame()}).
+     * The requested offset is applied in that frame to produce a fixed field target point.</p>
+     *
+     * <p><b>Requires:</b> field pose feedback (odometry / localization). Observation-only feedback
+     * cannot measure robot displacement, so this target cannot be solved from vision alone.</p>
+     */
+    public static final class RobotRelativePoint implements TranslationTarget {
+
+        /**
+         * Forward offset in inches (+X in the robot/translation frame).
+         */
+        public final double forwardInches;
+
+        /**
+         * Left offset in inches (+Y in the robot/translation frame).
+         */
+        public final double leftInches;
+
+        public RobotRelativePoint(double forwardInches, double leftInches) {
             this.forwardInches = forwardInches;
             this.leftInches = leftInches;
         }

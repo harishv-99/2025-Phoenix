@@ -44,10 +44,21 @@ Phoenix is designed around a few core goals:
     * Use `GamepadDriveSource` today, add a `DriveGuidance` overlay tomorrow.
     * Keep the same shooter macro while changing how distance is estimated.
 
+
 5. **One loop, one heartbeat**
 
    Phoenix assumes a single loop heartbeat (`LoopClock`) that everything else uses.
    This enables robust button edge detection, predictable task timing, and consistent rate limiting.
+
+6. **Docs are part of the API**
+
+   Phoenix treats documentation as a first-class feature: Javadocs should be “mouse-over quality,”
+   and the Markdown guides should stay in sync with the real APIs and examples.
+
+7. **Fail fast with actionable errors**
+
+   When something is misconfigured, Phoenix should throw early (often at build-time) with an
+   error message that tells a student what to change. Avoid silent no-ops.
 
 ---
 
@@ -438,3 +449,53 @@ When extending:
 * Keep SDK- or vendor-specific calls in adapters.
 * Preserve per-cycle semantics (do not “secretly” advance time or consume edges).
 * Keep interfaces narrow (`Plant`, `DriveSource`, `Task`) so systems remain composable.
+
+---
+
+## 10. Documentation standards
+
+Phoenix code is meant to be read by students **during build season** under time pressure.
+Javadocs aren’t “nice to have” — they are part of the API.
+
+### 10.1 Javadocs rules of thumb
+
+**Every class should be documented (public or not).**
+
+- **Top-level types:** start with a one-sentence summary of what the type is for.
+- **Non-public / internal types:** still add a short comment that answers “why does this exist?”
+  and (if relevant) what invariant it relies on.
+- If the type depends on **units** or a **coordinate frame**, say so up front.
+
+**Every non-trivial method should be documented.**
+
+- Start with a short verb phrase: “Create…”, “Update…”, “Return…”, “Apply…”, etc.
+- Document **units and frames** for parameters and return values (use suffixes like
+  `Inches`, `Rad`, `Sec`, etc. and explain when the frame is not obvious).
+- Document **preconditions** and what happens when they are violated (`@throws` with a helpful message).
+- Document **side effects** (what gets mutated / what gets cached).
+- For per-loop methods (`update`, `get(clock)`, etc.), document **call order** and whether
+  behavior is **idempotent by cycle**.
+
+**Examples are encouraged when they prevent misuse.**
+
+- Prefer small, copy-pastable snippets using `<pre>{@code ... }</pre>`.
+- When the “right” usage is not obvious (builders, overlays, transforms), include at least one example.
+
+**Link to the right things.**
+
+- Use `{@link ...}` to connect concepts and reduce duplicated explanations.
+- Use `{@code ...}` for code-ish names.
+
+### 10.2 Error messages are documentation
+
+Phoenix frequently teaches through its exceptions.
+
+- Prefer errors like: “field heading targets require fieldPose(...) feedback” over generic
+  `NullPointerException` / “invalid state.”
+- If a configuration can never work, throw **at build time** rather than silently producing
+  “no output” at runtime.
+
+### 10.3 Keep docs and code in sync
+
+- If an API changes, update **Javadocs**, **Markdown docs**, and **examples** in the same change.
+- Avoid stale comments (“TODO update later”) in student-facing areas — they become misinformation.

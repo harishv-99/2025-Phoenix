@@ -1,5 +1,6 @@
 package edu.ftcphoenix.fw.drive.guidance;
 
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -16,7 +17,7 @@ import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
  * <p>This replaces older tag-specific drive assist helpers (e.g. TagAim) with a single,
  * composable “guidance overlay” abstraction:</p>
  * <ul>
- *   <li>You describe a target (field point or tag-relative point).</li>
+ *   <li>You describe a target (field point, tag-relative point, robot-relative offset, or field heading).</li>
  *   <li>You describe what to do (translate, aim, or both).</li>
  *   <li>You pick feedback sources (observation, field pose, or both).</li>
  *   <li>You apply the resulting overlay to a base {@link DriveSource} using
@@ -297,6 +298,29 @@ public final class DriveGuidance {
         TranslateToBuilder<RETURN> tagRelativePointInches(double forwardInches, double leftInches);
 
         /**
+         * Move by a fixed offset defined in the <b>robot/translation frame</b> when the overlay is enabled.
+         *
+         * <p>This is a "nudge" style target: each time the guidance overlay becomes active,
+         * it snapshots the current field pose and treats that pose as the origin for the requested
+         * offset.</p>
+         *
+         * <p>Example: drive forward 6 inches from wherever you are:</p>
+         * <pre>{@code
+         * DriveGuidancePlan plan = DriveGuidance.plan()
+         *     .translateTo().robotRelativePointInches(6, 0).doneTranslateTo()
+         *     .feedback().fieldPose(poseEstimator).doneFeedback()
+         *     .build();
+         * }</pre>
+         *
+         * <p><b>Requires:</b> field-pose feedback. Observation-only feedback cannot measure robot
+         * displacement.</p>
+         *
+         * @param forwardInches forward offset (+X) in inches
+         * @param leftInches    left offset (+Y) in inches
+         */
+        TranslateToBuilder<RETURN> robotRelativePointInches(double forwardInches, double leftInches);
+
+        /**
          * Finish translation configuration and return to the main plan builder.
          */
         RETURN doneTranslateTo();
@@ -316,6 +340,25 @@ public final class DriveGuidance {
          * @param yInches field Y (left) in inches
          */
         AimToBuilder<RETURN> lookAtFieldPointInches(double xInches, double yInches);
+
+        /**
+         * Turn so the controlled aim frame reaches an <b>absolute field heading</b>.
+         *
+         * <p>This is the "turn-to-heading" sibling of {@link #lookAtFieldPointInches(double, double)}.
+         * Instead of aiming at a point, DriveGuidance will rotate until the aim frame's heading
+         * matches the requested field heading.</p>
+         *
+         * <p><b>Requires:</b> field-pose feedback (a heading estimate). Observation-only feedback
+         * cannot solve an absolute field heading.</p>
+         *
+         * @param fieldHeadingRad desired heading in the field frame (radians)
+         */
+        AimToBuilder<RETURN> fieldHeadingRad(double fieldHeadingRad);
+
+        /**
+         * Convenience overload: specify the desired field heading in degrees.
+         */
+        AimToBuilder<RETURN> fieldHeadingDeg(double fieldHeadingDeg);
 
         /**
          * Turn so the robot “looks at” a point defined in a specific tag's coordinate frame.
@@ -425,14 +468,6 @@ public final class DriveGuidance {
         FeedbackBuilder<RETURN> lossPolicy(DriveGuidancePlan.LossPolicy lossPolicy);
 
         /**
-         * Optional readability helper.
-         *
-         * <p>Calling this does not change behavior by itself. Adaptive selection automatically
-         * activates whenever both observation and field pose feedback are configured.</p>
-         */
-        FeedbackBuilder<RETURN> autoSelect();
-
-        /**
          * Finish feedback configuration and return to the main plan builder.
          */
         RETURN doneFeedback();
@@ -442,6 +477,13 @@ public final class DriveGuidance {
     // Implementation
     // ------------------------------------------------------------------------
 
+    /**
+     * Mutable builder state shared across staged builder instances.
+     *
+     * <p>The outer staged builder types ({@code PlanBuilder0..3}) are lightweight views
+     * over this shared state so IntelliSense can prevent illegal call sequences
+     * (like calling {@code translateTo()} twice).</p>
+     */
     private static final class State {
         DriveGuidancePlan.TranslationTarget translationTarget;
         DriveGuidancePlan.AimTarget aimTarget;
@@ -462,14 +504,16 @@ public final class DriveGuidance {
         DriveGuidancePlan.Gates gates;
         boolean preferObsOmega = true;
         DriveGuidancePlan.LossPolicy lossPolicy = DriveGuidancePlan.LossPolicy.PASS_THROUGH;
-
-        boolean autoSelectIntent = false;
     }
 
     private static DriveGuidancePlan buildPlan(State s) {
         if (s.translationTarget == null && s.aimTarget == null) {
             throw new IllegalStateException("DriveGuidance plan needs translateTo() and/or aimTo() configured");
         }
+
+        // Validate cross-feature compatibility up front so students get a clear error at build()
+        // instead of a silent "no output" at runtime.
+        validateCapabilitiesOrThrow(s);
 
         // Build feedback config.
         DriveGuidancePlan.Observation obs = null;
@@ -501,6 +545,141 @@ public final class DriveGuidance {
                 s.tuning,
                 fb
         );
+    }
+
+    /**
+     * Validate that the configured targets and feedback are mutually compatible.
+     *
+     * <p>The builder is intentionally “student strict”: when a plan configuration can never
+     * produce commands for the requested target(s) with the chosen feedback sources, Phoenix
+     * throws at {@link PlanBuilderCommon#build()} with a message that explains what to change.</p>
+     *
+     * <p>This avoids silent runtime failures where an overlay simply returns
+     * {@link DriveOverlayMask#NONE} forever.</p>
+     */
+    private static void validateCapabilitiesOrThrow(State s) {
+        ArrayList<String> errors = new ArrayList<>();
+
+        boolean hasObs = s.observationSource != null;
+        boolean hasFieldPose = s.poseEstimator != null;
+
+        if (!hasObs && !hasFieldPose) {
+            errors.add("feedback() must configure observation(...) and/or fieldPose(...)");
+        }
+
+        // --- Basic numeric validations (helpful guardrails for students) ---
+        if (hasObs) {
+            if (!Double.isFinite(s.obsMaxAgeSec) || s.obsMaxAgeSec < 0.0) {
+                errors.add("observation(...): maxAgeSec must be >= 0");
+            }
+            if (!Double.isFinite(s.obsMinQuality) || s.obsMinQuality < 0.0 || s.obsMinQuality > 1.0) {
+                errors.add("observation(...): minQuality must be in [0, 1]");
+            }
+        }
+
+        if (hasFieldPose) {
+            if (!Double.isFinite(s.poseMaxAgeSec) || s.poseMaxAgeSec < 0.0) {
+                errors.add("fieldPose(...): maxAgeSec must be >= 0");
+            }
+            if (!Double.isFinite(s.poseMinQuality) || s.poseMinQuality < 0.0 || s.poseMinQuality > 1.0) {
+                errors.add("fieldPose(...): minQuality must be in [0, 1]");
+            }
+        }
+
+        if (s.gates != null) {
+            if (!Double.isFinite(s.gates.enterRangeInches) || s.gates.enterRangeInches < 0.0) {
+                errors.add("gates(...): enterRangeInches must be >= 0");
+            }
+            if (!Double.isFinite(s.gates.exitRangeInches) || s.gates.exitRangeInches < 0.0) {
+                errors.add("gates(...): exitRangeInches must be >= 0");
+            }
+            if (!Double.isFinite(s.gates.takeoverBlendSec) || s.gates.takeoverBlendSec < 0.0) {
+                errors.add("gates(...): takeoverBlendSec must be >= 0");
+            }
+            if (Double.isFinite(s.gates.enterRangeInches)
+                    && Double.isFinite(s.gates.exitRangeInches)
+                    && s.gates.exitRangeInches < s.gates.enterRangeInches) {
+                errors.add("gates(...): exitRangeInches must be >= enterRangeInches");
+            }
+        }
+
+        // gates(...) is only meaningful in adaptive mode.
+        if (s.gates != null && !(hasObs && hasFieldPose)) {
+            errors.add("gates(...) is only used when both observation(...) and fieldPose(...) feedback are configured");
+        }
+
+        // --- Target/feedback capability checks ---
+        // Field points require field pose feedback.
+        if ((s.translationTarget instanceof DriveGuidancePlan.FieldPoint)
+                || (s.aimTarget instanceof DriveGuidancePlan.FieldPoint)) {
+            if (!hasFieldPose) {
+                errors.add("field point targets require fieldPose(...) feedback");
+            }
+        }
+
+        // Field heading requires field pose feedback.
+        if (s.aimTarget instanceof DriveGuidancePlan.FieldHeading) {
+            if (!hasFieldPose) {
+                errors.add("field heading targets require fieldPose(...) feedback");
+            }
+        }
+
+        // Robot-relative translation requires field pose feedback.
+        if (s.translationTarget instanceof DriveGuidancePlan.RobotRelativePoint) {
+            if (!hasFieldPose) {
+                errors.add("robot-relative translation targets require fieldPose(...) feedback");
+            }
+        }
+
+        // Tag-relative targets: certain combinations require observation and/or a tag layout.
+        boolean usesTagTargets = (s.translationTarget instanceof DriveGuidancePlan.TagPoint)
+                || (s.aimTarget instanceof DriveGuidancePlan.TagPoint);
+
+        if (usesTagTargets && hasFieldPose) {
+            if (s.tagLayout == null) {
+                errors.add("tag-relative targets with fieldPose(...) require a TagLayout (call fieldPose(poseEstimator, tagLayout) or tagLayout(tagLayout))");
+            }
+        }
+
+        // If any tag target uses “observed tag” (tagId = -1), we need an observation source
+        // to supply the tag ID at least once.
+        if (!hasObs) {
+            if (isObservedTag(s.translationTarget) || isObservedTag(s.aimTarget)) {
+                errors.add("tagRelativePointInches(forward,left) and tagCenter() (observed tag) require observation(...) feedback");
+            }
+        }
+
+        // If a fixed tag ID is referenced and a layout is present, validate it exists.
+        if (s.tagLayout != null) {
+            checkTagIdExists(s.translationTarget, s.tagLayout, errors);
+            checkTagIdExists(s.aimTarget, s.tagLayout, errors);
+        }
+
+        if (!errors.isEmpty()) {
+            StringBuilder msg = new StringBuilder();
+            msg.append("Invalid DriveGuidance plan:\n");
+            for (int i = 0; i < errors.size(); i++) {
+                msg.append(" - ").append(errors.get(i)).append('\n');
+            }
+            throw new IllegalStateException(msg.toString());
+        }
+    }
+
+    private static boolean isObservedTag(Object target) {
+        if (!(target instanceof DriveGuidancePlan.TagPoint)) {
+            return false;
+        }
+        return ((DriveGuidancePlan.TagPoint) target).tagId < 0;
+    }
+
+    private static void checkTagIdExists(Object target, TagLayout layout, ArrayList<String> errors) {
+        if (!(target instanceof DriveGuidancePlan.TagPoint)) {
+            return;
+        }
+        DriveGuidancePlan.TagPoint tp = (DriveGuidancePlan.TagPoint) target;
+        if (tp.tagId >= 0 && !layout.has(tp.tagId)) {
+            errors.add("TagLayout does not contain tag id=" + tp.tagId);
+        }
     }
 
     /**
@@ -537,6 +716,9 @@ public final class DriveGuidance {
         }
     }
 
+    /**
+     * Implementation of the initial plan builder stage.
+     */
     private static final class Builder0 extends BaseBuilder<PlanBuilder0> implements PlanBuilder0 {
         Builder0(State s) {
             super(s);
@@ -553,6 +735,9 @@ public final class DriveGuidance {
         }
     }
 
+    /**
+     * Implementation of the plan builder stage after translation has been configured.
+     */
     private static final class Builder1 extends BaseBuilder<PlanBuilder1> implements PlanBuilder1 {
         Builder1(State s) {
             super(s);
@@ -564,6 +749,9 @@ public final class DriveGuidance {
         }
     }
 
+    /**
+     * Implementation of the plan builder stage after aiming has been configured.
+     */
     private static final class Builder2 extends BaseBuilder<PlanBuilder2> implements PlanBuilder2 {
         Builder2(State s) {
             super(s);
@@ -575,12 +763,18 @@ public final class DriveGuidance {
         }
     }
 
+    /**
+     * Implementation of the plan builder stage after both translation and aim have been configured.
+     */
     private static final class Builder3 extends BaseBuilder<PlanBuilder3> implements PlanBuilder3 {
         Builder3(State s) {
             super(s);
         }
     }
 
+    /**
+     * Implementation of {@link TranslateToBuilder}.
+     */
     private static final class TranslateToStep<RETURN> implements TranslateToBuilder<RETURN> {
         private final State s;
         private final RETURN ret;
@@ -592,12 +786,18 @@ public final class DriveGuidance {
 
         @Override
         public TranslateToBuilder<RETURN> fieldPointInches(double xInches, double yInches) {
+            if (s.translationTarget != null) {
+                throw new IllegalStateException("translateTo() target already configured; choose only one target method");
+            }
             s.translationTarget = new DriveGuidancePlan.FieldPoint(xInches, yInches);
             return this;
         }
 
         @Override
         public TranslateToBuilder<RETURN> tagRelativePointInches(int tagId, double forwardInches, double leftInches) {
+            if (s.translationTarget != null) {
+                throw new IllegalStateException("translateTo() target already configured; choose only one target method");
+            }
             s.translationTarget = new DriveGuidancePlan.TagPoint(tagId, forwardInches, leftInches);
             return this;
         }
@@ -605,6 +805,15 @@ public final class DriveGuidance {
         @Override
         public TranslateToBuilder<RETURN> tagRelativePointInches(double forwardInches, double leftInches) {
             return tagRelativePointInches(-1, forwardInches, leftInches);
+        }
+
+        @Override
+        public TranslateToBuilder<RETURN> robotRelativePointInches(double forwardInches, double leftInches) {
+            if (s.translationTarget != null) {
+                throw new IllegalStateException("translateTo() target already configured; choose only one target method");
+            }
+            s.translationTarget = new DriveGuidancePlan.RobotRelativePoint(forwardInches, leftInches);
+            return this;
         }
 
         @Override
@@ -616,6 +825,9 @@ public final class DriveGuidance {
         }
     }
 
+    /**
+     * Implementation of {@link AimToBuilder}.
+     */
     private static final class AimToStep<RETURN> implements AimToBuilder<RETURN> {
         private final State s;
         private final RETURN ret;
@@ -627,12 +839,32 @@ public final class DriveGuidance {
 
         @Override
         public AimToBuilder<RETURN> lookAtFieldPointInches(double xInches, double yInches) {
+            if (s.aimTarget != null) {
+                throw new IllegalStateException("aimTo() target already configured; choose only one target method");
+            }
             s.aimTarget = new DriveGuidancePlan.FieldPoint(xInches, yInches);
             return this;
         }
 
         @Override
+        public AimToBuilder<RETURN> fieldHeadingRad(double fieldHeadingRad) {
+            if (s.aimTarget != null) {
+                throw new IllegalStateException("aimTo() target already configured; choose only one target method");
+            }
+            s.aimTarget = new DriveGuidancePlan.FieldHeading(fieldHeadingRad);
+            return this;
+        }
+
+        @Override
+        public AimToBuilder<RETURN> fieldHeadingDeg(double fieldHeadingDeg) {
+            return fieldHeadingRad(Math.toRadians(fieldHeadingDeg));
+        }
+
+        @Override
         public AimToBuilder<RETURN> lookAtTagPointInches(int tagId, double forwardInches, double leftInches) {
+            if (s.aimTarget != null) {
+                throw new IllegalStateException("aimTo() target already configured; choose only one target method");
+            }
             s.aimTarget = new DriveGuidancePlan.TagPoint(tagId, forwardInches, leftInches);
             return this;
         }
@@ -661,6 +893,9 @@ public final class DriveGuidance {
         }
     }
 
+    /**
+     * Implementation of {@link FeedbackBuilder}.
+     */
     private static final class FeedbackStep<RETURN> implements FeedbackBuilder<RETURN> {
         private final State s;
         private final RETURN ret;
@@ -736,12 +971,6 @@ public final class DriveGuidance {
         @Override
         public FeedbackBuilder<RETURN> lossPolicy(DriveGuidancePlan.LossPolicy lossPolicy) {
             s.lossPolicy = Objects.requireNonNull(lossPolicy, "lossPolicy");
-            return this;
-        }
-
-        @Override
-        public FeedbackBuilder<RETURN> autoSelect() {
-            s.autoSelectIntent = true;
             return this;
         }
 

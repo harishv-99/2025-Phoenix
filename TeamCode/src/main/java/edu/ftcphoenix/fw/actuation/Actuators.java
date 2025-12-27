@@ -57,10 +57,14 @@ import edu.ftcphoenix.fw.ftc.FtcHardware;
  */
 public final class Actuators {
 
-    /** Default tolerance for motor position plants (native units). */
+    /**
+     * Default tolerance for motor position plants (native units).
+     */
     private static final double DEFAULT_MOTOR_POSITION_TOLERANCE_NATIVE = 10.0;
 
-    /** Default tolerance for motor velocity plants (native units). */
+    /**
+     * Default tolerance for motor velocity plants (native units).
+     */
     private static final double DEFAULT_MOTOR_VELOCITY_TOLERANCE_NATIVE = 100.0;
 
     private Actuators() {
@@ -125,7 +129,7 @@ public final class Actuators {
          *   <li>Finish with {@link ModifiersStep#build()}.</li>
          * </ul>
          *
-         * @param name configured device name in the FTC Robot Configuration
+         * @param name      configured device name in the FTC Robot Configuration
          * @param direction logical direction for this motor channel
          * @return the next stage of the builder for motors
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -152,7 +156,7 @@ public final class Actuators {
          *   <li>Finish with {@link ModifiersStep#build()}.</li>
          * </ul>
          *
-         * @param name configured device name in the FTC Robot Configuration
+         * @param name      configured device name in the FTC Robot Configuration
          * @param direction logical direction for this servo channel
          * @return the next stage of the builder for servos
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -175,7 +179,7 @@ public final class Actuators {
          *   <li>Finish with {@link ModifiersStep#build()}.</li>
          * </ul>
          *
-         * @param name configured device name in the FTC Robot Configuration
+         * @param name      configured device name in the FTC Robot Configuration
          * @param direction logical direction for this CR servo channel
          * @return the next stage of the builder for CR servos
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -221,7 +225,7 @@ public final class Actuators {
          * <p>This is useful when you want a mechanism to ramp up slowly but ramp down quickly,
          * or vice versa (for example, soft-start an intake but allow a rapid stop).</p>
          *
-         * @param maxUpPerSec maximum increase allowed per second (must be {@code >= 0})
+         * @param maxUpPerSec   maximum increase allowed per second (must be {@code >= 0})
          * @param maxDownPerSec maximum decrease allowed per second (must be {@code >= 0})
          * @return this stage for chaining
          * @throws IllegalArgumentException if either argument is negative
@@ -236,6 +240,12 @@ public final class Actuators {
         Plant build();
     }
 
+    /**
+     * Implementation of {@link ModifiersStep}.
+     *
+     * <p>This stage wraps the current {@link Plant} and applies optional modifiers
+     * (like rate limiting) before returning the final plant via {@link #build()}.</p>
+     */
     private static final class ModifiersStepImpl implements ModifiersStep {
         private Plant plant;
 
@@ -243,21 +253,27 @@ public final class Actuators {
             this.plant = Objects.requireNonNull(plant, "plant");
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep rateLimit(double maxDeltaPerSec) {
             plant = new RateLimitedPlant(plant, maxDeltaPerSec);
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep rateLimit(double maxUpPerSec, double maxDownPerSec) {
             plant = new RateLimitedPlant(plant, maxUpPerSec, maxDownPerSec);
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public Plant build() {
             return plant;
@@ -268,7 +284,7 @@ public final class Actuators {
     // DC MOTOR BUILDER
     // =====================================================================
 
-        /**
+    /**
      * Motor builder stage when exactly one motor has been selected.
      *
      * <p>At this stage, IntelliSense will not show tuning helpers like
@@ -284,10 +300,10 @@ public final class Actuators {
          * {@link MotorGroupAddedStep#scale(double)} and {@link MotorGroupAddedStep#bias(double)}
          * apply to that last added motor.</p>
          *
-         * @param name configured motor name in the FTC Robot Configuration
+         * @param name      configured motor name in the FTC Robot Configuration
          * @param direction logical direction for the motor
          * @return a stage that allows tuning the motor you just added, adding more motors,
-         *         or selecting a control mode
+         * or selecting a control mode
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
          */
         MotorGroupAddedStep andMotor(String name, Direction direction);
@@ -359,7 +375,7 @@ public final class Actuators {
          * <p>The motor you add becomes the "last added" motor and is the one affected by
          * {@link MotorGroupAddedStep#scale(double)} and {@link MotorGroupAddedStep#bias(double)}.</p>
          *
-         * @param name configured motor name in the FTC Robot Configuration
+         * @param name      configured motor name in the FTC Robot Configuration
          * @param direction logical direction for the motor
          * @return a stage that allows tuning the motor you just added
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -463,14 +479,25 @@ public final class Actuators {
          * the <b>last-added motor</b>.
          *
          * @param scale multiplier applied to the group target
-         * @param bias constant offset applied after scaling
+         * @param bias  constant offset applied after scaling
          * @return this stage for chaining
          */
         MotorGroupAddedStep tune(double scale, double bias);
     }
 
+    /**
+     * Internal builder that implements the motor stages.
+     *
+     * <p>We keep this private so students interact only with the staged interfaces.
+     * This class collects per-motor specs and constructs the final {@link Plant}.</p>
+     */
     private static final class MotorBuilder implements MotorSingleStep, MotorGroupAddedStep {
 
+        /**
+         * Specification for one motor in a multi-motor group.
+         *
+         * <p>Scale/bias are applied to the group target when fanning out to individual motors.</p>
+         */
         private static final class Spec {
             final String name;
             final Direction direction;
@@ -493,7 +520,9 @@ public final class Actuators {
             lastIndex = 0;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public MotorGroupAddedStep andMotor(String name, Direction direction) {
             specs.add(new Spec(name, direction));
@@ -501,21 +530,27 @@ public final class Actuators {
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public MotorGroupAddedStep scale(double scale) {
             specs.get(lastIndex).scale = scale;
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public MotorGroupAddedStep bias(double bias) {
             specs.get(lastIndex).bias = bias;
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public MotorGroupAddedStep tune(double scale, double bias) {
             Spec s = specs.get(lastIndex);
@@ -524,33 +559,43 @@ public final class Actuators {
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep power() {
             Plant plant = buildPowerPlant();
             return new ModifiersStepImpl(plant);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep velocity() {
             return velocity(DEFAULT_MOTOR_VELOCITY_TOLERANCE_NATIVE);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep velocity(double toleranceNative) {
             Plant plant = buildVelocityPlant(toleranceNative);
             return new ModifiersStepImpl(plant);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep position() {
             return position(DEFAULT_MOTOR_POSITION_TOLERANCE_NATIVE);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep position(double toleranceNative) {
             Plant plant = buildPositionPlant(toleranceNative);
@@ -622,10 +667,10 @@ public final class Actuators {
          * {@link ServoGroupAddedStep#scale(double)} and {@link ServoGroupAddedStep#bias(double)}
          * apply to that last added servo.</p>
          *
-         * @param name configured servo name in the FTC Robot Configuration
+         * @param name      configured servo name in the FTC Robot Configuration
          * @param direction logical direction for the servo channel
          * @return a stage that allows tuning the servo you just added, adding more servos,
-         *         or selecting {@link #position()}
+         * or selecting {@link #position()}
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
          */
         ServoGroupAddedStep andServo(String name, Direction direction);
@@ -648,7 +693,7 @@ public final class Actuators {
         /**
          * Add another positional servo to this servo group.
          *
-         * @param name configured servo name in the FTC Robot Configuration
+         * @param name      configured servo name in the FTC Robot Configuration
          * @param direction logical direction for the servo channel
          * @return a stage that allows tuning the servo you just added
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -698,14 +743,20 @@ public final class Actuators {
          * the <b>last-added servo</b>.
          *
          * @param scale multiplier applied to the group target
-         * @param bias constant offset applied after scaling
+         * @param bias  constant offset applied after scaling
          * @return this stage for chaining
          */
         ServoGroupAddedStep tune(double scale, double bias);
     }
 
+    /**
+     * Internal builder that implements the servo stages.
+     */
     private static final class ServoBuilder implements ServoSingleStep, ServoGroupAddedStep {
 
+        /**
+         * Specification for one servo in a multi-servo group.
+         */
         private static final class Spec {
             final String name;
             final Direction direction;
@@ -728,7 +779,9 @@ public final class Actuators {
             lastIndex = 0;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ServoGroupAddedStep andServo(String name, Direction direction) {
             specs.add(new Spec(name, direction));
@@ -736,21 +789,27 @@ public final class Actuators {
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ServoGroupAddedStep scale(double scale) {
             specs.get(lastIndex).scale = scale;
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ServoGroupAddedStep bias(double bias) {
             specs.get(lastIndex).bias = bias;
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ServoGroupAddedStep tune(double scale, double bias) {
             Spec s = specs.get(lastIndex);
@@ -759,7 +818,9 @@ public final class Actuators {
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep position() {
             Plant plant = buildPositionPlant();
@@ -800,7 +861,7 @@ public final class Actuators {
          * {@link CrServoGroupAddedStep#scale(double)} and {@link CrServoGroupAddedStep#bias(double)}
          * apply to that last added actuator.</p>
          *
-         * @param name configured CR servo name in the FTC Robot Configuration
+         * @param name      configured CR servo name in the FTC Robot Configuration
          * @param direction logical direction for the CR servo channel
          * @return a stage that allows tuning the CR servo you just added, adding more, or selecting {@link #power()}
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -825,7 +886,7 @@ public final class Actuators {
         /**
          * Add another CR servo to this group.
          *
-         * @param name configured CR servo name in the FTC Robot Configuration
+         * @param name      configured CR servo name in the FTC Robot Configuration
          * @param direction logical direction for the CR servo channel
          * @return a stage that allows tuning the CR servo you just added
          * @throws NullPointerException if {@code name} or {@code direction} is {@code null}
@@ -874,14 +935,20 @@ public final class Actuators {
          * the <b>last-added CR servo</b>.
          *
          * @param scale multiplier applied to the group target
-         * @param bias constant offset applied after scaling
+         * @param bias  constant offset applied after scaling
          * @return this stage for chaining
          */
         CrServoGroupAddedStep tune(double scale, double bias);
     }
 
+    /**
+     * Internal builder that implements the continuous-rotation servo (CR servo) stages.
+     */
     private static final class CrServoBuilder implements CrServoSingleStep, CrServoGroupAddedStep {
 
+        /**
+         * Specification for one CR servo in a multi-servo group.
+         */
         private static final class Spec {
             final String name;
             final Direction direction;
@@ -904,7 +971,9 @@ public final class Actuators {
             lastIndex = 0;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public CrServoGroupAddedStep andCrServo(String name, Direction direction) {
             specs.add(new Spec(name, direction));
@@ -912,21 +981,27 @@ public final class Actuators {
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public CrServoGroupAddedStep scale(double scale) {
             specs.get(lastIndex).scale = scale;
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public CrServoGroupAddedStep bias(double bias) {
             specs.get(lastIndex).bias = bias;
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public CrServoGroupAddedStep tune(double scale, double bias) {
             Spec s = specs.get(lastIndex);
@@ -935,7 +1010,9 @@ public final class Actuators {
             return this;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public ModifiersStep power() {
             Plant plant = buildPowerPlant();

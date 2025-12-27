@@ -56,6 +56,9 @@ public final class Plants {
         return new PowerPlant(out);
     }
 
+    /**
+     * Internal {@link Plant} implementation for {@link PowerOutput} channels.
+     */
     private static final class PowerPlant implements Plant {
         private final PowerOutput out;
         private double target = 0.0;
@@ -64,39 +67,51 @@ public final class Plants {
             this.out = out;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void setTarget(double target) {
             this.target = target;
             out.setPower(target);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public double getTarget() {
             return target;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void update(double dtSec) {
             // No additional control logic; relies on underlying implementation.
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void stop() {
             out.stop();
             target = 0.0;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean atSetpoint() {
             return true;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "PowerPlant{target=" + target + "}";
@@ -125,6 +140,9 @@ public final class Plants {
         return new PositionPlant(out);
     }
 
+    /**
+     * Internal {@link Plant} implementation for open-loop position channels (e.g., servos).
+     */
     private static final class PositionPlant implements Plant {
         private final PositionOutput out;
         private double target = 0.0;
@@ -133,39 +151,51 @@ public final class Plants {
             this.out = out;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void setTarget(double target) {
             this.target = target;
             out.setPosition(target);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public double getTarget() {
             return target;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void update(double dtSec) {
             // No additional control logic; relies on underlying implementation.
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void stop() {
             out.stop();
             // Keep target as-is; this plant is open-loop in terms of atSetpoint().
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean atSetpoint() {
             return true;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "PositionPlant{target=" + target + "}";
@@ -197,6 +227,9 @@ public final class Plants {
         return new MotorPositionPlant(out, toleranceNative);
     }
 
+    /**
+     * Internal {@link Plant} implementation for encoder-backed position control with feedback.
+     */
     private static final class MotorPositionPlant implements Plant {
         private final PositionOutput out;
         private final double toleranceNative;
@@ -212,32 +245,42 @@ public final class Plants {
             this.toleranceNative = toleranceNative;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void setTarget(double target) {
             this.target = target;
             out.setPosition(target + offsetNative);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public double getTarget() {
             return target;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void update(double dtSec) {
             // No additional control beyond the underlying motor controller.
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void stop() {
             out.stop();
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void reset() {
             // Re-zero the plant's coordinate frame at the current measured position.
@@ -246,7 +289,9 @@ public final class Plants {
             target = 0.0;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean atSetpoint() {
             double measuredPlantFrame = out.getMeasuredPosition() - offsetNative;
@@ -254,13 +299,17 @@ public final class Plants {
             return Math.abs(error) <= toleranceNative;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasFeedback() {
             return true;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "MotorPositionPlant{target=" + target +
@@ -290,6 +339,9 @@ public final class Plants {
         return new VelocityPlant(out, toleranceNative);
     }
 
+    /**
+     * Internal {@link Plant} implementation for encoder-backed velocity control with feedback.
+     */
     private static final class VelocityPlant implements Plant {
         private final VelocityOutput out;
         private final double toleranceNative;
@@ -300,45 +352,59 @@ public final class Plants {
             this.toleranceNative = toleranceNative;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void setTarget(double target) {
             this.target = target;
             out.setVelocity(target);
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public double getTarget() {
             return target;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void update(double dtSec) {
             // No additional control logic; relies on underlying implementation.
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public void stop() {
             out.stop();
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean atSetpoint() {
             double error = out.getMeasuredVelocity() - target;
             return Math.abs(error) <= toleranceNative;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public boolean hasFeedback() {
             return true;
         }
 
-        /** {@inheritDoc} */
+        /**
+         * {@inheritDoc}
+         */
         @Override
         public String toString() {
             return "VelocityPlant{target=" + target +
