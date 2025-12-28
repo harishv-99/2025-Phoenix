@@ -79,6 +79,12 @@ Phoenix is designed around a few core goals:
    * Keep it short (single line).
    * Avoid huge nested output; if it wants to be multi-line or you want nested structure, prefer `debugDump(...)`.
 
+   **Debug vs required telemetry:**
+
+   * `debugDump(...)` is for diagnostics and understanding internal state. It should be safe to disable (for performance or to reduce telemetry noise).
+   * Driver-facing / “required for normal operation” telemetry (mode, safety warnings, high-level state the drivers rely on) should **not** depend on the debug pipeline.
+     In FTC OpModes, print that information via the FTC `Telemetry` API directly (or via a dedicated always-on status channel).
+
 7. **Fail fast with actionable errors**
 
    When something is misconfigured, Phoenix should throw early (often at build-time) with an

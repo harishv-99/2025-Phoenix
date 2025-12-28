@@ -317,22 +317,36 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
         shooter.update(dtSec);
         transfer.update(dtSec);
         pusher.update(dtSec);
-        // --- 6) Debug / Telemetry ---
-        dbg.addLine("FW Example 03: Shooter Macro");
+        // --- 6) Required telemetry (driver-facing) ---
+        // This is the information you should not lose even when debug output is disabled.
+        telemetry.addLine("FW Example 03: Shooter Macro");
+        telemetry.addData("drive.cmd", driveCmd);
+        telemetry.addData("macro.active", macroRunner.hasActiveTask());
+        telemetry.addData("macro.queued", macroRunner.queuedCount());
+        telemetry.addData("shooter.targetNative", shooter.getTarget());
+        telemetry.addData("shooter.atSetpoint", shooter.atSetpoint());
+        telemetry.addData("transfer.target", transfer.getTarget());
+        telemetry.addData("pusher.target", pusher.getTarget());
+        telemetry.addData("debug.enabled", DEBUG);
 
-        clock.debugDump(dbg, "clock");
-        gamepads.debugDump(dbg, "pads");
-        bindings.debugDump(dbg, "bindings");
+        // --- 7) Optional debug (can be disabled without breaking required telemetry) ---
+        // Use DebugSink + debugDump() for verbose internal state.
+        if (DEBUG) {
+            dbg.addLine("--- debugDump() (optional) ---");
 
-        macroRunner.debugDump(dbg, "macro");
+            clock.debugDump(dbg, "clock");
+            gamepads.debugDump(dbg, "pads");
+            bindings.debugDump(dbg, "bindings");
 
-        stickDrive.debugDump(dbg, "driveSrc");
-        dbg.addData("drive.cmd", driveCmd);
-        drivebase.debugDump(dbg, "drivebase");
+            macroRunner.debugDump(dbg, "macro");
 
-        shooter.debugDump(dbg, "shooter");
-        transfer.debugDump(dbg, "transfer");
-        pusher.debugDump(dbg, "pusher");
+            stickDrive.debugDump(dbg, "driveSrc");
+            drivebase.debugDump(dbg, "drivebase");
+
+            shooter.debugDump(dbg, "shooter");
+            transfer.debugDump(dbg, "transfer");
+            pusher.debugDump(dbg, "pusher");
+        }
 
         telemetry.update();
     }

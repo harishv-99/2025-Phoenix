@@ -286,21 +286,30 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
 
         // Update shooter plant once per loop.
         shooter.update(dtSec);
-        // --- 5) Debug / Telemetry ---
-        dbg.addLine("FW Example 04: Shooter Interpolated");
+        // --- 5) Required telemetry (driver-facing) ---
+        // This is the information you should not lose even when debug output is disabled.
+        telemetry.addLine("FW Example 04: Shooter Interpolated");
+        telemetry.addData("drive.cmd", driveCmd);
+        telemetry.addData("shooter.enabled", shooterEnabled);
+        telemetry.addData("range.in", distanceInches);
+        telemetry.addData("shooter.targetNative", lastShooterTarget);
+        telemetry.addData("shooter.atSetpoint", shooter.atSetpoint());
+        telemetry.addData("debug.enabled", DEBUG);
 
-        clock.debugDump(dbg, "clock");
-        gamepads.debugDump(dbg, "pads");
-        bindings.debugDump(dbg, "bindings");
+        // --- 6) Optional debug (can be disabled without breaking required telemetry) ---
+        // Use DebugSink + debugDump() for verbose internal state.
+        if (DEBUG) {
+            dbg.addLine("--- debugDump() (optional) ---");
 
-        stickDrive.debugDump(dbg, "driveSrc");
-        dbg.addData("drive.cmd", driveCmd);
-        drivebase.debugDump(dbg, "drivebase");
+            clock.debugDump(dbg, "clock");
+            gamepads.debugDump(dbg, "pads");
+            bindings.debugDump(dbg, "bindings");
 
-        dbg.addData("shooterEnabled", shooterEnabled);
-        dbg.addData("distanceIn", distanceInches);
-        dbg.addData("shooterTargetNative", lastShooterTarget);
-        shooter.debugDump(dbg, "shooter");
+            stickDrive.debugDump(dbg, "driveSrc");
+            drivebase.debugDump(dbg, "drivebase");
+
+            shooter.debugDump(dbg, "shooter");
+        }
 
         telemetry.update();
     }

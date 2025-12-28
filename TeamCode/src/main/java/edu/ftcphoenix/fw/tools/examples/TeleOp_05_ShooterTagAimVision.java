@@ -287,22 +287,38 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         // Shooter plant executes whatever target we just decided above
         shooter.update(dtSec);
-        // 5) Report (debugDump)
-        dbg.addLine("FW Example 05: Shooter Guidance Aim Vision");
 
-        clock.debugDump(dbg, "clock");
-        gamepads.debugDump(dbg, "pads");
-        bindings.debugDump(dbg, "bindings");
+        // 5) Report
+        //
+        // Important rule: telemetry required for normal operation (driver-facing state) should
+        // NOT go through the debug pipeline. Debug is optional and should be safe to disable.
 
-        scoringTarget.debugDump(dbg, "tag", cameraMount);
+        // --- Required telemetry (driver-facing) ---
+        telemetry.addLine("FW Example 05: Shooter DriveGuidance Vision");
+        telemetry.addData("aim.active", gamepads.p1().leftBumper().isHeld());
+        telemetry.addData("tag.hasTarget", lastHasTarget);
+        telemetry.addData("tag.id", lastTagId);
+        telemetry.addData("tag.rangeIn", lastTagRangeInches);
+        telemetry.addData("tag.ageSec", lastTagAgeSec);
+        telemetry.addData("shooter.enabled", shooterEnabled);
+        telemetry.addData("shooter.targetVelNative", lastShooterTargetVel);
+        telemetry.addData("drive.cmd", cmd);
+        telemetry.addData("debug.enabled", DEBUG);
 
-        dbg.addData("shooter.enabled", shooterEnabled);
-        dbg.addData("shooter.targetVelNative", lastShooterTargetVel);
-        shooter.debugDump(dbg, "shooter");
+        // --- Optional debug (verbose; can be disabled without losing required telemetry) ---
+        if (DEBUG) {
+            dbg.addLine("--- debugDump() (optional) ---");
 
-        driveWithAim.debugDump(dbg, "driveSrc");
-        dbg.addData("drive.cmd", cmd);
-        drivebase.debugDump(dbg, "drivebase");
+            clock.debugDump(dbg, "clock");
+            gamepads.debugDump(dbg, "pads");
+            bindings.debugDump(dbg, "bindings");
+
+            scoringTarget.debugDump(dbg, "tag", cameraMount);
+            shooter.debugDump(dbg, "shooter");
+
+            driveWithAim.debugDump(dbg, "driveSrc");
+            drivebase.debugDump(dbg, "drivebase");
+        }
 
         telemetry.update();
     }

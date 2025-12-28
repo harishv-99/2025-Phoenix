@@ -94,15 +94,24 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         // --- 4) Actuation: update drivebase timing, then send command ---
         drivebase.update(clock);
         drivebase.drive(cmd);
-        // --- 5) Debug / Telemetry ---
-        dbg.addLine("FW Example 01: Mecanum Basic");
 
-        clock.debugDump(dbg, "clock");
-        gamepads.debugDump(dbg, "pads");
+        // --- 5) Required telemetry (driver-facing) ---
+        // This is the information you should not lose even when debug output is disabled.
+        telemetry.addLine("FW Example 01: Mecanum Basic");
+        telemetry.addData("drive.cmd", cmd);
+        telemetry.addData("debug.enabled", DEBUG);
 
-        stickDrive.debugDump(dbg, "driveSrc");
-        dbg.addData("drive.cmd", cmd);
-        drivebase.debugDump(dbg, "drivebase");
+        // --- 6) Optional debug (can be disabled without breaking required telemetry) ---
+        // Use DebugSink + debugDump() for verbose internal state.
+        if (DEBUG) {
+            dbg.addLine("--- debugDump() (optional) ---");
+
+            clock.debugDump(dbg, "clock");
+            gamepads.debugDump(dbg, "pads");
+
+            stickDrive.debugDump(dbg, "driveSrc");
+            drivebase.debugDump(dbg, "drivebase");
+        }
 
         telemetry.update();
     }
