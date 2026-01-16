@@ -111,7 +111,8 @@ public final class PhoenixRobot {
 
         // --- Create mechanisms ---
         MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
-        mecanumConfig.maxLateralRatePerSec = 0.01;
+        // NOTE: avoid tiny values here. maxLateralRatePerSec is in "command units / sec".
+        // Setting it near zero effectively disables strafing.
         drivebase = Drives.mecanum(
                 hardwareMap,
                 RobotConfig.DriveTrain.mecanumWiring(),
@@ -251,7 +252,8 @@ public final class PhoenixRobot {
         }
 
         // --- 4) Drive: guidance overlay (P2 LB may override omega) ---
-        DriveSignal cmd = driveWithAim.get(clock);
+        // Use the composed source (base sticks + optional omega overlay), not the raw stick source.
+        DriveSignal cmd = driveWithAim.get(clock).clamped();
         drivebase.update(clock);
         drivebase.drive(cmd);
 
@@ -260,7 +262,7 @@ public final class PhoenixRobot {
 
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
-//        driveWithAim.debugDump(dbg, "driveWAim");
+//        driveWithAim.debugDump(dbg, "drive");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
             if (Math.abs(scoringTarget.robotBearingRad(cameraMountConfig)) <= (aimTuning.aimDeadbandRad * 5))

@@ -79,8 +79,8 @@ public class RobotConfig {
         public static final double velocityMax = 1900;
         public static final double velocityIncrement = 50;
 
-        public static final double targetPusherBack = 0.5;
-        public static final double targetPusherFront = 0.9;
+        public static final double targetPusherBack = 0.55;
+        public static final double targetPusherFront = 1.00;
     }
 
 

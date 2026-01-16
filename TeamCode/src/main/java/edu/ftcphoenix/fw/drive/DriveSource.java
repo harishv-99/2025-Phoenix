@@ -76,7 +76,15 @@ public interface DriveSource {
             return;
         }
         String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
-        dbg.addData(p + ".class", getClass().getSimpleName());
+
+        // Note: anonymous classes have an empty simple name, and lambdas have a compiler-generated
+        // name. For debug output we prefer something non-empty and stable.
+        String simple = getClass().getSimpleName();
+        String className = (simple == null || simple.isEmpty())
+                ? getClass().getName()
+                : simple;
+
+        dbg.addData(p + ".class", className);
     }
 
     /**
@@ -120,12 +128,54 @@ public interface DriveSource {
         }
 
         DriveSource self = this;
-        return clock -> {
-            DriveSignal base = self.get(clock);
-            if (!when.getAsBoolean()) {
-                return base;
+
+        // Important: do NOT return a lambda here.
+        // Lambdas cannot override debugDump(), which breaks debug delegation (Framework Principles).
+        return new DriveSource() {
+            private boolean lastEnabled = false;
+            private DriveSignal lastBase = DriveSignal.zero();
+            private DriveSignal lastOut = DriveSignal.zero();
+
+            @Override
+            public DriveSignal get(LoopClock clock) {
+                DriveSignal base = self.get(clock);
+                lastBase = base;
+
+                boolean enabled = when.getAsBoolean();
+                lastEnabled = enabled;
+
+                DriveSignal out = enabled
+                        ? base.scaled(translationScale, omegaScale)
+                        : base;
+
+                lastOut = out;
+                return out;
             }
-            return base.scaled(translationScale, omegaScale);
+
+            @Override
+            public void debugDump(DebugSink dbg, String prefix) {
+                if (dbg == null) {
+                    return;
+                }
+                String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
+
+                dbg.addData(p + ".class", "DriveSource.scaledWhen");
+                dbg.addData(p + ".scaledWhen.enabled", lastEnabled);
+                dbg.addData(p + ".scaledWhen.translationScale", translationScale);
+                dbg.addData(p + ".scaledWhen.omegaScale", omegaScale);
+
+                // Show both the base output and the final output so the effect is visible.
+                dbg.addData(p + ".scaledWhen.last.base.axial", lastBase.axial);
+                dbg.addData(p + ".scaledWhen.last.base.lateral", lastBase.lateral);
+                dbg.addData(p + ".scaledWhen.last.base.omega", lastBase.omega);
+
+                dbg.addData(p + ".scaledWhen.last.out.axial", lastOut.axial);
+                dbg.addData(p + ".scaledWhen.last.out.lateral", lastOut.lateral);
+                dbg.addData(p + ".scaledWhen.last.out.omega", lastOut.omega);
+
+                // Delegate: debug should drill down into the wrapped source.
+                self.debugDump(dbg, p + ".source");
+            }
         };
     }
 
@@ -145,8 +195,9 @@ public interface DriveSource {
         if (translationScale == 1.0 && omegaScale == 1.0) {
             return this;
         }
-        DriveSource self = this;
-        return clock -> self.get(clock).scaled(translationScale, omegaScale);
+
+        // Route through scaledWhen(...) so debugDump delegation is preserved.
+        return scaledWhen(() -> true, translationScale, omegaScale);
     }
 
     /**
@@ -226,7 +277,7 @@ public interface DriveSource {
                     return;
                 }
                 String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
-                dbg.addData(p + ".class", getClass().getSimpleName());
+                dbg.addData(p + ".class", "DriveSource.overlayWhen");
                 dbg.addData(p + ".overlay.enabled", lastEnabled);
                 dbg.addData(p + ".overlay.requestedMask", requestedMask.toString());
                 overlay.debugDump(dbg, p + ".overlay");
@@ -271,10 +322,48 @@ public interface DriveSource {
         Objects.requireNonNull(other, "other DriveSource must not be null");
         final double alphaClamped = Math.max(0.0, Math.min(1.0, alpha));
         DriveSource self = this;
-        return clock -> {
-            DriveSignal a = self.get(clock);
-            DriveSignal b = other.get(clock);
-            return a.lerp(b, alphaClamped);
+
+        // Same debug principle as scaledWhen(...): return a real object so we can override debugDump.
+        return new DriveSource() {
+            private DriveSignal lastA = DriveSignal.zero();
+            private DriveSignal lastB = DriveSignal.zero();
+            private DriveSignal lastOut = DriveSignal.zero();
+
+            @Override
+            public DriveSignal get(LoopClock clock) {
+                DriveSignal a = self.get(clock);
+                DriveSignal b = other.get(clock);
+                lastA = a;
+                lastB = b;
+                lastOut = a.lerp(b, alphaClamped);
+                return lastOut;
+            }
+
+            @Override
+            public void debugDump(DebugSink dbg, String prefix) {
+                if (dbg == null) {
+                    return;
+                }
+                String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
+
+                dbg.addData(p + ".class", "DriveSource.blendedWith");
+                dbg.addData(p + ".blend.alpha", alphaClamped);
+
+                dbg.addData(p + ".blend.last.a.axial", lastA.axial);
+                dbg.addData(p + ".blend.last.a.lateral", lastA.lateral);
+                dbg.addData(p + ".blend.last.a.omega", lastA.omega);
+
+                dbg.addData(p + ".blend.last.b.axial", lastB.axial);
+                dbg.addData(p + ".blend.last.b.lateral", lastB.lateral);
+                dbg.addData(p + ".blend.last.b.omega", lastB.omega);
+
+                dbg.addData(p + ".blend.last.out.axial", lastOut.axial);
+                dbg.addData(p + ".blend.last.out.lateral", lastOut.lateral);
+                dbg.addData(p + ".blend.last.out.omega", lastOut.omega);
+
+                self.debugDump(dbg, p + ".a");
+                other.debugDump(dbg, p + ".b");
+            }
         };
     }
 }
