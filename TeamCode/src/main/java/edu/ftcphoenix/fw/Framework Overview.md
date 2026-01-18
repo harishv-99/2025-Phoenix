@@ -38,6 +38,19 @@ These exist so the student-facing packages stay small and consistent:
 * `edu.ftcphoenix.fw.tools.*` — testers and examples you can copy.
 * `edu.ftcphoenix.fw.legacy.*` — intentionally retained older base classes (not recommended for new code).
 
+One important gotcha with FTC vision:
+
+* Anything backed by a `VisionPortal` **owns the camera**. When you are done with a vision tester/OpMode,
+  make sure the portal is closed so the next tester can start the camera cleanly.
+  In Phoenix, `AprilTagSensor` has a `close()` method for this purpose—call it on `stop()`/BACK navigation.
+
+Tester naming conventions (telemetry menus):
+
+* Prefix calibration routines with `Calib:`
+* Prefix localization/pose display tools with `Loc:`
+* Prefix hardware sanity checks with `HW:`
+* If a tester is robot-specific, make that obvious in the label (for example, append `(Robot)` or include the robot name)
+
 Two rules of thumb:
 
 1. If a class references FTC SDK types (`com.qualcomm.*`), it belongs in `fw.ftc` or `fw.tools`, not in the core building blocks.

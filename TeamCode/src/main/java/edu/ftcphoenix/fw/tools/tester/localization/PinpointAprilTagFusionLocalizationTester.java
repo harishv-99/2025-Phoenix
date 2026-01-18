@@ -224,12 +224,24 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
         ready = false;
         initError = null;
         layout = null;
+        if (tagSensor != null) {
+            tagSensor.close();
+        }
         tagSensor = null;
         target = null;
         visionEstimator = null;
         odomEstimator = null;
         fusedEstimator = null;
         return true;
+    }
+
+    @Override
+    protected void onStop() {
+        // Ensure we release the camera portal on exit.
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
+        }
     }
 
     private void renderPicker() {
@@ -319,6 +331,18 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
         t.addLine("Controls: START any/single | X/Y tag id | A snap-to-vision | B vision on/off | RB zero | BACK picker");
         t.addLine();
 
+        // Dependencies / preflight hints. These testers are often used during calibration
+        // bring-up; surface common "why does this look wrong?" causes directly on screen.
+        if (isLikelyIdentity(cameraMount)) {
+            t.addLine("NOTE: CameraMountConfig looks uncalibrated (identity). Run 'Calib: Camera Mount'.");
+        }
+        if (isLikelyDefaultPinpointOffsets(pinpointCfg)) {
+            t.addLine("NOTE: Pinpoint pod offsets look default (0/0). Run 'Calib: Pinpoint Pod Offsets'.");
+        }
+        if (isLikelyIdentity(cameraMount) || isLikelyDefaultPinpointOffsets(pinpointCfg)) {
+            t.addLine();
+        }
+
         t.addData("Camera", selectedCameraName);
         t.addData("Mode", trackAny ? "ANY" : ("SINGLE (id=" + selectedTagId + ")"));
         t.addData("Vision Enabled", fusedEstimator.isVisionEnabled());
@@ -349,6 +373,25 @@ public final class PinpointAprilTagFusionLocalizationTester extends BaseTeleOpTe
         }
 
         t.update();
+    }
+
+    private static boolean isLikelyIdentity(CameraMountConfig mount) {
+        if (mount == null) return true;
+        Pose3d p = mount.robotToCameraPose();
+        double tol = 1e-6;
+        return Math.abs(p.xInches) < tol
+                && Math.abs(p.yInches) < tol
+                && Math.abs(p.zInches) < tol
+                && Math.abs(p.rollRad) < tol
+                && Math.abs(p.pitchRad) < tol
+                && Math.abs(p.yawRad) < tol;
+    }
+
+    private static boolean isLikelyDefaultPinpointOffsets(PinpointPoseEstimator.Config cfg) {
+        if (cfg == null) return true;
+        double tol = 1e-6;
+        return Math.abs(cfg.forwardPodOffsetLeftInches) < tol
+                && Math.abs(cfg.strafePodOffsetForwardInches) < tol;
     }
 
     private static void renderPose(Telemetry t, String label, PoseEstimate est) {

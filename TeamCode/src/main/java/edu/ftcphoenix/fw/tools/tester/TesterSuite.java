@@ -31,10 +31,54 @@ public final class TesterSuite extends BaseTeleOpTester {
     private boolean inMenu = true;
     private boolean opModeStarted = false;
 
+    // -----------------------------------------------------------------------------------------
+    // Menu configuration
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Override the menu title.
+     */
+    public TesterSuite setTitle(String title) {
+        menu.setTitle(title);
+        return this;
+    }
+
+    /**
+     * Override the menu's global help line.
+     */
+    public TesterSuite setHelp(String help) {
+        menu.setHelp(help);
+        return this;
+    }
+
+    /**
+     * Set whether menu selection wraps around at the ends.
+     */
+    public TesterSuite setWrap(boolean wrap) {
+        menu.setWrap(wrap);
+        return this;
+    }
+
+    /**
+     * Limit how many items are rendered at one time.
+     */
+    public TesterSuite setMaxVisibleItems(int maxVisibleItems) {
+        menu.setMaxVisibleItems(maxVisibleItems);
+        return this;
+    }
+
+    /**
+     * Set the initial selection index for the menu.
+     */
+    public TesterSuite setSelectedIndex(int index) {
+        menu.setSelectedIndex(index);
+        return this;
+    }
+
     /**
      * Register a tester in the menu (no help text).
      *
-     * @param name display name in the menu
+     * @param name    display name in the menu
      * @param factory factory that creates a new tester instance when selected
      * @return this suite for chaining
      */
@@ -45,8 +89,8 @@ public final class TesterSuite extends BaseTeleOpTester {
     /**
      * Register a tester in the menu with optional one-line help.
      *
-     * @param name display name in the menu
-     * @param help optional help line shown under the item (nullable)
+     * @param name    display name in the menu
+     * @param help    optional help line shown under the item (nullable)
      * @param factory factory that creates a new tester instance when selected
      * @return this suite for chaining
      */
@@ -55,13 +99,44 @@ public final class TesterSuite extends BaseTeleOpTester {
         return this;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String name() {
         return "Tester Suite";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * Allow this suite to be nested inside another {@link TesterSuite}.
+     *
+     * <p>When nested, the parent suite offers BACK to the active tester via
+     * {@link TeleOpTester#onBackPressed()}. The default implementation returns
+     * {@code false}, which would cause the parent to immediately exit this suite.
+     * We implement BACK semantics here so nested suites behave like a normal "sub-menu":
+     * <ul>
+     *   <li>If this suite is showing its own menu, BACK is not consumed (parent can exit).</li>
+     *   <li>If this suite is running a tester, BACK returns to this suite's menu.</li>
+     * </ul>
+     */
+    @Override
+    public boolean onBackPressed() {
+        if (inMenu) {
+            return false;
+        }
+
+        if (active != null && active.onBackPressed()) {
+            return true;
+        }
+
+        stopActive();
+        inMenu = true;
+        return true;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onInit() {
         // Menu navigation and selection are ONLY active while inMenu.
@@ -93,7 +168,9 @@ public final class TesterSuite extends BaseTeleOpTester {
         active = null;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onInitLoop(double dtSec) {
         if (inMenu) {
@@ -111,7 +188,9 @@ public final class TesterSuite extends BaseTeleOpTester {
         renderMenu();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onStart() {
         opModeStarted = true;
@@ -120,7 +199,9 @@ public final class TesterSuite extends BaseTeleOpTester {
         }
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onLoop(double dtSec) {
         if (inMenu) {
@@ -138,7 +219,9 @@ public final class TesterSuite extends BaseTeleOpTester {
         renderMenu();
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     protected void onStop() {
         stopActive();
@@ -206,7 +289,7 @@ public final class TesterSuite extends BaseTeleOpTester {
         ctx.telemetry.addLine("");
         ctx.telemetry.addLine(opModeStarted
                 ? "RUNNING: Enter tester with A."
-                : "INIT: Enter a tester with A (it may have its own picker/selection menu)." );
+                : "INIT: Enter a tester with A (it may have its own picker/selection menu).");
         ctx.telemetry.update();
     }
 }

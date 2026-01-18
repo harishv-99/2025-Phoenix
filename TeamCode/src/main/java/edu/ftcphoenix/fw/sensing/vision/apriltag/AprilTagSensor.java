@@ -167,4 +167,28 @@ public interface AprilTagSensor {
     default boolean hasFresh(int id, double maxAgeSec) {
         return best(id, maxAgeSec).hasTarget;
     }
+
+    // ---------------------------------------------------------------------
+    // Resource lifecycle
+    // ---------------------------------------------------------------------
+
+    /**
+     * Release any underlying resources held by this sensor.
+     *
+     * <p>Most implementations are lightweight and do not need explicit cleanup.
+     * However, FTC vision adapters typically allocate native camera/streaming
+     * resources (for example, a {@code VisionPortal}). If those are not released,
+     * later code may fail to start a new portal with errors like “multiple vision
+     * portals”.</p>
+     *
+     * <p>This method is:</p>
+     * <ul>
+     *   <li><b>Optional</b> for callers (safe to ignore if you never create more than one).</li>
+     *   <li><b>Safe to call multiple times</b>.</li>
+     *   <li><b>Non-throwing</b> by contract (implementations should swallow/guard exceptions).</li>
+     * </ul>
+     */
+    default void close() {
+        // Default: no-op.
+    }
 }

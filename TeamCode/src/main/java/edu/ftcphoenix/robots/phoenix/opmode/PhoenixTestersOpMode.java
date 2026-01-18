@@ -1,6 +1,5 @@
 package edu.ftcphoenix.robots.phoenix.opmode;
 
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import edu.ftcphoenix.fw.ftc.FtcTeleOpTesterOpMode;

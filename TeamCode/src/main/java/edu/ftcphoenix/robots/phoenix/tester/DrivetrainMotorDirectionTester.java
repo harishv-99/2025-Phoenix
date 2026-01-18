@@ -44,7 +44,7 @@ public final class DrivetrainMotorDirectionTester extends BaseTeleOpTester {
         if (suite == null) return;
 
         suite.add(
-                "Robot: Drivetrain Motor Direction",
+                "HW: Drivetrain Motor Direction (Robot)",
                 "Hold X/Y/A/B to run FL/FR/BL/BR. Each should drive robot forward.",
                 DrivetrainMotorDirectionTester::new
         );

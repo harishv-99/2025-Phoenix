@@ -8,6 +8,7 @@ import java.util.Locale;
 
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.core.geometry.Pose2d;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.core.math.MathUtil;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.Drives;
@@ -217,6 +218,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     private AprilTagSensor tagSensor;
     private TagTarget tagTarget;
     private TagOnlyPoseEstimator tagEstimator;
+    private String aprilTagAssistNotice;
 
     /**
      * High-level state machine for the calibration flow.
@@ -311,9 +313,18 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
 
         // Optional AprilTag assist
         if (cfg.enableAprilTagAssist) {
+            // AprilTag assistance relies on a calibrated robot->camera mount. If it isn't available,
+            // degrade gracefully: run without assist and tell the driver what to calibrate first.
             if (cfg.cameraMount == null) {
-                throw new IllegalArgumentException("cameraMount is required when enableAprilTagAssist=true");
+                cfg.enableAprilTagAssist = false;
+                aprilTagAssistNotice = "Disabled: cfg.cameraMount not set";
+            } else if (isLikelyIdentity(cfg.cameraMount)) {
+                cfg.enableAprilTagAssist = false;
+                aprilTagAssistNotice = "Disabled: camera mount looks uncalibrated";
             }
+        }
+
+        if (cfg.enableAprilTagAssist) {
 
             layout = (cfg.tagLayout != null)
                     ? cfg.tagLayout
@@ -332,6 +343,13 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                         name -> selectedCameraName = name
                 );
             }
+        }
+
+        // If AprilTag assist is disabled because the camera mount is still identity,
+        // surface that clearly in telemetry so users know which calibration to run next.
+        if (!cfg.enableAprilTagAssist && aprilTagAssistNotice == null
+                && cfg.cameraMount != null && isLikelyIdentity(cfg.cameraMount)) {
+            aprilTagAssistNotice = "Tip: run Calib: Camera Mount to enable AprilTag assist";
         }
 
         // Controls
@@ -811,6 +829,9 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
             }
         } else {
             ctx.telemetry.addData("Tag assist", false);
+            if (aprilTagAssistNotice != null && !aprilTagAssistNotice.isEmpty()) {
+                ctx.telemetry.addData("Assist note", aprilTagAssistNotice);
+            }
         }
 
         ctx.telemetry.addLine();
@@ -927,6 +948,29 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                 );
                 ctx.telemetry.addLine("Copy these into your PinpointPoseEstimator.Config / RobotConfig.");
             }
+        }
+    }
+
+    private static boolean isLikelyIdentity(CameraMountConfig mount) {
+        if (mount == null) {
+            return true;
+        }
+        Pose3d p = mount.robotToCameraPose();
+        double tol = 1e-6;
+        return Math.abs(p.xInches) < tol
+                && Math.abs(p.yInches) < tol
+                && Math.abs(p.zInches) < tol
+                && Math.abs(p.yawRad) < tol
+                && Math.abs(p.pitchRad) < tol
+                && Math.abs(p.rollRad) < tol;
+    }
+
+    @Override
+    protected void onStop() {
+        // Release vision resources (VisionPortal) if AprilTag assist was used.
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
         }
     }
 

@@ -57,14 +57,15 @@ public class Shooter {
                     76.6, 1600,
                     83.4, 1600,
                     94.5, 1650,
-                    103.8, 1650,
-                    112.4, 1700,
-                    123.5, 1750,
-                    125.2, 1750,
-                    132.5, 1750,
-                    137.4, 1800,
-                    141.4, 1850,
-                    148.6, 1850
+                    102.5, 1625,
+                    105.5, 1650,
+                    113.3, 1650,
+                    117.8, 1685,
+                    121, 1700,
+                    125, 1700,
+                    130.2, 1700,
+                    139.4, 1750,
+                    150, 1800
             );
 
 
@@ -159,6 +160,13 @@ public class Shooter {
      */
     public double getVelocity() {
         return velocity;
+    }
+
+    /**
+     * @return whether the shooter motors are currently commanded on.
+     */
+    public boolean isShooterOn() {
+        return isShooterOn;
     }
 
     /**

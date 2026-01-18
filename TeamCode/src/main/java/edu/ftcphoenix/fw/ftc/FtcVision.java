@@ -64,6 +64,17 @@ import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 public final class FtcVision {
 
     /**
+     * Default resource name used by the FTC Robot Controller app for the camera
+     * monitor container.
+     *
+     * <p>The FTC SDK VisionPortal builder can target a specific live-view container
+     * via {@code setLiveViewContainerId(int)}. Using this is required when multiple
+     * VisionPortals exist over the lifetime of an OpMode (for example, when a
+     * tester creates a portal, exits, then another tester creates a new one).</p>
+     */
+    private static final String DEFAULT_CAMERA_MONITOR_VIEW_ID_NAME = "cameraMonitorViewId";
+
+    /**
      * Nano-seconds per second, used when converting FTC's
      * {@link AprilTagDetection#frameAcquisitionNanoTime} into seconds.
      */
@@ -73,6 +84,72 @@ public final class FtcVision {
      * Default camera resolution if none is provided.
      */
     private static final Size DEFAULT_RESOLUTION = new Size(640, 480);
+
+    // -----------------------------------------------------------------------------------------
+    // Live-view helpers
+    // -----------------------------------------------------------------------------------------
+
+    /**
+     * Resolve the FTC Robot Controller's camera monitor container view id.
+     *
+     * <p>FTC samples commonly obtain this value via:
+     * {@code hardwareMap.appContext.getResources().getIdentifier("cameraMonitorViewId", "id", ...)}.
+     * We wrap it here so vision adapters can behave correctly across OpModes and tester flows.</p>
+     */
+    private static int resolveDefaultLiveViewContainerId(HardwareMap hw) {
+        if (hw == null || hw.appContext == null) {
+            return 0;
+        }
+        try {
+            // Primary: use whatever package the RC is running under.
+            int id = hw.appContext.getResources().getIdentifier(
+                    DEFAULT_CAMERA_MONITOR_VIEW_ID_NAME,
+                    "id",
+                    hw.appContext.getPackageName()
+            );
+
+            if (id != 0) {
+                return id;
+            }
+
+            // Fallback: some builds/tooling can end up with an appContext whose package name
+            // is not the canonical RC package. Try the common RC package names explicitly.
+            String[] pkgs = new String[]{
+                    "com.qualcomm.ftcrobotcontroller",
+                    "org.firstinspires.ftc.robotcontroller"
+            };
+
+            for (String p : pkgs) {
+                id = hw.appContext.getResources().getIdentifier(
+                        DEFAULT_CAMERA_MONITOR_VIEW_ID_NAME,
+                        "id",
+                        p
+                );
+                if (id != 0) {
+                    return id;
+                }
+            }
+
+            return 0;
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    /**
+     * Apply a default live-view container id to a {@link VisionPortal.Builder}.
+     *
+     * <p>Why: the FTC SDK throws a runtime error if multiple vision portals exist and you attempt
+     * to use {@code enableLiveView(...)}. Using {@code setLiveViewContainerId(int)} avoids that
+     * failure mode and is safe even when only a single portal is used.</p>
+     */
+    private static void applyDefaultLiveViewContainerId(VisionPortal.Builder builder, HardwareMap hw) {
+        if (builder == null) return;
+        int id = resolveDefaultLiveViewContainerId(hw);
+        if (id != 0) {
+            builder.setLiveViewContainerId(id);
+        }
+    }
 
     /**
      * Configuration for {@link #aprilTags(HardwareMap, String, Config)}.
@@ -222,6 +299,13 @@ public final class FtcVision {
                 .addProcessor(processor)
                 .setCameraResolution(resolution);
 
+        // Important FTC SDK quirk:
+        // If more than one VisionPortal exists (even across previous testers/screens),
+        // the SDK requires you to use setLiveViewContainerId(int) rather than
+        // enableLiveView(bool). We always set the container id when it is available
+        // to avoid hard-to-debug “multiple vision portals” startup errors.
+        applyDefaultLiveViewContainerId(portalBuilder, hw);
+
         VisionPortal portal = portalBuilder.build();
 
         return new PortalAprilTagSensor(portal, processor);
@@ -287,14 +371,31 @@ public final class FtcVision {
      */
     static final class PortalAprilTagSensor implements AprilTagSensor {
 
-        @SuppressWarnings("unused")
-        private final VisionPortal portal;   // kept for lifecycle; not directly used yet
+        private final VisionPortal portal;   // kept for lifecycle; used for close()
+        private boolean closed = false;
 
         private final AprilTagProcessor processor;
 
         PortalAprilTagSensor(VisionPortal portal, AprilTagProcessor processor) {
             this.portal = Objects.requireNonNull(portal, "portal");
             this.processor = Objects.requireNonNull(processor, "processor");
+        }
+
+        /**
+         * Release the underlying {@link VisionPortal}.
+         */
+        @Override
+        public void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+
+            try {
+                portal.close();
+            } catch (Exception ignored) {
+                // Non-throwing by contract.
+            }
         }
 
         /**
@@ -495,4 +596,5 @@ public final class FtcVision {
             return AprilTagObservation.target(bestDet.id, bestCameraToTagPose, bestAgeSec);
         }
     }
+
 }

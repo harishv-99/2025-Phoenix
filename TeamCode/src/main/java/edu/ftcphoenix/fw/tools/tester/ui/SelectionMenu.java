@@ -41,7 +41,7 @@ public final class SelectionMenu<T> {
          * Create a menu item.
          *
          * @param label display label shown in the menu
-         * @param help optional help text shown for the selected item (nullable)
+         * @param help  optional help text shown for the selected item (nullable)
          * @param value value associated with this item (for example a factory or device name)
          */
         public Item(String label, String help, T value) {
@@ -58,6 +58,17 @@ public final class SelectionMenu<T> {
     private int selected = 0;
 
     private boolean wrap = true;
+
+    /**
+     * Maximum number of menu items to render at once.
+     *
+     * <p>FTC Driver Station telemetry has limited vertical space. If we render every item,
+     * long menus push important instructions (usually shown below the menu) off screen.
+     *
+     * <p>When {@link #size()} exceeds this value, the menu renders a scroll window centered
+     * around the current selection.</p>
+     */
+    private int maxVisibleItems = 8;
 
     /**
      * Set the title shown at the top of the menu.
@@ -84,6 +95,16 @@ public final class SelectionMenu<T> {
      */
     public SelectionMenu<T> setWrap(boolean wrap) {
         this.wrap = wrap;
+        return this;
+    }
+
+    /**
+     * Set how many items the menu renders at one time.
+     *
+     * <p>Values &lt;= 0 disable the limit (all items will be rendered).
+     */
+    public SelectionMenu<T> setMaxVisibleItems(int maxVisibleItems) {
+        this.maxVisibleItems = maxVisibleItems;
         return this;
     }
 
@@ -254,14 +275,30 @@ public final class SelectionMenu<T> {
     public void render(Telemetry telemetry) {
         telemetry.addLine("=== " + title + " ===");
         if (help != null && !help.isEmpty()) telemetry.addLine(help);
-        telemetry.addLine("");
+        // Keep a stable screen height: for long menus we render a scroll window so
+        // callers can reserve the bottom of the telemetry page for instructions.
+
+        final int count = items.size();
+        final boolean limit = (maxVisibleItems > 0) && (count > maxVisibleItems);
+
+        int start = 0;
+        int end = count;
+        if (limit) {
+            int half = maxVisibleItems / 2;
+            start = selected - half;
+            start = MathUtil.clamp(start, 0, count - maxVisibleItems);
+            end = start + maxVisibleItems;
+            telemetry.addLine(String.format("Items %d-%d of %d", start + 1, end, count));
+        } else {
+            telemetry.addLine("");
+        }
 
         if (items.isEmpty()) {
             telemetry.addLine("(no items)");
             return;
         }
 
-        for (int i = 0; i < items.size(); i++) {
+        for (int i = start; i < end; i++) {
             String prefix = (i == selected) ? ">> " : "   ";
             telemetry.addLine(prefix + items.get(i).label);
         }

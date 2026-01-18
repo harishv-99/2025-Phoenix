@@ -328,6 +328,10 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
      */
     @Override
     public void stop() {
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
+        }
         shooterEnabled = false;
         shooter.setTarget(0.0);
         shooter.update(0.0);

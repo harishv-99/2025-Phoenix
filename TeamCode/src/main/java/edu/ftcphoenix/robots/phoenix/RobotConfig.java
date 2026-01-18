@@ -1,5 +1,7 @@
 package edu.ftcphoenix.robots.phoenix;
 
+import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
+
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 
@@ -33,6 +35,14 @@ public class RobotConfig {
 
         public static final String nameMotorBackRight = "backRightMotor";
         public static final Direction directionMotorBackRight = Direction.REVERSE;
+
+        /**
+         * If true, set drivetrain motors to BRAKE when commanded power is 0.
+         *
+         * <p>This helps the robot resist small bumps while stopped (useful for aiming/shooting).
+         * If you prefer smoother coasting stops, set this to false.</p>
+         */
+        public static final boolean zeroPowerBrake = true;
 
 
         /**
@@ -77,10 +87,10 @@ public class RobotConfig {
 
         public static final double velocityMin = 1500;
         public static final double velocityMax = 1900;
-        public static final double velocityIncrement = 50;
+        public static final double velocityIncrement = 25;
 
-        public static final double targetPusherBack = 0.55;
-        public static final double targetPusherFront = 1.00;
+        public static final double targetPusherBack = 0.2;
+        public static final double targetPusherFront = 1.0;
     }
 
 
@@ -128,20 +138,75 @@ public class RobotConfig {
          *
          * <p>Distances are in inches to match Phoenix's pose types.</p>
          */
-        public static final PinpointPoseEstimator.Config pinpoint =
+        public static PinpointPoseEstimator.Config pinpoint =
                 PinpointPoseEstimator.Config.defaults()
                         .withHardwareMapName("odo")
-                        .withOffsets(0.0, 0.0);
+                        .withOffsets(0.0, 0.0)
+                        .withForwardPodDirection(GoBildaPinpointDriver.EncoderDirection.REVERSED)
+                        .withStrafePodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
 
         // Advanced options (uncomment if needed):
-        // pinpoint.withEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
-        // pinpoint.withCustomEncoderResolutionTicksPerInch(null);
-        // pinpoint.withForwardPodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
-        // pinpoint.withStrafePodDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD);
-        // pinpoint.withYawScalar(null);
-        // pinpoint.withResetOnInit(true);
-        // pinpoint.withResetWaitMs(300);
-        // pinpoint.withQuality(0.75);
+        static {
+            // pinpoint.withEncoderPods(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
+            // pinpoint.withCustomEncoderResolutionTicksPerInch(null);
+            // pinpoint.withYawScalar(null);
+            // pinpoint.withResetOnInit(true);
+            // pinpoint.withResetWaitMs(300);
+            // pinpoint.withQuality(0.75);
+        }
     }
 
+    /**
+     * Calibration status and guidance.
+     *
+     * <p>Many Phoenix testers can optionally use other subsystems to improve results (example:
+     * Pinpoint pod offset calibration can use AprilTag assistance). To keep that knowledge
+     * out of scattered tester classes, we centralize the "what's calibrated" flags here so
+     * menus/testers can choose sensible defaults and display helpful warnings.</p>
+     *
+     * <p>Some flags are auto-detectable (camera mount != identity), while others need an explicit
+     * acknowledgement after you run a sanity-check style tester.</p>
+     */
+    public static final class Calibration {
+
+        private Calibration() {
+        }
+
+        /**
+         * True once {@link Vision#cameraMount} has been solved and pasted from the
+         * <i>Calib: Camera Mount</i> tester output.
+         */
+        public static boolean cameraMountCalibrated() {
+            return Vision.cameraMount != null && !Vision.cameraMount.equals(CameraMountConfig.identity());
+        }
+
+        /**
+         * Set to true after running the <i>Robot Calib: Pinpoint Axis Check</i> tester and confirming
+         * the forward/strafe directions are correct.
+         */
+        public static final boolean pinpointAxesVerified = false;
+
+        /**
+         * Set to true after you run the <i>Robot Calib: Pinpoint Pod Offsets</i> calibrator and copy
+         * the recommended offsets into {@link Localization#pinpoint}.
+         */
+        public static final boolean pinpointPodOffsetsCalibrated = false;
+
+        /**
+         * Returns true if Pinpoint pod offsets look non-default (best-effort heuristic).
+         * Prefer {@link #pinpointPodOffsetsCalibrated} for an explicit signal.
+         */
+        public static boolean pinpointPodOffsetsNonDefault() {
+            double fx = Localization.pinpoint.forwardPodOffsetLeftInches;
+            double sy = Localization.pinpoint.strafePodOffsetForwardInches;
+            return Math.abs(fx) > 1e-6 || Math.abs(sy) > 1e-6;
+        }
+
+        /**
+         * Convenience: whether it's reasonable to enable AprilTag assistance where supported.
+         */
+        public static boolean canUseAprilTagAssist() {
+            return cameraMountCalibrated();
+        }
+    }
 }

@@ -25,10 +25,17 @@ public final class PhoenixRobotTesters {
     public static void register(TesterSuite suite) {
         if (suite == null) return;
 
-        DrivetrainMotorDirectionTester.register(suite);
+        // A guided, recommended calibration path for new setups.
+        PhoenixCalibrationWalkthrough.register(suite);
+
+        // Robot-specific calibration + localization.
+        PinpointAxisDirectionTesterPhoenix.register(suite);
+        PinpointPodOffsetCalibratorPhoenix.register(suite);
         AprilTagLocalizationTesterPhoenix.register(suite);
         PinpointAprilTagFusionLocalizationTesterPhoenix.register(suite);
-        PinpointPodOffsetCalibratorPhoenix.register(suite);
+
+        // Robot-specific hardware sanity checks.
+        DrivetrainMotorDirectionTester.register(suite);
 
         // Add future robot-specific testers here, e.g.:
         // IntakeTester.register(suite);

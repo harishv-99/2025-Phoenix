@@ -293,6 +293,10 @@ public final class AprilTagLocalizationTester extends BaseTeleOpTester {
         visionReady = false;
         visionInitError = null;
 
+        // IMPORTANT: Release camera resources before re-entering the picker.
+        if (tagSensor != null) {
+            tagSensor.close();
+        }
         tagSensor = null;
         target = null;
         poseEstimator = null;
@@ -307,6 +311,15 @@ public final class AprilTagLocalizationTester extends BaseTeleOpTester {
         }
 
         return true;
+    }
+
+    @Override
+    protected void onStop() {
+        // Ensure we release the VisionPortal when leaving the tester.
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
+        }
     }
 
     // ---------------------------------------------------------------------------------------------

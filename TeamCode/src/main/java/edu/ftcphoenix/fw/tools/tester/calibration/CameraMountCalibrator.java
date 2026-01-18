@@ -265,6 +265,11 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         visionReady = false;
         visionInitError = null;
 
+        // IMPORTANT: Release the VisionPortal backing this sensor. If we don't, future camera
+        // selection attempts can fail with FTC SDK errors about “multiple vision portals”.
+        if (tagSensor != null) {
+            tagSensor.close();
+        }
         tagSensor = null;
 
         lastRobotToCameraSample = null;
@@ -277,6 +282,15 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         refreshCameraList();
 
         return true;
+    }
+
+    @Override
+    protected void onStop() {
+        // Ensure we release the camera resource when leaving the tester.
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
+        }
     }
 
     /**

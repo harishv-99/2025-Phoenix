@@ -43,9 +43,13 @@ public final class AprilTagLocalizationTesterPhoenix {
     public static void register(TesterSuite suite) {
         if (suite == null) return;
 
+        String mountStatus = RobotConfig.Calibration.cameraMountCalibrated()
+                ? "camera mount: OK"
+                : "camera mount: NOT CALIBRATED (run Calib: Camera Mount)";
+
         suite.add(
-                "Robot: AprilTag Localization",
-                "Runs AprilTag localization tester using RobotConfig.Vision defaults.",
+                "Loc: AprilTag Localization (Robot)",
+                "Uses RobotConfig.Vision defaults; " + mountStatus,
                 () -> new AprilTagLocalizationTester(
                         RobotConfig.Vision.nameWebcam,
                         RobotConfig.Vision.cameraMount

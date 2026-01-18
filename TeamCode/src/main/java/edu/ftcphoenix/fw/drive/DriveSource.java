@@ -76,15 +76,7 @@ public interface DriveSource {
             return;
         }
         String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
-
-        // Note: anonymous classes have an empty simple name, and lambdas have a compiler-generated
-        // name. For debug output we prefer something non-empty and stable.
-        String simple = getClass().getSimpleName();
-        String className = (simple == null || simple.isEmpty())
-                ? getClass().getName()
-                : simple;
-
-        dbg.addData(p + ".class", className);
+        dbg.addData(p + ".class", getClass().getSimpleName());
     }
 
     /**
@@ -127,10 +119,9 @@ public interface DriveSource {
             return this;
         }
 
+        // NOTE: Do not use a lambda here.
+        // Lambdas cannot override debugDump(), and debuggability is a first-class Phoenix principle.
         DriveSource self = this;
-
-        // Important: do NOT return a lambda here.
-        // Lambdas cannot override debugDump(), which breaks debug delegation (Framework Principles).
         return new DriveSource() {
             private boolean lastEnabled = false;
             private DriveSignal lastBase = DriveSignal.zero();
@@ -138,18 +129,10 @@ public interface DriveSource {
 
             @Override
             public DriveSignal get(LoopClock clock) {
-                DriveSignal base = self.get(clock);
-                lastBase = base;
-
-                boolean enabled = when.getAsBoolean();
-                lastEnabled = enabled;
-
-                DriveSignal out = enabled
-                        ? base.scaled(translationScale, omegaScale)
-                        : base;
-
-                lastOut = out;
-                return out;
+                lastBase = self.get(clock);
+                lastEnabled = when.getAsBoolean();
+                lastOut = lastEnabled ? lastBase.scaled(translationScale, omegaScale) : lastBase;
+                return lastOut;
             }
 
             @Override
@@ -158,22 +141,12 @@ public interface DriveSource {
                     return;
                 }
                 String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
-
-                dbg.addData(p + ".class", "DriveSource.scaledWhen");
-                dbg.addData(p + ".scaledWhen.enabled", lastEnabled);
-                dbg.addData(p + ".scaledWhen.translationScale", translationScale);
-                dbg.addData(p + ".scaledWhen.omegaScale", omegaScale);
-
-                // Show both the base output and the final output so the effect is visible.
-                dbg.addData(p + ".scaledWhen.last.base.axial", lastBase.axial);
-                dbg.addData(p + ".scaledWhen.last.base.lateral", lastBase.lateral);
-                dbg.addData(p + ".scaledWhen.last.base.omega", lastBase.omega);
-
-                dbg.addData(p + ".scaledWhen.last.out.axial", lastOut.axial);
-                dbg.addData(p + ".scaledWhen.last.out.lateral", lastOut.lateral);
-                dbg.addData(p + ".scaledWhen.last.out.omega", lastOut.omega);
-
-                // Delegate: debug should drill down into the wrapped source.
+                dbg.addData(p + ".class", "ScaledWhenDriveSource")
+                        .addData(p + ".scaledWhen.enabled", lastEnabled)
+                        .addData(p + ".scaledWhen.translationScale", translationScale)
+                        .addData(p + ".scaledWhen.omegaScale", omegaScale)
+                        .addData(p + ".scaledWhen.lastBase", lastBase)
+                        .addData(p + ".scaledWhen.lastOut", lastOut);
                 self.debugDump(dbg, p + ".source");
             }
         };
@@ -191,13 +164,37 @@ public interface DriveSource {
      * </ul>
      */
     default DriveSource scaled(double translationScale, double omegaScale) {
-        // Reuse the implementation above without forcing callers to provide a dummy supplier.
         if (translationScale == 1.0 && omegaScale == 1.0) {
             return this;
         }
+        // NOTE: Do not use a lambda here.
+        // Lambdas cannot override debugDump(), and debuggability is a first-class Phoenix principle.
+        DriveSource self = this;
+        return new DriveSource() {
+            private DriveSignal lastBase = DriveSignal.zero();
+            private DriveSignal lastOut = DriveSignal.zero();
 
-        // Route through scaledWhen(...) so debugDump delegation is preserved.
-        return scaledWhen(() -> true, translationScale, omegaScale);
+            @Override
+            public DriveSignal get(LoopClock clock) {
+                lastBase = self.get(clock);
+                lastOut = lastBase.scaled(translationScale, omegaScale);
+                return lastOut;
+            }
+
+            @Override
+            public void debugDump(DebugSink dbg, String prefix) {
+                if (dbg == null) {
+                    return;
+                }
+                String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
+                dbg.addData(p + ".class", "ScaledDriveSource")
+                        .addData(p + ".scaled.translationScale", translationScale)
+                        .addData(p + ".scaled.omegaScale", omegaScale)
+                        .addData(p + ".scaled.lastBase", lastBase)
+                        .addData(p + ".scaled.lastOut", lastOut);
+                self.debugDump(dbg, p + ".source");
+            }
+        };
     }
 
     /**
@@ -277,7 +274,7 @@ public interface DriveSource {
                     return;
                 }
                 String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
-                dbg.addData(p + ".class", "DriveSource.overlayWhen");
+                dbg.addData(p + ".class", getClass().getSimpleName());
                 dbg.addData(p + ".overlay.enabled", lastEnabled);
                 dbg.addData(p + ".overlay.requestedMask", requestedMask.toString());
                 overlay.debugDump(dbg, p + ".overlay");
@@ -321,9 +318,9 @@ public interface DriveSource {
     default DriveSource blendedWith(DriveSource other, double alpha) {
         Objects.requireNonNull(other, "other DriveSource must not be null");
         final double alphaClamped = Math.max(0.0, Math.min(1.0, alpha));
+        // NOTE: Do not use a lambda here.
+        // Lambdas cannot override debugDump(), and debuggability is a first-class Phoenix principle.
         DriveSource self = this;
-
-        // Same debug principle as scaledWhen(...): return a real object so we can override debugDump.
         return new DriveSource() {
             private DriveSignal lastA = DriveSignal.zero();
             private DriveSignal lastB = DriveSignal.zero();
@@ -331,11 +328,9 @@ public interface DriveSource {
 
             @Override
             public DriveSignal get(LoopClock clock) {
-                DriveSignal a = self.get(clock);
-                DriveSignal b = other.get(clock);
-                lastA = a;
-                lastB = b;
-                lastOut = a.lerp(b, alphaClamped);
+                lastA = self.get(clock);
+                lastB = other.get(clock);
+                lastOut = lastA.lerp(lastB, alphaClamped);
                 return lastOut;
             }
 
@@ -345,22 +340,11 @@ public interface DriveSource {
                     return;
                 }
                 String p = (prefix == null || prefix.isEmpty()) ? "drive" : prefix;
-
-                dbg.addData(p + ".class", "DriveSource.blendedWith");
-                dbg.addData(p + ".blend.alpha", alphaClamped);
-
-                dbg.addData(p + ".blend.last.a.axial", lastA.axial);
-                dbg.addData(p + ".blend.last.a.lateral", lastA.lateral);
-                dbg.addData(p + ".blend.last.a.omega", lastA.omega);
-
-                dbg.addData(p + ".blend.last.b.axial", lastB.axial);
-                dbg.addData(p + ".blend.last.b.lateral", lastB.lateral);
-                dbg.addData(p + ".blend.last.b.omega", lastB.omega);
-
-                dbg.addData(p + ".blend.last.out.axial", lastOut.axial);
-                dbg.addData(p + ".blend.last.out.lateral", lastOut.lateral);
-                dbg.addData(p + ".blend.last.out.omega", lastOut.omega);
-
+                dbg.addData(p + ".class", "BlendedDriveSource")
+                        .addData(p + ".blend.alpha", alphaClamped)
+                        .addData(p + ".blend.lastA", lastA)
+                        .addData(p + ".blend.lastB", lastB)
+                        .addData(p + ".blend.lastOut", lastOut);
                 self.debugDump(dbg, p + ".a");
                 other.debugDump(dbg, p + ".b");
             }

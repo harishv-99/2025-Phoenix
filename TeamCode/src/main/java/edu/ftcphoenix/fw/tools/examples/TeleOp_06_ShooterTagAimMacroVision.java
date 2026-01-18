@@ -417,6 +417,10 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
      */
     @Override
     public void stop() {
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
+        }
         cancelShootMacros();
         drivebase.stop();
     }

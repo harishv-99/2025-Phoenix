@@ -1,6 +1,7 @@
 package edu.ftcphoenix.robots.phoenix;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -12,6 +13,7 @@ import java.util.function.BooleanSupplier;
 
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.ftc.FtcVision;
+import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveOverlayMask;
@@ -58,6 +60,7 @@ public final class PhoenixRobot {
     private final DebugSink dbg;
     private Shooter shooter;
     private MecanumDrivebase drivebase;
+    private PinpointPoseEstimator pinpoint;
     private DriveSource stickDrive;
     private DriveSource driveWithAim;
     private CameraMountConfig cameraMountConfig;
@@ -65,6 +68,14 @@ public final class PhoenixRobot {
     private TagTarget scoringTarget;
     private DriveGuidancePlan aimPlan;
     private DriveGuidancePlan.Tuning aimTuning;
+
+    // "Shoot brace" pose-lock: latch-on while the shooter is spinning and the driver is not
+    // commanding translation. This lets the driver still nudge/strafe to line up, but once they
+    // let go, the robot resists being bumped off the spot.
+    private boolean shootBraceEnabled = false;
+    private boolean shootBraceLatched = false;
+    private static final double SHOOT_BRACE_ENTER_MAG = 0.06;
+    private static final double SHOOT_BRACE_EXIT_MAG = 0.10;
 
 
     // ----------------------------------------------------------------------
@@ -111,17 +122,24 @@ public final class PhoenixRobot {
 
         // --- Create mechanisms ---
         MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
-        // NOTE: avoid tiny values here. maxLateralRatePerSec is in "command units / sec".
-        // Setting it near zero effectively disables strafing.
         drivebase = Drives.mecanum(
                 hardwareMap,
                 RobotConfig.DriveTrain.mecanumWiring(),
                 mecanumConfig);
 
+        // Use motor braking to help resist small pushes when commanded power is 0.
+        // PoseLock will actively correct position, but BRAKE helps reduce "coast".
+        setDriveBrake(RobotConfig.DriveTrain.zeroPowerBrake);
+
         shooter = new Shooter(hardwareMap, telemetry, gamepads);
 
         // --- Use the standard TeleOp stick mapping for mecanum.
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
+
+        // --- Odometry (goBILDA Pinpoint) ---
+        // This is used for pose-lock (resist bumps while shooting). It can also be used for
+        // autonomous / fusion later.
+//        pinpoint = new PinpointPoseEstimator(hardwareMap, RobotConfig.Localization.pinpoint);
 
         // --- Vision ---
         cameraMountConfig = RobotConfig.Vision.cameraMount;
@@ -138,7 +156,7 @@ public final class PhoenixRobot {
 
         // Tuning for the auto-aim assist. Start with defaults and tweak only what you need.
         aimTuning = DriveGuidancePlan.Tuning.defaults()
-                .withAimKp(1.0)            // how strongly we turn toward the target
+                .withAimKp(2.0)            // how strongly we turn toward the target
                 .withAimDeadbandDeg(0.25); // stop turning when we're within this many degrees
 
         aimPlan = DriveGuidance.plan()
@@ -159,7 +177,17 @@ public final class PhoenixRobot {
         BooleanSupplier autoAimEnabled = gamepads.p2().leftBumper()::isHeld;
 
         driveWithAim = DriveGuidance.overlayOn(
-                stickDrive,
+                stickDrive
+                        .overlayWhen(
+                                () -> shootBraceEnabled,
+                                DriveGuidance.poseLock(
+                                        pinpoint,
+                                        DriveGuidancePlan.Tuning.defaults()
+                                                .withTranslateKp(0.08)
+                                                .withMaxTranslateCmd(0.35)
+                                ),
+                                DriveOverlayMask.TRANSLATION_ONLY
+                        ),
                 autoAimEnabled,
                 aimPlan,
                 DriveOverlayMask.OMEGA_ONLY
@@ -167,7 +195,7 @@ public final class PhoenixRobot {
 
         telemetry.addLine("Phoenix TeleOp with AutoAim");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");
-        telemetry.addLine("P2 LB: auto-aim at scoring tag");
+        telemetry.addLine("P2 LB: auto-aim + lock translation (shoot brace)");
         telemetry.update();
 
         // Create bindings
@@ -243,6 +271,14 @@ public final class PhoenixRobot {
 
         bindings.update(clock);
 
+        // --- Odometry update (needed for pose lock) ---
+        if (pinpoint != null) {
+            pinpoint.update(clock);
+        }
+
+        // --- Shoot-brace latch (pose lock translation only) ---
+        updateShootBraceEnabled();
+
 
         // --- 3) TeleOp Macros ---
         taskRunnerTeleOp.update(clock);
@@ -252,7 +288,6 @@ public final class PhoenixRobot {
         }
 
         // --- 4) Drive: guidance overlay (P2 LB may override omega) ---
-        // Use the composed source (base sticks + optional omega overlay), not the raw stick source.
         DriveSignal cmd = driveWithAim.get(clock).clamped();
         drivebase.update(clock);
         drivebase.drive(cmd);
@@ -262,6 +297,10 @@ public final class PhoenixRobot {
 
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
+        telemetry.addData("shootBrace", shootBraceEnabled);
+        if (pinpoint != null) {
+            telemetry.addData("pose", pinpoint.getEstimate());
+        }
 //        driveWithAim.debugDump(dbg, "drive");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
@@ -276,6 +315,56 @@ public final class PhoenixRobot {
     }
 
     /**
+     * Latches pose-lock while P2 is holding auto-aim (LB) and the driver is not commanding translation.
+     *
+     * <p>This makes "hold LB" a single driver action for: aim + brace + shoot.</p>
+     * <p>Hysteresis prevents chatter when sticks hover near center.</p>
+     */
+    private void updateShootBraceEnabled() {
+        // Only brace while the aiming driver (P2) is actively holding the aim button.
+        // This avoids surprise "fighting the driver" behavior during normal driving.
+        if (!gamepads.p2().leftBumper().isHeld()) {
+            shootBraceLatched = false;
+            shootBraceEnabled = false;
+            return;
+        }
+
+        double lx = gamepads.p1().leftX().get();
+        double ly = gamepads.p1().leftY().get();
+        double mag = Math.hypot(lx, ly);
+
+        if (shootBraceLatched) {
+            if (mag > SHOOT_BRACE_EXIT_MAG) {
+                shootBraceLatched = false;
+            }
+        } else {
+            if (mag < SHOOT_BRACE_ENTER_MAG) {
+                shootBraceLatched = true;
+            }
+        }
+
+        shootBraceEnabled = shootBraceLatched;
+    }
+
+    /**
+     * Sets ZeroPowerBehavior on the drivetrain motors.
+     */
+    private void setDriveBrake(boolean brake) {
+        DcMotor.ZeroPowerBehavior behavior = brake
+                ? DcMotor.ZeroPowerBehavior.BRAKE
+                : DcMotor.ZeroPowerBehavior.FLOAT;
+
+        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorFrontLeft)
+                .setZeroPowerBehavior(behavior);
+        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorFrontRight)
+                .setZeroPowerBehavior(behavior);
+        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorBackLeft)
+                .setZeroPowerBehavior(behavior);
+        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorBackRight)
+                .setZeroPowerBehavior(behavior);
+    }
+
+    /**
      * Stop hook shared by all OpModes.
      */
     public void stopAny() {
@@ -286,5 +375,10 @@ public final class PhoenixRobot {
      * Stop hook for TeleOp.
      */
     public void stopTeleOp() {
+        // Release camera resources so future OpModes/testers can start vision cleanly.
+        if (tagSensor != null) {
+            tagSensor.close();
+            tagSensor = null;
+        }
     }
 }
