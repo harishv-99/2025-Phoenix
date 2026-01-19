@@ -4,6 +4,7 @@ import android.util.Size;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.robotcore.external.matrices.MatrixF;
 import org.firstinspires.ftc.robotcore.external.hardware.camera.WebcamName;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
@@ -13,6 +14,7 @@ import org.firstinspires.ftc.vision.VisionPortal;
 import org.firstinspires.ftc.vision.apriltag.AprilTagDetection;
 import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
 import org.firstinspires.ftc.vision.apriltag.AprilTagLibrary;
+import org.firstinspires.ftc.vision.apriltag.AprilTagPoseRaw;
 import org.firstinspires.ftc.vision.apriltag.AprilTagProcessor;
 
 import java.util.Collections;
@@ -21,6 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.geometry.Mat3;
 import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
@@ -36,10 +39,16 @@ import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
  *
  * <h2>Frames &amp; conversions</h2>
  *
- * <p>FTC AprilTag detection pose values are reported in the FTC detection pose reference frame
- * (documented in {@link FtcFrames}). Phoenix core code uses the Phoenix framing convention, so
- * this adapter converts FTC poses into Phoenix poses using {@link FtcFrames} before constructing
- * {@link AprilTagObservation}.</p>
+ * <p>FTC AprilTag detections expose two pose representations:</p>
+ * <ul>
+ *   <li><b>{@code rawPose}</b>: the native AprilTag/OpenCV camera axes (+X right, +Y down, +Z forward)</li>
+ *   <li><b>{@code ftcPose}</b>: an FTC convenience frame (+X right, +Y forward, +Z up) intended for
+ *       human-friendly telemetry</li>
+ * </ul>
+ *
+ * <p>Phoenix uses {@code rawPose} for geometry/math (localization, mount calibration) because it
+ * matches the FTC game database tag metadata. This adapter converts that camera frame into the
+ * Phoenix camera frame (+X forward, +Y left, +Z up) before constructing {@link AprilTagObservation}.</p>
  *
  * <h2>Range / bearing</h2>
  *
@@ -365,6 +374,62 @@ public final class FtcVision {
         builder.setCameraPose(pos, ypr);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // AprilTag pose conversions
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Convert an FTC SDK {@link AprilTagPoseRaw} into Phoenix's {@link Pose3d} camera-to-tag pose.
+     *
+     * <p><b>Why rawPose?</b>
+     * The FTC game database tag poses ({@code AprilTagMetadata.fieldPosition/fieldOrientation}) are
+     * defined in the AprilTag/OpenCV coordinate conventions used by {@code rawPose}. The SDK also
+     * provides {@code ftcPose}, which is a convenience re-framing for on-screen telemetry. Mixing
+     * {@code ftcPose} with game-database tag orientations can yield inconsistent transforms.
+     *
+     * <p><b>Frames</b>
+     * <ul>
+     *   <li>{@code rawPose} camera frame: +X right, +Y down, +Z forward (out of the lens).</li>
+     *   <li>Phoenix camera frame: +X forward, +Y left, +Z up.</li>
+     *   <li>Tag frame: AprilTag native tag axes (as defined by the AprilTag library / FTC SDK).</li>
+     * </ul>
+     *
+     * <p>We change the <em>camera</em> basis into Phoenix framing, but we intentionally do not
+     * "re-basis" the tag frame here. That keeps the tag frame consistent with FTC's field tag
+     * layouts.</p>
+     */
+    private static Pose3d cameraToTagFromRawPose(AprilTagPoseRaw rawPose) {
+        if (rawPose == null || rawPose.R == null) {
+            return null;
+        }
+
+        // Translation: raw camera (+X right, +Y down, +Z forward) -> Phoenix camera (+X forward, +Y left, +Z up)
+        //   PhoenixX = rawZ
+        //   PhoenixY = -rawX
+        //   PhoenixZ = -rawY
+        double xIn = rawPose.z;
+        double yIn = -rawPose.x;
+        double zIn = -rawPose.y;
+
+        // Rotation: rawPose.R is a 3x3 rotation matrix for the pose (tag -> camera) in the raw camera axes.
+        // Change camera basis only (left-multiply).
+        Mat3 rRaw = mat3FromMatrixF(rawPose.R);
+        Mat3 rCam = FtcFrames.phoenixFromAprilTagRawCameraFrame().mul(rRaw);
+
+        Mat3.YawPitchRoll ypr = Mat3.toYawPitchRoll(rCam);
+        return new Pose3d(xIn, yIn, zIn, ypr.yawRad, ypr.pitchRad, ypr.rollRad);
+    }
+
+    private static Mat3 mat3FromMatrixF(MatrixF m) {
+        // MatrixF supports row/col indexing via get(r,c). rawPose.R is documented as a 3x3 rotation matrix.
+        // If the SDK ever supplies a larger matrix, we still read the upper-left 3x3.
+        return new Mat3(
+                m.get(0, 0), m.get(0, 1), m.get(0, 2),
+                m.get(1, 0), m.get(1, 1), m.get(1, 2),
+                m.get(2, 0), m.get(2, 1), m.get(2, 2)
+        );
+    }
+
     /**
      * Internal implementation of {@link AprilTagSensor} backed by a
      * {@link VisionPortal} and {@link AprilTagProcessor}.
@@ -527,7 +592,17 @@ public final class FtcVision {
                 }
 
                 // We need pose values to build cameraToTagPose.
-                if (det.ftcPose == null) {
+                //
+                // FTC SDK exposes two different AprilTag pose representations:
+                //   - rawPose: AprilTag/OpenCV native camera frame (+X right, +Y down, +Z forward)
+                //   - ftcPose: FTC "robot-friendly" frame (+X right, +Y forward, +Z up)
+                //
+                // Phoenix uses rawPose for geometry math because it stays consistent with
+                // FTC's tag metadata (fieldPosition/fieldOrientation) and the AprilTag
+                // library's published coordinate conventions.
+                //
+                // We keep ftcPose as a fallback for older SDKs or unusual configurations.
+                if (det.rawPose == null && det.ftcPose == null) {
                     continue;
                 }
 
@@ -541,16 +616,33 @@ public final class FtcVision {
                 }
 
                 // Convert FTC detection pose -> Phoenix cameraToTagPose.
-                Pose3d ftcCamToTag = new Pose3d(
-                        det.ftcPose.x,
-                        det.ftcPose.y,
-                        det.ftcPose.z,
-                        det.ftcPose.yaw,
-                        det.ftcPose.pitch,
-                        det.ftcPose.roll
-                );
+                Pose3d cameraToTagPose = (det.rawPose != null)
+                        ? cameraToTagFromRawPose(det.rawPose)
+                        : null;
 
-                Pose3d cameraToTagPose = FtcFrames.toPhoenixFromFtcDetectionFrame(ftcCamToTag);
+                // Fallback: use ftcPose if rawPose isn't present.
+                if (cameraToTagPose == null && det.ftcPose != null) {
+                    // IMPORTANT FTC NOTE:
+                    // - AprilTagPoseFtc angles are reported in DEGREES.
+                    // - FTC names the axes differently than Phoenix's Pose3d convention:
+                    //     * FTC:   pitch = rotation about +X, roll = rotation about +Y, yaw = rotation about +Z
+                    //     * Phoenix Pose3d: roll = rotation about +X, pitch = rotation about +Y, yaw = rotation about +Z
+                    //   So we must swap pitch/roll when constructing a Pose3d.
+                    Pose3d ftcCamToTag = new Pose3d(
+                            det.ftcPose.x,
+                            det.ftcPose.y,
+                            det.ftcPose.z,
+                            Math.toRadians(det.ftcPose.yaw),
+                            Math.toRadians(det.ftcPose.roll),
+                            Math.toRadians(det.ftcPose.pitch)
+                    );
+
+                    cameraToTagPose = FtcFrames.toPhoenixFromFtcDetectionFrame(ftcCamToTag);
+                }
+
+                if (cameraToTagPose == null) {
+                    continue;
+                }
 
                 // Choose the closest (3D range). We compute from cameraToTagPose to avoid relying on
                 // any additional FTC convenience fields.
@@ -575,8 +667,9 @@ public final class FtcVision {
             // If the FTC SDK produced a global robot pose (requires a configured camera mount),
             // surface it as an optional fieldToRobotPose measurement.
             //
-            // FTC's Field Coordinate System matches Phoenix field framing (+X forward, +Y left, +Z up).
-            // (See FTC Docs April Tags Guide Fig. 40.)
+            // The SDK's robotPose is expressed in the FTC Field Coordinate System for the
+            // current season. Phoenix uses that same field frame for all field-centric poses
+            // (field-to-robot, field-to-tag), so no axis conversion is performed here.
             if (bestDet.robotPose != null) {
                 Position pos = bestDet.robotPose.getPosition();
                 YawPitchRollAngles ypr = bestDet.robotPose.getOrientation();

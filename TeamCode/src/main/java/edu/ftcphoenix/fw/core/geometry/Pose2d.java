@@ -16,33 +16,34 @@ import edu.ftcphoenix.fw.core.math.MathUtil;
  *   <li><strong>Units:</strong> distances are in inches, angles are in radians.</li>
  *   <li><strong>Axes:</strong>
  *     <ul>
- *       <li>{@code xInches}: +X forward (toward some reference side of the field).</li>
- *       <li>{@code yInches}: +Y to the left when facing +X.</li>
+ *       <li>{@code xInches} and {@code yInches} are the X/Y translation components of the
+ *           pose in <em>whatever frame</em> you are working in.</li>
+ *       <li>{@code Pose2d} itself does not assign a universal real-world meaning to +X/+Y.
+ *           That meaning comes from the coordinate frame the pose is expressed in.</li>
+ *       <li><b>Robot/mechanism frames</b> in Phoenix are typically expressed as +X forward,
+ *           +Y left (+Z up in 3D).</li>
+ *       <li><b>Field-centric poses</b> in Phoenix are expressed in the <b>FTC Field Coordinate
+ *           System</b> for the current season (see {@code TagLayout} and {@code PoseEstimate}).</li>
  *     </ul>
  *   </li>
  *   <li><strong>Heading:</strong>
  *     <ul>
- *       <li>{@code headingRad} is measured CCW from +X.</li>
+ *       <li>{@code headingRad} is measured CCW from +X, following the right-hand rule about +Z.</li>
  *       <li>{@code headingRad = 0} -> "facing +X".</li>
- *       <li>{@code headingRad = +pi/2} -> "facing +Y" (left).</li>
- *       <li>{@code headingRad = -pi/2} -> "facing -Y" (right).</li>
+ *       <li>{@code headingRad = +pi/2} -> "facing +Y".</li>
  *     </ul>
  *   </li>
  * </ul>
- *
- * <p>This matches the conventions used in {@link edu.ftcphoenix.fw.drive.DriveSignal}
- * and {@code TagLayout}: forward is +X, left is +Y, and heading increases
- * counter-clockwise.</p>
  */
 public final class Pose2d {
 
     /**
-     * X position on the floor plane, in inches (forward).
+     * X position on the floor plane, in inches (frame +X).
      */
     public final double xInches;
 
     /**
-     * Y position on the floor plane, in inches (left).
+     * Y position on the floor plane, in inches (frame +Y).
      */
     public final double yInches;
 
@@ -72,8 +73,8 @@ public final class Pose2d {
     /**
      * Constructs a new immutable 2D pose.
      *
-     * @param xInches    X position on the floor plane, in inches (forward)
-     * @param yInches    Y position on the floor plane, in inches (left)
+     * @param xInches    X position on the floor plane, in inches (frame +X)
+     * @param yInches    Y position on the floor plane, in inches (frame +Y)
      * @param headingRad heading about the vertical axis, in radians
      */
     public Pose2d(double xInches, double yInches, double headingRad) {

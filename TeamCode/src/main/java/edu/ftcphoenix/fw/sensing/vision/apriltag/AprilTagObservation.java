@@ -6,10 +6,10 @@ import edu.ftcphoenix.fw.core.geometry.Pose3d;
  * Immutable snapshot of a single AprilTag observation (sensor measurement), expressed in
  * <b>Phoenix framing</b>.
  *
- * <h2>Principle: core framework uses Phoenix framing only</h2>
+ * <h2>Principle: Phoenix framing for Phoenix-defined frames</h2>
  * <p>
- * All core Phoenix framework types (outside {@code edu.ftcphoenix.fw.adapters.*}) operate only in
- * the Phoenix pose convention:
+ * All core Phoenix framework types operate in Phoenix's standard right-handed axis convention
+ * for <b>Phoenix-defined frames</b> (robot, camera, field, mechanisms, etc.):
  * </p>
  * <ul>
  *   <li><b>+X</b> forward</li>
@@ -20,6 +20,13 @@ import edu.ftcphoenix.fw.core.geometry.Pose3d;
  * <p>
  * Any FTC-SDK-specific coordinate conventions must be converted inside the FTC adapter layer
  * before constructing this object.
+ * </p>
+ *
+ * <p>
+ * Note: AprilTags introduce a <em>third-party tag frame</em> (the tag's own +X/+Y/+Z axes).
+ * Phoenix keeps that tag frame consistent with the FTC game database metadata so that
+ * {@code fieldToTagPose} (from the layout) and {@code cameraToTagPose} (from the detector)
+ * compose cleanly.
  * </p>
  *
  * <h2>Phoenix pose naming convention</h2>
@@ -60,6 +67,12 @@ import edu.ftcphoenix.fw.core.geometry.Pose3d;
  *   <li><b>+Y</b> left</li>
  *   <li><b>+Z</b> up</li>
  * </ul>
+ * <h2>AprilTag tag frame (for cameraToTagPose)</h2>
+ * <p>
+ * The tag's axes are defined by the AprilTag library/FTC SDK (i.e., the tag frame used by
+ * {@code AprilTagDetection.rawPose} and by FTC game metadata {@code fieldOrientation}).
+ * Do <b>not</b> assume the tag frame is a "robot-style" +X-forward/+Y-left/+Z-up frame.
+ * </p>
  *
  * <h2>Derived aiming helpers</h2>
  * <p>
@@ -128,9 +141,9 @@ public final class AprilTagObservation {
     /**
      * Create an observation representing a detected tag, expressed in Phoenix framing.
      *
-     * @param id               AprilTag ID
+     * @param id              AprilTag ID
      * @param cameraToTagPose tag pose in Phoenix camera frame (non-null)
-     * @param ageSec           age of the underlying camera frame (seconds)
+     * @param ageSec          age of the underlying camera frame (seconds)
      */
     public static AprilTagObservation target(int id, Pose3d cameraToTagPose, double ageSec) {
         if (cameraToTagPose == null) {
@@ -143,10 +156,10 @@ public final class AprilTagObservation {
      * Create an observation representing a detected tag with an additional field-centric robot pose
      * measurement.
      *
-     * @param id                AprilTag ID
+     * @param id               AprilTag ID
      * @param cameraToTagPose  tag pose in Phoenix camera frame (non-null)
      * @param fieldToRobotPose robot pose in Phoenix field frame (non-null)
-     * @param ageSec            age of the underlying camera frame (seconds)
+     * @param ageSec           age of the underlying camera frame (seconds)
      */
     public static AprilTagObservation target(int id,
                                              Pose3d cameraToTagPose,
@@ -230,7 +243,9 @@ public final class AprilTagObservation {
         return Math.sqrt(f * f + l * l + u * u);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         if (!hasTarget) {

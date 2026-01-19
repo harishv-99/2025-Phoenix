@@ -118,7 +118,13 @@ public class RobotConfig {
          * <p>Defaults to identity (all zeros) so code compiles out-of-the-box. For accurate
          * localization/aiming, calibrate and update this value.</p>
          */
-        public static final CameraMountConfig cameraMount = CameraMountConfig.identity();
+        public static final CameraMountConfig cameraMount = CameraMountConfig.ofDegrees(
+                5.095,
+                -2.969,
+                5.816,
+                0.5,
+                -18.2,
+                2.9);
     }
 
     /**
@@ -184,7 +190,7 @@ public class RobotConfig {
          * Set to true after running the <i>Robot Calib: Pinpoint Axis Check</i> tester and confirming
          * the forward/strafe directions are correct.
          */
-        public static final boolean pinpointAxesVerified = false;
+        public static final boolean pinpointAxesVerified = true;
 
         /**
          * Set to true after you run the <i>Robot Calib: Pinpoint Pod Offsets</i> calibrator and copy

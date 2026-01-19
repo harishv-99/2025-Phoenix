@@ -44,6 +44,47 @@ One important gotcha with FTC vision:
   make sure the portal is closed so the next tester can start the camera cleanly.
   In Phoenix, `AprilTagSensor` has a `close()` method for this purpose—call it on `stop()`/BACK navigation.
 
+One more gotcha that matters a lot for AprilTags:
+
+### Coordinate frames and 3rd-party conventions (especially AprilTags)
+
+Phoenix uses `Pose2d`/`Pose3d` heavily. Those are just *math objects* — they don't know what "+X" means
+unless you define the frame.
+
+Phoenix's standard convention is right-handed:
+
+* Units: **inches** (translation) and **radians** (angles).
+* Rotations:
+  * yaw = rotation about **+Z** (turning left / CCW is positive)
+  * pitch = rotation about **+Y**
+  * roll = rotation about **+X**
+
+For field-centric work, Phoenix uses the **FTC Field Coordinate System**:
+
+* Origin at the field center
+* +Z up
+* Stand at the **Red Wall center** facing the field: +X is to your right, +Y is away from the Red Wall
+
+AprilTags add an extra complication: FTC exposes *multiple* pose frames.
+
+* **Game database / layout** (`AprilTagGameDatabase` → `TagLayout`)
+  * Tag poses come from FTC metadata (`fieldPosition` + `fieldOrientation`).
+* **Detections** (`AprilTagDetection`)
+  * `rawPose` is the **native AprilTag/OpenCV camera frame** (+X right, +Y down, +Z forward).
+  * `ftcPose` is a **convenience re-frame** (+X right, +Y forward, +Z up) with yaw/pitch/roll labels.
+
+Phoenix's rule of thumb:
+
+* If you are composing detections with the FTC game database (localization, camera mount calibration),
+  use `rawPose` (then convert it into Phoenix camera axes). Mixing `ftcPose` with game database
+  metadata can put you in two different coordinate systems and produce nonsense transforms.
+
+Implementation pointers:
+
+* `fw.ftc.FtcFrames` documents the basis transforms and exposes the conversion matrices.
+* `fw.ftc.FtcVision` builds `AprilTagObservation.cameraToTagPose` from `rawPose` and converts it into
+  Phoenix camera axes (+X forward, +Y left, +Z up).
+
 Tester naming conventions (telemetry menus):
 
 * Prefix calibration routines with `Calib:`

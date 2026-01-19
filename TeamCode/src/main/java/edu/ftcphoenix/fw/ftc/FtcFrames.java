@@ -64,6 +64,14 @@ import edu.ftcphoenix.fw.core.geometry.Vec3;
  * rotation that is compatible with that mapping when converting to/from matrices.
  * </p>
  *
+ * <p><b>AprilTagDetection.ftcPose gotcha:</b>
+ * The FTC SDK reports {@code pitch} as rotation about <b>+X</b> and {@code roll} as rotation about <b>+Y</b>,
+ * and the sample OpModes treat these values as <b>degrees</b>. Phoenix {@link Pose3d} uses the more common
+ * naming where roll is about +X and pitch is about +Y, and Phoenix angles are in <b>radians</b>.
+ * Therefore, when converting {@code det.ftcPose} into a {@link Pose3d}, convert degrees→radians and swap
+ * the pitch/roll fields (FTC pitch→Phoenix roll, FTC roll→Phoenix pitch). See {@link FtcVision} for the
+ * canonical conversion.
+ * </p>
  * <h2>How to use</h2>
  * <p>
  * Use these functions only inside the FTC adapter layer. Store outputs using Phoenix naming:
@@ -233,5 +241,55 @@ public final class FtcFrames {
             this.M = M;
             this.Minv = M.transpose();
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Public basis matrices (for adapters)
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Rotation matrix that converts vectors expressed in the <b>FTC Localization / AprilTag raw
+     * camera frame</b> into Phoenix camera coordinates.
+     *
+     * <p><b>FTC/AprilTag raw camera axes</b> (OpenCV / AprilRobotics):
+     * <ul>
+     *   <li>+X: right</li>
+     *   <li>+Y: down</li>
+     *   <li>+Z: forward (out of the camera lens)</li>
+     * </ul>
+     *
+     * <p><b>Phoenix camera axes</b>:
+     * <ul>
+     *   <li>+X: forward</li>
+     *   <li>+Y: left</li>
+     *   <li>+Z: up</li>
+     * </ul>
+     */
+    public static Mat3 phoenixFromAprilTagRawCameraFrame() {
+        return Basis.FTC_LOC_CAM_TO_P.M;
+    }
+
+    /**
+     * Inverse of {@link #phoenixFromAprilTagRawCameraFrame()}.
+     */
+    public static Mat3 aprilTagRawCameraFromPhoenixFrame() {
+        return Basis.FTC_LOC_CAM_TO_P.Minv;
+    }
+
+    /**
+     * Rotation matrix that converts vectors expressed in the FTC "ftcPose" AprilTag reference
+     * frame (+X right, +Y forward, +Z up) into Phoenix camera coordinates.
+     */
+    public static Mat3 phoenixFromFtcDetectionFrame() {
+        // FTC AprilTag detection frame uses the same axes as FTC robot axes:
+        // +X right, +Y forward, +Z up.
+        return Basis.FTC_XRIGHT_YFWD_ZUP_TO_P.M;
+    }
+
+    /**
+     * Inverse of {@link #phoenixFromFtcDetectionFrame()}.
+     */
+    public static Mat3 ftcDetectionFromPhoenixFrame() {
+        return Basis.FTC_XRIGHT_YFWD_ZUP_TO_P.Minv;
     }
 }

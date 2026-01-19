@@ -9,14 +9,19 @@ import java.util.Objects;
  * It is used to describe relationships between coordinate frames (e.g. camera-to-tag,
  * robot-to-camera mount, field-to-robot).</p>
  *
- * <h2>Phoenix coordinate conventions</h2>
+ * <h2>Coordinate conventions</h2>
  * <ul>
  *   <li><strong>Units:</strong> distances are in inches, angles are in radians.</li>
  *   <li><strong>Axes:</strong>
  *     <ul>
- *       <li>{@code xInches}: +X forward</li>
- *       <li>{@code yInches}: +Y left</li>
- *       <li>{@code zInches}: +Z up</li>
+ *       <li>{@code xInches}, {@code yInches}, {@code zInches} are the X/Y/Z translation
+ *           components of the pose in <em>whatever frame</em> you are working in.</li>
+ *       <li>{@code Pose3d} itself does not assign a universal real-world meaning to +X/+Y/+Z.
+ *           That meaning comes from the coordinate frame the pose is expressed in.</li>
+ *       <li><b>Robot/mechanism frames</b> in Phoenix are typically expressed as +X forward,
+ *           +Y left, +Z up.</li>
+ *       <li><b>Field-centric poses</b> in Phoenix are expressed in the <b>FTC Field Coordinate
+ *           System</b> for the current season (see {@code TagLayout} and {@code PoseEstimate}).</li>
  *     </ul>
  *   </li>
  *   <li><strong>Rotations:</strong> right-hand rule about the +axis.</li>
@@ -43,22 +48,22 @@ import java.util.Objects;
 public final class Pose3d {
 
     /**
-     * +X forward translation in inches.
+     * X translation in inches (frame +X).
      */
     public final double xInches;
 
     /**
-     * +Y left translation in inches.
+     * Y translation in inches (frame +Y).
      */
     public final double yInches;
 
     /**
-     * +Z up translation in inches.
+     * Z translation in inches (frame +Z).
      */
     public final double zInches;
 
     /**
-     * Rotation about +Z in radians (turning left is positive).
+     * Rotation about +Z in radians (CCW-positive).
      */
     public final double yawRad;
 
@@ -73,12 +78,12 @@ public final class Pose3d {
     public final double rollRad;
 
     /**
-     * Constructs a {@code Pose3d} using Phoenix coordinate conventions.
+     * Constructs a {@code Pose3d} (distances in inches, angles in radians).
      *
-     * @param xInches  +X forward translation in inches
-     * @param yInches  +Y left translation in inches
-     * @param zInches  +Z up translation in inches
-     * @param yawRad   rotation about +Z in radians
+     * @param xInches  X translation in inches (frame +X)
+     * @param yInches  Y translation in inches (frame +Y)
+     * @param zInches  Z translation in inches (frame +Z)
+     * @param yawRad   rotation about +Z in radians (CCW-positive)
      * @param pitchRad rotation about +Y in radians
      * @param rollRad  rotation about +X in radians
      */
@@ -200,7 +205,9 @@ public final class Pose3d {
         return new Pose3d(xInches, yInches, zInches, yawRad, pitchRad, rollRad);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "Pose3d{"
@@ -213,7 +220,9 @@ public final class Pose3d {
                 + '}';
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Pose3d)) return false;
@@ -226,7 +235,9 @@ public final class Pose3d {
                 && Double.compare(rollRad, other.rollRad) == 0;
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return Objects.hash(xInches, yInches, zInches, yawRad, pitchRad, rollRad);

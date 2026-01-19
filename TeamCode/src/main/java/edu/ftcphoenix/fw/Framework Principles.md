@@ -312,11 +312,29 @@ If a boolean is genuinely a *permission* (“this action is allowed”), `allowX
 
 ### 3.5 Direction and naming conventions
 
-Phoenix coordinates and sign conventions are a contract:
+Phoenix coordinates and sign conventions are a contract.
 
-* `Pose2d` / `Pose3d`: **+X forward**, **+Y left**, heading/yaw is **CCW-positive**.
+Importantly, Phoenix uses **multiple frames**:
+
+* **Robot / mechanism frames (robot-centric):** Phoenix uses a right-handed frame with
+  **+X forward**, **+Y left**, **+Z up**.
+  * `DriveSignal` is defined in this robot-centric frame.
+  * Camera mount extrinsics (`robotToCamera`) are expressed in this robot-centric frame.
+
+* **Field frame (field-centric):** Phoenix uses the **FTC Field Coordinate System** for the
+  current season.
+  * The origin is the center of the field on the floor.
+  * **+Z is up**.
+  * The meaning of **+X and +Y is season-dependent** (diamond vs square vs inverted square)
+    and is defined by FTC official docs.
+  * When in doubt, use the FTC reference-frame definition: a person standing at the center
+    of the Red Wall looking in — **+X is to their right** and **+Y is away from the Red Wall**.
+
+Shared conventions (all frames):
+
 * Distances are in **inches**.
 * Angles are in **radians**.
+* Heading/yaw is **CCW-positive** about **+Z**.
 
 **Naming guideline:** prefer *directional words* (`Forward`, `Left`, `Up`, etc.) when a value is not literally a `Pose2d` component.
 

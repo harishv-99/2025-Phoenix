@@ -87,6 +87,24 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
     private Pose3d fieldToRobotPose = DEFAULT_P_FIELD_TO_ROBOT;
     private boolean fineSteps = true;
 
+    // Input/UI mode
+    private boolean editMode = false;
+
+    private enum EditField {
+        TAG_ID("Tag ID"),
+        ROBOT_X("Robot X"),
+        ROBOT_Y("Robot Y"),
+        ROBOT_YAW("Robot Yaw");
+
+        final String label;
+
+        EditField(String label) {
+            this.label = label;
+        }
+    }
+
+    private EditField editField = EditField.ROBOT_X;
+
     private Pose3d lastRobotToCameraSample = null;
     private Pose3d lastObservedCameraToTag = null;
     private Pose3d lastPredictedCameraToTag = null;
@@ -219,32 +237,67 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
             fineSteps = !fineSteps;
         });
 
+        // Toggle edit mode (RS). Edit mode lets you select which variable you're changing
+        // instead of remembering which button maps to which axis.
+        bindings.onPress(gamepads.p1().rs(), () -> {
+            if (!visionReady) return;
+            editMode = !editMode;
+        });
+
+        // D-pad:
+        //  - QUICK mode: dpad X adjusts X, dpad Y adjusts Y (requested)
+        //  - EDIT mode: up/down selects a field, left/right changes its value
         bindings.onPress(gamepads.p1().dpadUp(), () -> {
             if (!visionReady) return;
-            adjustRobotPose(+stepXY(), 0.0, 0.0);
+            if (editMode) {
+                cycleEditField(-1);
+            } else {
+                adjustRobotPose(0.0, +stepXY(), 0.0);
+            }
         });
         bindings.onPress(gamepads.p1().dpadDown(), () -> {
             if (!visionReady) return;
-            adjustRobotPose(-stepXY(), 0.0, 0.0);
+            if (editMode) {
+                cycleEditField(+1);
+            } else {
+                adjustRobotPose(0.0, -stepXY(), 0.0);
+            }
         });
 
-        // Intentionally map left/right to +/-Y for intuitive feel.
         bindings.onPress(gamepads.p1().dpadLeft(), () -> {
             if (!visionReady) return;
-            adjustRobotPose(0.0, +stepXY(), 0.0);
+            if (editMode) {
+                adjustEditField(-1);
+            } else {
+                adjustRobotPose(-stepXY(), 0.0, 0.0);
+            }
         });
         bindings.onPress(gamepads.p1().dpadRight(), () -> {
             if (!visionReady) return;
-            adjustRobotPose(0.0, -stepXY(), 0.0);
+            if (editMode) {
+                adjustEditField(+1);
+            } else {
+                adjustRobotPose(+stepXY(), 0.0, 0.0);
+            }
         });
 
+        // Yaw adjustment. In QUICK mode we keep the classic LB/RB mapping.
+        // In EDIT mode, bumpers behave like +/- on the selected field.
         bindings.onPress(gamepads.p1().leftBumper(), () -> {
             if (!visionReady) return;
-            adjustRobotPose(0.0, 0.0, +stepYawRad());
+            if (editMode) {
+                adjustEditField(-1);
+            } else {
+                adjustRobotPose(0.0, 0.0, +stepYawRad());
+            }
         });
         bindings.onPress(gamepads.p1().rightBumper(), () -> {
             if (!visionReady) return;
-            adjustRobotPose(0.0, 0.0, -stepYawRad());
+            if (editMode) {
+                adjustEditField(+1);
+            } else {
+                adjustRobotPose(0.0, 0.0, -stepYawRad());
+            }
         });
 
         // If user provided a camera name, try to bring vision up immediately in INIT.
@@ -264,6 +317,9 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         // the tester suite.
         visionReady = false;
         visionInitError = null;
+
+        editMode = false;
+        editField = EditField.ROBOT_X;
 
         // IMPORTANT: Release the VisionPortal backing this sensor. If we don't, future camera
         // selection attempts can fail with FTC SDK errors about “multiple vision portals”.
@@ -437,10 +493,40 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
 
         t.addLine("=== Camera Mount Calibrator ===");
         t.addLine(String.format(Locale.US,
-                "Camera=%s | TagId=%d | Step=%s | MaxAge=%.0f ms",
-                selectedCameraName, selectedTagId, fineSteps ? "FINE" : "COARSE", maxAgeSec * 1000.0
+                "Camera=%s | TagId=%d | Mode=%s%s",
+                selectedCameraName,
+                selectedTagId,
+                editMode ? "EDIT" : "QUICK",
+                editMode ? (" (" + editField.label + ")") : ""
         ));
-        t.addLine("Controls: Y/X tagId | A capture | B clear | dpad XY | LB/RB yaw | START step | BACK camera picker");
+        t.addLine(String.format(Locale.US,
+                "Step=%s | XY=%.2f in | Yaw=%.1f° | MaxAge=%.0f ms",
+                fineSteps ? "FINE" : "COARSE",
+                stepXY(),
+                Math.toDegrees(stepYawRad()),
+                maxAgeSec * 1000.0
+        ));
+        t.addLine("Units: inches (angles shown in degrees)");
+        t.addLine("Field frame: FTC Field Coordinate System (origin=center, +Z up)");
+        t.addLine("FTC axes hint: stand at Red Wall center facing field: +X to your right, +Y away from Red Wall");
+        t.addLine("AprilTag note: observation uses SDK rawPose (native AprilTag/OpenCV) converted to Phoenix camera axes");
+        t.addLine("             (SDK ftcPose is a convenience reframe; don't mix with game database fieldOrientation)");
+        if (!editMode) {
+            t.addLine("Controls: Y/X tagId | A capture | B clear | dpad: X/Y translate | LB/RB yaw | START fine/coarse | RS edit");
+        } else {
+            t.addLine("Controls: dpad up/down field | dpad left/right +/- | LB/RB +/- | RS quick | START fine/coarse");
+        }
+        t.addLine("(BACK: camera picker)  (Hold robot still when sampling)");
+
+        // Show the known field pose of the selected tag (from the FTC game database or an override layout).
+        t.addLine("");
+        t.addLine("Selected tag pose from layout (fieldToTagPose):");
+        TagLayout.TagPose selectedTagPose = (layout != null) ? layout.get(selectedTagId) : null;
+        if (selectedTagPose == null) {
+            t.addLine("  (tag not present in layout)");
+        } else {
+            addPoseLine(t, "fieldToTagPose(layout)", selectedTagPose.fieldToTagPose());
+        }
 
         t.addLine("");
         t.addLine("Known robot pose (fieldToRobotPose):");
@@ -460,6 +546,14 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
             t.addLine("  Need: (1) fresh detection AND (2) this tag present in layout.");
         } else {
             addPoseLine(t, "robotToCameraPose(sample)", lastRobotToCameraSample);
+
+            double mountNorm = translationNormInches(lastRobotToCameraSample);
+            if (mountNorm > 36.0) {
+                t.addLine(String.format(Locale.US,
+                        "WARNING: mount translation is large (|t|=%.1f in). Check fieldToRobotPose + tag ID.",
+                        mountNorm
+                ));
+            }
 
             if (lastPredictedCameraToTag != null && lastObservedCameraToTag != null) {
                 Pose3d predToObsPose = lastPredictedCameraToTag.inverse().then(lastObservedCameraToTag);
@@ -482,13 +576,19 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
         if (mean == null) {
             t.addLine("Average: (none yet) Press A a few times while holding still.");
         } else {
-            t.addLine("Average mount (paste into CameraMountConfig.of):");
+            t.addLine("Average mount (paste into CameraMountConfig.of / ofDegrees):");
             addPoseLine(t, "robotToCameraPose(avg)", mean);
 
             t.addLine(String.format(Locale.US,
                     "CameraMountConfig.of(%.3f, %.3f, %.3f, %.6f, %.6f, %.6f)",
                     mean.xInches, mean.yInches, mean.zInches,
                     mean.yawRad, mean.pitchRad, mean.rollRad
+            ));
+
+            t.addLine(String.format(Locale.US,
+                    "CameraMountConfig.ofDegrees(%.3f, %.3f, %.3f, %.1f, %.1f, %.1f)",
+                    mean.xInches, mean.yInches, mean.zInches,
+                    Math.toDegrees(mean.yawRad), Math.toDegrees(mean.pitchRad), Math.toDegrees(mean.rollRad)
             ));
         }
 
@@ -531,6 +631,37 @@ public final class CameraMountCalibrator extends BaseTeleOpTester {
                 fieldToRobotPose.pitchRad,
                 fieldToRobotPose.rollRad
         );
+    }
+
+
+    // Edit-mode helpers
+    private void cycleEditField(int delta) {
+        EditField[] fields = EditField.values();
+        int idx = editField.ordinal();
+        int next = (idx + delta) % fields.length;
+        if (next < 0) next += fields.length;
+        editField = fields[next];
+    }
+
+    private void adjustEditField(int dir) {
+        switch (editField) {
+            case TAG_ID:
+                if (dir > 0) {
+                    selectedTagId++;
+                } else {
+                    selectedTagId = Math.max(1, selectedTagId - 1);
+                }
+                break;
+            case ROBOT_X:
+                adjustRobotPose(dir * stepXY(), 0.0, 0.0);
+                break;
+            case ROBOT_Y:
+                adjustRobotPose(0.0, dir * stepXY(), 0.0);
+                break;
+            case ROBOT_YAW:
+                adjustRobotPose(0.0, 0.0, dir * stepYawRad());
+                break;
+        }
     }
 
     // Averager

@@ -104,6 +104,38 @@ public final class CameraMountConfig {
     }
 
     /**
+     * Creates a mount config from the six standard values, but with angles expressed in degrees.
+     *
+     * <p>This is a convenience for calibration workflows where humans think in degrees. The config
+     * still stores angles internally in <b>radians</b>.</p>
+     *
+     * @param xInches  camera position +X forward from robot center (inches)
+     * @param yInches  camera position +Y left from robot center (inches)
+     * @param zInches  camera position +Z up from floor (inches)
+     * @param yawDeg   rotation about +Z (degrees)
+     * @param pitchDeg rotation about +Y (degrees)
+     * @param rollDeg  rotation about +X (degrees)
+     * @return a new {@link CameraMountConfig}
+     */
+    public static CameraMountConfig ofDegrees(
+            double xInches,
+            double yInches,
+            double zInches,
+            double yawDeg,
+            double pitchDeg,
+            double rollDeg
+    ) {
+        return of(
+                xInches,
+                yInches,
+                zInches,
+                Math.toRadians(yawDeg),
+                Math.toRadians(pitchDeg),
+                Math.toRadians(rollDeg)
+        );
+    }
+
+    /**
      * Convenience: camera mount at robot origin with no rotation.
      */
     public static CameraMountConfig identity() {
@@ -188,13 +220,17 @@ public final class CameraMountConfig {
                 .addData(p + ".rollRad", rollRad());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "CameraMountConfig{robotToCamera=" + robotToCamera + "}";
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof CameraMountConfig)) return false;
@@ -202,7 +238,9 @@ public final class CameraMountConfig {
         return robotToCamera.equals(other.robotToCamera);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int hashCode() {
         return robotToCamera.hashCode();

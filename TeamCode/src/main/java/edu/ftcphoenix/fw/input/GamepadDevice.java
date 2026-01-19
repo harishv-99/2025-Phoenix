@@ -136,6 +136,10 @@ public final class GamepadDevice {
     private final Button dpadLeft;
     private final Button dpadRight;
 
+    // Stick click buttons
+    private final Button leftStickButton;
+    private final Button rightStickButton;
+
     // Menu/system buttons (controller dependent naming)
     private final Button back;
     private final Button start;
@@ -176,6 +180,10 @@ public final class GamepadDevice {
         this.dpadDown = Button.of(() -> gp.dpad_down);
         this.dpadLeft = Button.of(() -> gp.dpad_left);
         this.dpadRight = Button.of(() -> gp.dpad_right);
+
+        // Stick click buttons
+        this.leftStickButton = Button.of(() -> gp.left_stick_button);
+        this.rightStickButton = Button.of(() -> gp.right_stick_button);
 
         // Menu/system buttons (controller-dependent naming across SDK/controller mappings)
         this.back = Button.of(() -> readBooleanAny(gp, F_BACK, F_SHARE));
@@ -439,6 +447,34 @@ public final class GamepadDevice {
      */
     public Button dpadRight() {
         return dpadRight;
+    }
+
+    /**
+     * Left stick button (press the left stick).
+     */
+    public Button leftStickButton() {
+        return leftStickButton;
+    }
+
+    /**
+     * Right stick button (press the right stick).
+     */
+    public Button rightStickButton() {
+        return rightStickButton;
+    }
+
+    /**
+     * Alias for {@link #leftStickButton()} (common "LS" naming).
+     */
+    public Button ls() {
+        return leftStickButton;
+    }
+
+    /**
+     * Alias for {@link #rightStickButton()} (common "RS" naming).
+     */
+    public Button rs() {
+        return rightStickButton;
     }
 
     /**
