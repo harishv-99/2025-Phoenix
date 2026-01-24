@@ -49,10 +49,9 @@ Drive overlays take a `BooleanSupplier`. The most common patterns are:
 #### Hold to enable
 
 ```java
-DriveSource drive = DriveGuidance.overlayOn(
-        base,
+DriveSource drive = base.overlayWhen(
         gamepads.p1().leftBumper()::isHeld,
-        aimPlan,
+        aimPlan.overlay(),
         DriveOverlayMask.OMEGA_ONLY
 );
 ```
@@ -62,15 +61,41 @@ DriveSource drive = DriveGuidance.overlayOn(
 Use `Button.isToggled()` via a method reference to get a `BooleanSupplier` that flips on each press:
 
 ```java
-DriveSource drive = DriveGuidance.overlayOn(
-        base,
+DriveSource drive = base.overlayWhen(
         gamepads.p1().leftBumper()::isToggled,
-        aimPlan,
+        aimPlan.overlay(),
         DriveOverlayMask.OMEGA_ONLY
 );
 ```
 
 That’s it: your driver keeps full stick translation, and the overlay “owns” only omega.
+
+#### Multiple overlays (recommended): overlay stack
+
+When you want to layer multiple assists (for example: a **pose lock** that overrides translation
+*and* an **auto-aim** that overrides omega), use an overlay stack.
+
+```java
+DriveSource drive = base.overlayStack()
+        .add(
+                "shootBrace",
+                () -> shootBraceEnabled,
+                DriveGuidance.poseLock(poseEstimator),
+                DriveOverlayMask.TRANSLATION_ONLY
+        )
+        .add(
+                "autoAim",
+                gamepads.p2().leftBumper()::isHeld,
+                aimPlan.overlay(),
+                DriveOverlayMask.OMEGA_ONLY
+        )
+        .build();
+```
+
+Notes:
+
+* Layers are evaluated **top to bottom**.
+* If two enabled layers claim the same DOF, **the last layer wins** for that DOF.
 
 ---
 
@@ -86,10 +111,9 @@ DriveGuidancePlan plan = DriveGuidance.plan()
         .feedback().observation(obs).doneFeedback()
         .build();
 
-DriveSource drive = DriveGuidance.overlayOn(
-        base,
+DriveSource drive = base.overlayWhen(
         gamepads.p2().leftBumper()::isHeld,
-        plan,
+        plan.overlay(),
         DriveOverlayMask.OMEGA_ONLY
 );
 ```

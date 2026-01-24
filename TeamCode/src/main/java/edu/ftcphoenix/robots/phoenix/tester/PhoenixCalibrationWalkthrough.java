@@ -85,17 +85,22 @@ public final class PhoenixCalibrationWalkthrough {
         final int stepPinpointOffsets = idx++;
         suite.add(
                 "4) Calib: Pinpoint Pod Offsets",
-                "Rotate in place to estimate offsets. Tag assist auto-enables when camera mount is OK.",
+                "Press PLAY, then rotate in place to estimate offsets (Y auto-sample; auto-computes when tags are available). Tag assist auto-enables when camera mount is OK.",
                 () -> {
                     PinpointPodOffsetCalibrator.Config cfg = PinpointPodOffsetCalibrator.Config.defaults();
                     cfg.pinpoint = RobotConfig.Localization.pinpoint;
                     cfg.mecanumWiring = RobotConfig.DriveTrain.mecanumWiring();
-                    cfg.targetTurnRad = 2.0 * Math.PI;
+                    // Use ~180° for the pod-offset solve.
+                    // A full 360° turn is (nearly) degenerate for this math and can explode.
+                    cfg.targetTurnRad = Math.PI;
 
                     // Optional AprilTag assist.
                     cfg.preferredCameraName = RobotConfig.Vision.nameWebcam;
                     cfg.cameraMount = RobotConfig.Vision.cameraMount;
                     cfg.enableAprilTagAssist = RobotConfig.Calibration.canUseAprilTagAssist();
+
+                    // With AprilTag assist, auto-samples compute automatically after the turn.
+                    cfg.autoComputeAfterAutoSample = true;
 
                     return new PinpointPodOffsetCalibrator(cfg);
                 }

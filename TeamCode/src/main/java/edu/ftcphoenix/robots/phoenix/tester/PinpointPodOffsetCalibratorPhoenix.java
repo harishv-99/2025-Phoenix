@@ -30,7 +30,8 @@ public final class PinpointPodOffsetCalibratorPhoenix {
 
         suite.add(
                 "Calib: Pinpoint Pod Offsets (Robot)",
-                "Rotate in place to estimate pod offsets; " + assistStatus + "; " + offsetsStatus,
+                "Press PLAY, then rotate in place to estimate pod offsets (Y auto-sample; auto-computes with tags). "
+                        + assistStatus + "; " + offsetsStatus,
                 () -> {
                     PinpointPodOffsetCalibrator.Config cfg = PinpointPodOffsetCalibrator.Config.defaults();
                     cfg.pinpoint = RobotConfig.Localization.pinpoint;
@@ -38,11 +39,19 @@ public final class PinpointPodOffsetCalibratorPhoenix {
                     // Provide drivetrain wiring so the calibrator can rotate the robot.
                     cfg.mecanumWiring = RobotConfig.DriveTrain.mecanumWiring();
 
-                    // Use a full turn for better signal-to-noise.
-                    cfg.targetTurnRad = 2.0 * Math.PI;
+                    // IMPORTANT: don't use a full 360° turn here.
+                    // This calibrator solves offsets from start/end translation drift. After a full
+                    // turn, the ideal drift is ~0, so the math becomes ill-conditioned and will blow
+                    // up on noise (you'll see absurd offsets like hundreds of inches).
+                    //
+                    // ~180° gives the strongest signal and a well-conditioned solve.
+                    cfg.targetTurnRad = Math.PI;
 
                     // AprilTag assist is optional. Enable automatically once camera mount is calibrated.
                     cfg.enableAprilTagAssist = canUseAssist;
+
+                    // With AprilTag assist, auto-samples compute automatically after the turn.
+                    cfg.autoComputeAfterAutoSample = true;
                     cfg.preferredCameraName = RobotConfig.Vision.nameWebcam;
                     cfg.cameraMount = RobotConfig.Vision.cameraMount;
 

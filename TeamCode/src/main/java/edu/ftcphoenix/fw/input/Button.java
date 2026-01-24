@@ -75,10 +75,9 @@ public interface Button {
      *
      * <h2>Usage (enable a drive overlay)</h2>
      * <pre>{@code
-     * DriveSource drive = DriveGuidance.overlayOn(
-     *         base,
+     * DriveSource drive = base.overlayWhen(
      *         gamepads.p2().leftBumper()::isToggled, // press-to-toggle enable
-     *         aimPlan,
+     *         aimPlan.overlay(),
      *         DriveOverlayMask.OMEGA_ONLY
      * );
      * }</pre>

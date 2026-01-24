@@ -40,10 +40,26 @@ import edu.ftcphoenix.fw.tools.tester.ui.HardwareNamePicker;
  *   <li><b>Right stick X</b>: Manual rotate (when drive is configured)</li>
  * </ul>
  *
+ * <p><b>Important:</b> robot movement only happens after you press <b>PLAY</b> on the Driver Station.
+ * In <b>INIT</b> (before PLAY), this tester can still show status and (optionally) let you select a
+ * webcam for AprilTag assist, but it will not command the motors.</p>
+ *
  * <p>Optional: enable AprilTag assist to subtract real translation while sampling. This is useful if the
  * robot doesn't rotate perfectly in place (carpet slip, uneven pod preload, etc.).</p>
  */
 public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
+
+    /**
+     * Minimum solve denominator (a^2 + b^2) required to produce a stable result.
+     *
+     * <p>For this calibrator, the solve becomes ill-conditioned when the net rotation is close to
+     * 0° or 360° (or any multiple of 360°). In those cases, the true drift approaches 0 and noise
+     * will "blow up" into absurd offset values.</p>
+     *
+     * <p>Denominator is: sin^2(theta) + (1 - cos(theta))^2 = 4 * sin^2(theta/2).
+     * A value of 0.5 roughly corresponds to ~45° away from the degenerate cases.</p>
+     */
+    private static final double MIN_SOLVE_DENOM = 0.5;
 
     /**
      * Configuration for the tester.
@@ -79,6 +95,21 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
          * Target rotation (radians) for auto samples. Defaults to 180 degrees.
          */
         public double targetTurnRad = Math.PI;
+
+        /**
+         * If true, auto samples (Y) will compute results automatically once the rotation is done
+         * <b>when AprilTag assist is active</b>.
+         *
+         * <p>This is the recommended way to run the calibrator: the tester uses the Pinpoint IMU
+         * heading to stop at ~180°, and uses AprilTags to subtract any real translation (carpet slip,
+         * imperfect pivot, etc.). When a tag pose is available at both the start and end of the
+         * sample, the test becomes fully automatic: press <b>Y</b>, and it will stop and compute on
+         * its own.</p>
+         *
+         * <p>If tags are not available (no known-pose tag seen), the tester will fall back to the
+         * recenter-and-press-A flow to avoid producing misleading numbers.</p>
+         */
+        public boolean autoComputeAfterAutoSample = true;
 
         // -------------------------------------------------------------------------------------
         // AprilTag assist enhancements
@@ -266,6 +297,10 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     private Pose2d startPinpointPose = Pose2d.zero();
     private Pose2d startTagPose = null;
 
+    // If AprilTag assist is enabled, we cache the most recent valid tag pose during the sample.
+    // This makes the assist robust to brief dropouts (motion blur, occlusion, etc.).
+    private Pose2d endTagPose = null;
+
     private double startHeadingRad = 0.0;
     private double startHeadingUnwrappedRad = 0.0;
     private final AngleUnwrapper headingUnwrapper = new AngleUnwrapper();
@@ -284,6 +319,10 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
 
     private Double lastRecommendedStrafePodOffsetForwardInches = null;
     private Double lastRecommendedForwardPodOffsetLeftInches = null;
+
+    // If the last sample couldn't be solved (too little rotation / degenerate rotation), this
+    // is a short, driver-facing note explaining why.
+    private String lastSolveNote = null;
 
     private boolean lastHadTagStart = false;
     private boolean lastHadTagEnd = false;
@@ -535,9 +574,12 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         lastRecommendedForwardPodOffsetLeftInches = null;
         lastHadTagStart = false;
         lastHadTagEnd = false;
+        lastSolveNote = null;
 
         startTagPose = null;
         latestTagPose = null;
+
+        endTagPose = null;
 
         // Reset pose to something deterministic
         pinpoint.setPose(Pose2d.zero());
@@ -604,6 +646,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         lastRecommendedForwardPodOffsetLeftInches = null;
         lastHadTagStart = false;
         lastHadTagEnd = false;
+        lastSolveNote = null;
     }
 
     private void requestStartSample(boolean auto) {
@@ -644,6 +687,8 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         lastHadTagStart = (startTagPose != null);
         lastHadTagEnd = false;
 
+        endTagPose = null;
+
         // Align Pinpoint's field frame so deltas are comparable.
         if (startTagPose != null) {
             pinpoint.setPose(startTagPose);
@@ -676,6 +721,9 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                 && tagEstimator != null
                 && startTagPose != null) {
             PoseEstimate tagEst = tagEstimator.getEstimate();
+            if (tagEst.hasPose) {
+                endTagPose = tagEst.toPose2d();
+            }
             if (!tagEst.hasPose) {
                 phase = Phase.SEARCH_TAG_END;
                 tagStableFrames = 0;
@@ -689,6 +737,21 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
     }
 
     private void transitionToPostRecenterOrFinish() {
+        // Fully automatic path (recommended): if this was an auto sample and AprilTag assist
+        // produced a start+end tag pose, compute immediately (no extra button presses).
+        if (autoSample
+                && cfg.autoComputeAfterAutoSample
+                && cfg.enableAprilTagAssist
+                && startTagPose != null
+                && endTagPose != null) {
+            if (drive != null) {
+                drive.update(ctx.clock);
+                drive.drive(DriveSignal.zero());
+            }
+            finishSampleAndCompute();
+            return;
+        }
+
         if (cfg.enablePostRotateRecenter) {
             phase = Phase.POST_RECENTER;
         } else {
@@ -717,13 +780,13 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
 
         double deltaHeading = headingUnwrapper.getUnwrappedRad() - startHeadingUnwrappedRad;
 
-        // AprilTag assist: subtract real translation
-        if (cfg.enableAprilTagAssist && tagEstimator != null && startTagPose != null) {
-            PoseEstimate tagEst = tagEstimator.getEstimate();
-            if (tagEst.hasPose) {
-                Pose2d endTagPose = tagEst.toPose2d();
-                double dxTrue = endTagPose.xInches - startTagPose.xInches;
-                double dyTrue = endTagPose.yInches - startTagPose.yInches;
+        // AprilTag assist: subtract real translation (tag-measured) so we isolate odometry drift
+        // caused by pod-offset misconfiguration, not carpet slip or an imperfect pivot.
+        if (cfg.enableAprilTagAssist && startTagPose != null) {
+            Pose2d end = (endTagPose != null) ? endTagPose : latestTagPose;
+            if (end != null) {
+                double dxTrue = end.xInches - startTagPose.xInches;
+                double dyTrue = end.yInches - startTagPose.yInches;
 
                 dxField -= dxTrue;
                 dyField -= dyTrue;
@@ -748,12 +811,13 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         double b = 1.0 - Math.cos(deltaHeading);
         double denom = a * a + b * b;
 
-        if (denom < 1e-6) {
-            // Not enough rotation to compute a stable solution
+        if (denom < MIN_SOLVE_DENOM) {
+            // Rotation is too small OR too close to a full turn (degenerate for this math).
             lastXErrorInches = null;
             lastYErrorInches = null;
             lastRecommendedStrafePodOffsetForwardInches = null;
             lastRecommendedForwardPodOffsetLeftInches = null;
+            lastSolveNote = "Rotate ~180° (avoid ~360°) for a stable solve";
         } else {
             // xError = x_est - x_true (strafe pod forward offset error)
             // yError = y_est - y_true (forward pods left offset error)
@@ -766,6 +830,8 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
             // Recommended new offsets = current_est - error
             lastRecommendedStrafePodOffsetForwardInches = cfg.pinpoint.strafePodOffsetForwardInches - xError;
             lastRecommendedForwardPodOffsetLeftInches = cfg.pinpoint.forwardPodOffsetLeftInches - yError;
+
+            lastSolveNote = null;
         }
 
         // Return to idle after computing.
@@ -802,6 +868,9 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
 
             PoseEstimate tagEst = tagEstimator.getEstimate();
             latestTagPose = tagEst.hasPose ? tagEst.toPose2d() : null;
+            if (isSampleActive() && latestTagPose != null) {
+                endTagPose = latestTagPose;
+            }
         }
     }
 
@@ -850,10 +919,36 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                 )
         );
 
+        // Make the "copy/paste" result hard to miss.
+        if (lastRecommendedForwardPodOffsetLeftInches != null
+                && lastRecommendedStrafePodOffsetForwardInches != null) {
+            ctx.telemetry.addData(
+                    "Recommended offsets (in)",
+                    String.format(
+                            Locale.US,
+                            "forwardPodOffsetLeft=%.3f, strafePodOffsetForward=%.3f",
+                            lastRecommendedForwardPodOffsetLeftInches,
+                            lastRecommendedStrafePodOffsetForwardInches
+                    )
+            );
+            ctx.telemetry.addData(
+                    "Paste into config",
+                    String.format(
+                            Locale.US,
+                            ".withOffsets(%.3f, %.3f)",
+                            lastRecommendedForwardPodOffsetLeftInches,
+                            lastRecommendedStrafePodOffsetForwardInches
+                    )
+            );
+        }
+
         ctx.telemetry.addLine();
 
         // Instructions (dynamic by phase)
         ctx.telemetry.addLine();
+        if (initPhase) {
+            ctx.telemetry.addLine("IMPORTANT: Press PLAY to enable motor movement (auto sample / stick rotate).");
+        }
         switch (phase) {
             case IDLE:
                 ctx.telemetry.addLine("Controls: X reset | A manual sample | Y auto sample | B abort");
@@ -872,7 +967,11 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
 
             case ROTATING:
                 if (autoSample) {
-                    ctx.telemetry.addLine("Auto rotating... (B abort)");
+                    if (cfg.enableAprilTagAssist && cfg.autoComputeAfterAutoSample) {
+                        ctx.telemetry.addLine("Auto rotating... will stop at target and auto-compute (B abort)");
+                    } else {
+                        ctx.telemetry.addLine("Auto rotating... (B abort)");
+                    }
                 } else {
                     if (drive != null) {
                         ctx.telemetry.addLine("Rotate now: right stick X. Press A when done.");
@@ -880,7 +979,9 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                         ctx.telemetry.addLine("Rotate the robot by hand. Press A when done.");
                     }
                 }
-                if (cfg.enablePostRotateRecenter) {
+                if (autoSample && cfg.enableAprilTagAssist && cfg.autoComputeAfterAutoSample) {
+                    ctx.telemetry.addLine("Tip: with tag assist, results compute automatically after the turn.");
+                } else if (cfg.enablePostRotateRecenter) {
                     ctx.telemetry.addLine("After you stop rotation: you can recenter, then press A to compute.");
                 } else {
                     ctx.telemetry.addLine("Press A to compute immediately when rotation is complete.");
@@ -933,7 +1034,8 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
                         String.format(Locale.US, "xError=%.3f, yError=%.3f", lastXErrorInches, lastYErrorInches)
                 );
             } else {
-                ctx.telemetry.addData("  Offset error", "<not enough rotation>");
+                String note = (lastSolveNote != null) ? lastSolveNote : "<insufficient/degenerate rotation>";
+                ctx.telemetry.addData("  Offset error", note);
             }
 
             if (lastRecommendedForwardPodOffsetLeftInches != null && lastRecommendedStrafePodOffsetForwardInches != null) {

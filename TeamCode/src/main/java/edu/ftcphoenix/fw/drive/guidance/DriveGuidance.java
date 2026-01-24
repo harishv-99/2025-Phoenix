@@ -2,11 +2,9 @@ package edu.ftcphoenix.fw.drive.guidance;
 
 import java.util.ArrayList;
 import java.util.Objects;
-import java.util.function.BooleanSupplier;
 
 import edu.ftcphoenix.fw.drive.DriveOverlay;
 import edu.ftcphoenix.fw.drive.DriveOverlayMask;
-import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.field.TagLayout;
 import edu.ftcphoenix.fw.localization.PoseEstimator;
 import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
@@ -20,8 +18,8 @@ import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
  *   <li>You describe a target (field point, tag-relative point, robot-relative offset, or field heading).</li>
  *   <li>You describe what to do (translate, aim, or both).</li>
  *   <li>You pick feedback sources (observation, field pose, or both).</li>
- *   <li>You apply the resulting overlay to a base {@link DriveSource} using
- *       {@link DriveSource#overlayWhen}.</li>
+ *   <li>You apply the resulting overlay to a base {@link edu.ftcphoenix.fw.drive.DriveSource} using
+ *       {@link edu.ftcphoenix.fw.drive.DriveSource#overlayWhen}.</li>
  * </ul>
  */
 public final class DriveGuidance {
@@ -35,34 +33,6 @@ public final class DriveGuidance {
      */
     public static PlanBuilder0 plan() {
         return new Builder0(new State());
-    }
-
-    /**
-     * Convenience helper to apply a guidance plan as an overlay on top of a base drive source.
-     *
-     * <p>This is equivalent to:
-     * <pre>{@code
-     * base.overlayWhen(enabledWhen, plan.overlay(), requestedMask)
-     * }</pre>
-     */
-    public static DriveSource overlayOn(DriveSource base,
-                                        BooleanSupplier enabledWhen,
-                                        DriveGuidancePlan plan,
-                                        DriveOverlayMask requestedMask) {
-        Objects.requireNonNull(base, "base");
-        Objects.requireNonNull(enabledWhen, "enabledWhen");
-        Objects.requireNonNull(plan, "plan");
-        Objects.requireNonNull(requestedMask, "requestedMask");
-        return base.overlayWhen(enabledWhen, plan.overlay(), requestedMask);
-    }
-
-    /**
-     * Convenience helper that uses {@link DriveGuidancePlan#suggestedMask()}.
-     */
-    public static DriveSource overlayOn(DriveSource base,
-                                        BooleanSupplier enabledWhen,
-                                        DriveGuidancePlan plan) {
-        return overlayOn(base, enabledWhen, plan, plan.suggestedMask());
     }
 
     /**
@@ -187,10 +157,9 @@ public final class DriveGuidance {
          * to override only turning (omega) while a button is held:</p>
          *
          * <pre>{@code
-         * DriveSource drive = DriveGuidance.overlayOn(
-         *     baseDrive,
+         * DriveSource drive = baseDrive.overlayWhen(
          *     gamepads.p2().leftBumper()::isHeld,
-         *     plan,
+         *     plan.overlay(),
          *     DriveOverlayMask.OMEGA_ONLY);
          * }</pre>
          *

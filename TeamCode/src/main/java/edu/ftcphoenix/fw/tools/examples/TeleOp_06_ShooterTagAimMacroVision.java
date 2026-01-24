@@ -259,10 +259,10 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
                 .doneFeedback()
                 .build();
 
-        driveWithAim = DriveGuidance.overlayOn(
-                baseDrive,
+        // Apply the plan as an overlay: the driver keeps translation, and the overlay owns omega.
+        driveWithAim = baseDrive.overlayWhen(
                 () -> gamepads.p1().leftBumper().isHeld(),
-                aimPlan,
+                aimPlan.overlay(),
                 DriveOverlayMask.OMEGA_ONLY
         );
 

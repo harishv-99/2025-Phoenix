@@ -220,10 +220,9 @@ DriveGuidancePlan aimPlan = DriveGuidance.plan()
             .doneFeedback()
         .build();
 
-DriveSource driveWithAim = DriveGuidance.overlayOn(
-        baseDrive,
+DriveSource driveWithAim = baseDrive.overlayWhen(
         () -> gamepads.p1().leftBumper().isHeld(),
-        aimPlan,
+        aimPlan.overlay(),
         DriveOverlayMask.OMEGA_ONLY
 );
 ```

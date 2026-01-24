@@ -18,6 +18,7 @@ import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.drive.DriveSource;
+import edu.ftcphoenix.fw.drive.DriveOverlayStack;
 import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.guidance.DriveGuidance;
@@ -139,7 +140,7 @@ public final class PhoenixRobot {
         // --- Odometry (goBILDA Pinpoint) ---
         // This is used for pose-lock (resist bumps while shooting). It can also be used for
         // autonomous / fusion later.
-//        pinpoint = new PinpointPoseEstimator(hardwareMap, RobotConfig.Localization.pinpoint);
+        pinpoint = new PinpointPoseEstimator(hardwareMap, RobotConfig.Localization.pinpoint);
 
         // --- Vision ---
         cameraMountConfig = RobotConfig.Vision.cameraMount;
@@ -176,22 +177,28 @@ public final class PhoenixRobot {
         // enable, press again to disable), use: gamepads.p2().leftBumper()::isToggled
         BooleanSupplier autoAimEnabled = gamepads.p2().leftBumper()::isHeld;
 
-        driveWithAim = DriveGuidance.overlayOn(
-                stickDrive
-                        .overlayWhen(
-                                () -> shootBraceEnabled,
-                                DriveGuidance.poseLock(
-                                        pinpoint,
-                                        DriveGuidancePlan.Tuning.defaults()
-                                                .withTranslateKp(0.08)
-                                                .withMaxTranslateCmd(0.35)
-                                ),
-                                DriveOverlayMask.TRANSLATION_ONLY
+        // Stack multiple overlays without nested overlayWhen(...) calls.
+        //
+        // Order matters only when two enabled overlays claim the same DOF (the last layer wins).
+        driveWithAim = DriveOverlayStack.on(stickDrive)
+                .add(
+                        "shootBrace",
+                        () -> shootBraceEnabled,
+                        DriveGuidance.poseLock(
+                                pinpoint,
+                                DriveGuidancePlan.Tuning.defaults()
+                                        .withTranslateKp(0.08)
+                                        .withMaxTranslateCmd(0.35)
                         ),
-                autoAimEnabled,
-                aimPlan,
-                DriveOverlayMask.OMEGA_ONLY
-        );
+                        DriveOverlayMask.TRANSLATION_ONLY
+                )
+                .add(
+                        "autoAim",
+                        autoAimEnabled,
+                        aimPlan.overlay(),
+                        DriveOverlayMask.OMEGA_ONLY
+                )
+                .build();
 
         telemetry.addLine("Phoenix TeleOp with AutoAim");
         telemetry.addLine("Left stick: drive, Right stick: turn, RB: slow mode");
