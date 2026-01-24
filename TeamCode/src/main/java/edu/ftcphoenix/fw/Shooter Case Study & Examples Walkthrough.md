@@ -213,7 +213,7 @@ ObservationSource2d scoringObs = ObservationSources.aprilTag(scoringTarget, came
 DriveGuidancePlan aimPlan = DriveGuidance.plan()
         .aimTo()
             // Aim at the center of whichever scoring tag is currently observed.
-            .lookAtTagPointInches(0.0, 0.0)
+            .tagRelativePointInches(0.0, 0.0)
             .doneAimTo()
         .feedback()
             .observation(scoringObs)

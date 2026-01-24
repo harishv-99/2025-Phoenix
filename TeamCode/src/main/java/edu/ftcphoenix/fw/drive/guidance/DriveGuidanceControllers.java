@@ -10,9 +10,9 @@ import edu.ftcphoenix.fw.drive.DriveSignal;
  * kinematics-aware and intentionally avoid physical units (ips, rad/s) so they can be used
  * directly with Phoenix TeleOp driving.</p>
  */
-final class GuidanceControllers {
+final class DriveGuidanceControllers {
 
-    private GuidanceControllers() {
+    private DriveGuidanceControllers() {
     }
 
     /**

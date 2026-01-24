@@ -67,7 +67,7 @@ public final class DriveGuidancePlan {
      *   <li>{@code leftInches} is +Y (left when looking in +X).</li>
      * </ul>
      */
-    public static final class TagPoint implements TranslationTarget, AimTarget {
+    public static final class TagRelativePoint implements TranslationTarget, AimTarget {
 
         /**
          * Tag ID used to resolve this point in a {@link TagLayout}.
@@ -81,7 +81,7 @@ public final class DriveGuidancePlan {
         public final double forwardInches;
         public final double leftInches;
 
-        public TagPoint(int tagId, double forwardInches, double leftInches) {
+        public TagRelativePoint(int tagId, double forwardInches, double leftInches) {
             this.tagId = tagId;
             this.forwardInches = forwardInches;
             this.leftInches = leftInches;
@@ -91,7 +91,7 @@ public final class DriveGuidancePlan {
     /**
      * Aim target that requests an <b>absolute field heading</b>.
      *
-     * <p>This is the “turn to heading” sibling of {@link FieldPoint} / {@link TagPoint} aiming.
+     * <p>This is the “turn to heading” sibling of {@link FieldPoint} / {@link TagRelativePoint} aiming.
      * Instead of aiming at a point, DriveGuidance will rotate the robot until the aim control
      * frame's heading matches {@link #fieldHeadingRad}.</p>
      *

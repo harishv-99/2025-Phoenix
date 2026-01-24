@@ -193,7 +193,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
 
         DriveGuidancePlan aimPlan = DriveGuidance.plan()
                 .aimTo()
-                .lookAtTagPointInches(0.0, 0.0) // tag center (observed tag ID)
+                .tagCenter()
                 .doneAimTo()
                 .feedback()
                 .observation(scoringObs)

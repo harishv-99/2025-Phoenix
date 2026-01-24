@@ -12,9 +12,13 @@ import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcGameTagLayout;
 import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
+import edu.ftcphoenix.fw.field.TagLayout;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.geometry.Pose2d;
+import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.drive.DriveSource;
@@ -31,11 +35,14 @@ import edu.ftcphoenix.fw.sensing.observation.ObservationSources;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
+import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.task.TaskBindings;
 import edu.ftcphoenix.fw.task.Tasks;
 import edu.ftcphoenix.fw.core.time.LoopClock;
+
+import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
 
 /**
  * Central robot class for Phoenix-based robots.
@@ -67,8 +74,10 @@ public final class PhoenixRobot {
     private CameraMountConfig cameraMountConfig;
     private AprilTagSensor tagSensor;
     private TagTarget scoringTarget;
-    private DriveGuidancePlan aimPlan;
+    private DriveGuidancePlan aimPlanBlue;
+    private DriveGuidancePlan aimPlanRed;
     private DriveGuidancePlan.Tuning aimTuning;
+    private TagLayout gameTagLayout;
 
     // "Shoot brace" pose-lock: latch-on while the shooter is spinning and the driver is not
     // commanding translation. This lets the driver still nudge/strafe to line up, but once they
@@ -87,8 +96,8 @@ public final class PhoenixRobot {
 
     static {
         HashSet<Integer> ids = new HashSet<Integer>();
-        ids.add(20);
-        ids.add(24);
+        ids.add(RobotConfig.AutoAim.BLUE_TARGET_TAG_ID);
+        ids.add(RobotConfig.AutoAim.RED_TARGET_TAG_ID);
         SCORING_TAG_IDS = Collections.unmodifiableSet(ids);
     }
 
@@ -146,6 +155,11 @@ public final class PhoenixRobot {
         cameraMountConfig = RobotConfig.Vision.cameraMount;
         tagSensor = FtcVision.aprilTags(hardwareMap, RobotConfig.Vision.nameWebcam);
 
+        // Use the FTC-provided tag layout metadata (field coordinates + tag heading).
+        // This is optional for pure “vision-only” aiming, but it becomes important when you
+        // later add odometry / field-pose aware targeting.
+        gameTagLayout = new FtcGameTagLayout(AprilTagGameDatabase.getCurrentGameTagLibrary());
+
         // Track scoring tags with a freshness window.
         scoringTarget = new TagTarget(tagSensor, SCORING_TAG_IDS, 0.5);
 
@@ -160,9 +174,20 @@ public final class PhoenixRobot {
                 .withAimKp(2.0)            // how strongly we turn toward the target
                 .withAimDeadbandDeg(0.25); // stop turning when we're within this many degrees
 
-        aimPlan = DriveGuidance.plan()
+        // --- Auto-aim plans ---
+        // Instead of aiming at the AprilTag center, aim at a *tag-relative point* that you pick
+        // (example: a basket corner). Each tag ID can have a different offset.
+        //
+        // Offsets are in the tag frame: +forward is out of the tag, +left is left when looking out.
+        RobotConfig.AutoAim.AimOffset blueOffset = RobotConfig.AutoAim.BLUE_AIM_OFFSET;
+        RobotConfig.AutoAim.AimOffset redOffset = RobotConfig.AutoAim.RED_AIM_OFFSET;
+
+        aimPlanBlue = DriveGuidance.plan()
                 .aimTo()
-                .tagCenter()
+                .tagRelativePointInches(
+                        RobotConfig.AutoAim.BLUE_TARGET_TAG_ID,
+                        blueOffset.forwardInches,
+                        blueOffset.leftInches)
                 .doneAimTo()
                 .tuning(aimTuning)
                 .feedback()
@@ -170,6 +195,89 @@ public final class PhoenixRobot {
                 .lossPolicy(DriveGuidancePlan.LossPolicy.PASS_THROUGH)
                 .doneFeedback()
                 .build();
+
+        aimPlanRed = DriveGuidance.plan()
+                .aimTo()
+                .tagRelativePointInches(
+                        RobotConfig.AutoAim.RED_TARGET_TAG_ID,
+                        redOffset.forwardInches,
+                        redOffset.leftInches)
+                .doneAimTo()
+                .tuning(aimTuning)
+                .feedback()
+                .observation(obs2d, 0.50, 0.0)
+                .lossPolicy(DriveGuidancePlan.LossPolicy.PASS_THROUGH)
+                .doneFeedback()
+                .build();
+
+        /*
+         * FUTURE OPTION (leave commented out for now):
+         * Combine AprilTag observation + odometry pose estimator for targeting.
+         *
+         * Why:
+         *  - If the tag blinks out of view for a moment, fieldPose(...) can keep aim stable.
+         *  - You can aim at a tag-relative point in *field coordinates* (using gameTagLayout).
+         *
+         * How:
+         *  - Provide BOTH observation(...) and fieldPose(...)
+         *  - Provide a TagLayout (we already built gameTagLayout above)
+         *  - Optionally configure gates(...) so Phoenix blends between sources based on range
+         */
+        /*
+         * If you eventually want true <b>fusion</b> (odometry corrected by tags) instead of
+         * “use odometry when the tag isn't visible”, you can build a fused PoseEstimator and
+         * pass that into fieldPose(...):
+         *
+         *   edu.ftcphoenix.fw.localization.apriltag.TagOnlyPoseEstimator visionPose =
+         *       new edu.ftcphoenix.fw.localization.apriltag.TagOnlyPoseEstimator(
+         *           scoringTarget,
+         *           gameTagLayout,
+         *           cameraMountConfig
+         *       );
+         *
+         *   edu.ftcphoenix.fw.localization.fusion.OdometryTagFusionPoseEstimator fusedPose =
+         *       new edu.ftcphoenix.fw.localization.fusion.OdometryTagFusionPoseEstimator(
+         *           pinpoint,
+         *           visionPose
+         *       );
+         *
+         * IMPORTANT:
+         *   - You still must call scoringTarget.update(clock) before fusedPose.update(clock)
+         *   - In updateTeleOp(), update fusedPose instead of (or in addition to) pinpoint
+         */
+//        aimPlanBlue = DriveGuidance.plan()
+//                .aimTo()
+//                .tagRelativePointInches(
+//                        RobotConfig.AutoAim.BLUE_TARGET_TAG_ID,
+//                        blueOffset.forwardInches,
+//                        blueOffset.leftInches)
+//                .doneAimTo()
+//                .tuning(aimTuning)
+//                .feedback()
+//                .observation(obs2d, 0.50, 0.0)
+//                .fieldPose(pinpoint, gameTagLayout, 0.25, 0.0)
+//                .gates(72.0, 84.0, 0.25) // enterRange, exitRange, blendSeconds (example numbers)
+//                .preferObservationForOmegaWhenValid(true)
+//                .lossPolicy(DriveGuidancePlan.LossPolicy.PASS_THROUGH)
+//                .doneFeedback()
+//                .build();
+//
+//        aimPlanRed = DriveGuidance.plan()
+//                .aimTo()
+//                .tagRelativePointInches(
+//                        RobotConfig.AutoAim.RED_TARGET_TAG_ID,
+//                        redOffset.forwardInches,
+//                        redOffset.leftInches)
+//                .doneAimTo()
+//                .tuning(aimTuning)
+//                .feedback()
+//                .observation(obs2d, 0.50, 0.0)
+//                .fieldPose(pinpoint, gameTagLayout, 0.25, 0.0)
+//                .gates(72.0, 84.0, 0.25)
+//                .preferObservationForOmegaWhenValid(true)
+//                .lossPolicy(DriveGuidancePlan.LossPolicy.PASS_THROUGH)
+//                .doneFeedback()
+//                .build();
 
         // Enable condition for the guidance overlay.
         //
@@ -193,9 +301,19 @@ public final class PhoenixRobot {
                         DriveOverlayMask.TRANSLATION_ONLY
                 )
                 .add(
-                        "autoAim",
-                        autoAimEnabled,
-                        aimPlan.overlay(),
+                        "autoAimBlue",
+                        () -> autoAimEnabled.getAsBoolean()
+                                && scoringTarget.last().hasTarget
+                                && scoringTarget.last().id == RobotConfig.AutoAim.BLUE_TARGET_TAG_ID,
+                        aimPlanBlue.overlay(),
+                        DriveOverlayMask.OMEGA_ONLY
+                )
+                .add(
+                        "autoAimRed",
+                        () -> autoAimEnabled.getAsBoolean()
+                                && scoringTarget.last().hasTarget
+                                && scoringTarget.last().id == RobotConfig.AutoAim.RED_TARGET_TAG_ID,
+                        aimPlanRed.overlay(),
                         DriveOverlayMask.OMEGA_ONLY
                 )
                 .build();
@@ -311,14 +429,73 @@ public final class PhoenixRobot {
 //        driveWithAim.debugDump(dbg, "drive");
         AprilTagObservation obs = scoringTarget.last();
         if (obs.hasTarget) {
-            if (Math.abs(scoringTarget.robotBearingRad(cameraMountConfig)) <= (aimTuning.aimDeadbandRad * 5))
+            RobotConfig.AutoAim.AimOffset aimOffset = RobotConfig.AutoAim.aimOffsetForTag(obs.id);
+
+            // Bearing to the configured *aim point* (not the tag center).
+            double aimBearingRad = robotBearingToTagRelativePointRad(obs, aimOffset);
+            if (Double.isFinite(aimBearingRad)
+                    && Math.abs(aimBearingRad) <= (aimTuning.aimDeadbandRad * 5)) {
                 telemetry.addLine(">>> AIMED <<<");
+            }
+
             telemetry.addData("tagId", obs.id);
             telemetry.addData("distIn", obs.cameraRangeInches());
-            telemetry.addData("bearingDeg", Math.toDegrees(obs.cameraBearingRad()));
+            telemetry.addData("bearingTagDeg", Math.toDegrees(obs.cameraBearingRad()));
+            telemetry.addData(
+                    "aimOffset(fwd,left)",
+                    String.format("%.1f, %.1f", aimOffset.forwardInches, aimOffset.leftInches)
+            );
+            telemetry.addData("bearingAimDeg", Math.toDegrees(aimBearingRad));
+
+            // Field metadata (comes from the FTC game database): where this tag is placed on the field.
+            // This is useful for sanity-checking that you're targeting the right point.
+            if (gameTagLayout != null && gameTagLayout.has(obs.id)) {
+                Pose3d fieldToTag = gameTagLayout.require(obs.id).fieldToTagPose();
+                Pose2d fieldToAimPoint = new Pose2d(
+                        fieldToTag.xInches,
+                        fieldToTag.yInches,
+                        fieldToTag.yawRad
+                ).then(new Pose2d(aimOffset.forwardInches, aimOffset.leftInches, 0.0));
+
+                telemetry.addData("field.tag", fieldToTag);
+                telemetry.addData("field.aim", fieldToAimPoint);
+            }
         }
 
         telemetry.update();
+    }
+
+    /**
+     * Computes the robot-frame bearing (radians) to a tag-relative aim point.
+     *
+     * <p>0 rad means the aim point is straight ahead of the robot, + is to the left, - is to the right.</p>
+     *
+     * <p>This mirrors how DriveGuidance resolves tag-relative points internally, but we do it here
+     * so telemetry can say “AIMED” based on the <b>corner point</b> instead of the tag center.</p>
+     */
+    private double robotBearingToTagRelativePointRad(
+            AprilTagObservation obs,
+            RobotConfig.AutoAim.AimOffset aimOffset
+    ) {
+        if (obs == null || !obs.hasTarget || obs.cameraToTagPose == null || aimOffset == null) {
+            return Double.NaN;
+        }
+        if (cameraMountConfig == null) {
+            return Double.NaN;
+        }
+
+        // Robot → tag (in robot frame)
+        Pose3d robotToTag = CameraMountLogic.robotToTagPose(cameraMountConfig, obs.cameraToTagPose);
+        Pose2d robotToTag2d = new Pose2d(robotToTag.xInches, robotToTag.yInches, robotToTag.yawRad);
+
+        // Robot → aim point (tag-relative offset rotated by the tag heading)
+        Pose2d robotToAimPoint = robotToTag2d.then(new Pose2d(
+                aimOffset.forwardInches,
+                aimOffset.leftInches,
+                0.0
+        ));
+
+        return Math.atan2(robotToAimPoint.yInches, robotToAimPoint.xInches);
     }
 
     /**

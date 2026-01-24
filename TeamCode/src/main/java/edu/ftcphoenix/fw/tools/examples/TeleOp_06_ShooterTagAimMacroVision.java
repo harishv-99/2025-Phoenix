@@ -252,7 +252,7 @@ public final class TeleOp_06_ShooterTagAimMacroVision extends OpMode {
         ObservationSource2d scoringObs = ObservationSources.aprilTag(scoringTarget, cameraMount);
         DriveGuidancePlan aimPlan = DriveGuidance.plan()
                 .aimTo()
-                .lookAtTagPointInches(0.0, 0.0) // observed tag center
+                .tagCenter()
                 .doneAimTo()
                 .feedback()
                 .observation(scoringObs)

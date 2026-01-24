@@ -215,4 +215,83 @@ public class RobotConfig {
             return cameraMountCalibrated();
         }
     }
+
+    /**
+     * Auto-aim targeting configuration.
+     *
+     * <p>Offsets in this section are expressed in the <b>tag frame</b> (inches):</p>
+     * <ul>
+     *   <li><b>+forward</b> is +X: straight <em>out of the tag</em> (away from the tag face)</li>
+     *   <li><b>+left</b> is +Y: left when looking in +forward</li>
+     * </ul>
+     *
+     * <p>That means you can define a point like “the corner of the basket opening” as a
+     * tag-relative offset, and Phoenix will automatically rotate it using the tag’s heading.
+     * This is exactly what we want for auto-aim from weird angles.</p>
+     */
+    public static final class AutoAim {
+
+        private AutoAim() {
+        }
+
+        // Tag IDs for your scoring targets.
+        // (These match the IDs used in PhoenixRobot.SCORING_TAG_IDS today.)
+        public static final int BLUE_TARGET_TAG_ID = 20;
+        public static final int RED_TARGET_TAG_ID = 24;
+
+        /**
+         * Where to aim relative to the BLUE target tag.
+         *
+         * <p>Set this to the point you want the robot to face (e.g. a basket corner) instead of
+         * the AprilTag center. Start with (0,0) and measure/tune from there.</p>
+         */
+        public static final AimOffset BLUE_AIM_OFFSET = new AimOffset(
+                0.0,   // forward (in)
+                0.0    // left (in)
+        );
+
+        /**
+         * Where to aim relative to the RED target tag.
+         *
+         * <p>If you only ever score on one side, it is totally fine for this to match the blue
+         * offset or stay at (0,0).</p>
+         */
+        public static final AimOffset RED_AIM_OFFSET = new AimOffset(
+                0.0,   // forward (in)
+                0.0    // left (in)
+        );
+
+        /**
+         * Default aim offset when we see an unexpected tag ID.
+         *
+         * <p>(0,0) means “fall back to tag center”.</p>
+         */
+        public static final AimOffset DEFAULT_AIM_OFFSET = new AimOffset(0.0, 0.0);
+
+        /**
+         * Returns the configured tag-relative aim offset for the given tag ID.
+         */
+        public static AimOffset aimOffsetForTag(int tagId) {
+            if (tagId == BLUE_TARGET_TAG_ID) {
+                return BLUE_AIM_OFFSET;
+            }
+            if (tagId == RED_TARGET_TAG_ID) {
+                return RED_AIM_OFFSET;
+            }
+            return DEFAULT_AIM_OFFSET;
+        }
+
+        /**
+         * Simple (forward,left) pair in inches.
+         */
+        public static final class AimOffset {
+            public final double forwardInches;
+            public final double leftInches;
+
+            public AimOffset(double forwardInches, double leftInches) {
+                this.forwardInches = forwardInches;
+                this.leftInches = leftInches;
+            }
+        }
+    }
 }

@@ -67,7 +67,7 @@ final class PoseLockOverlay implements DriveOverlay {
         Pose2d robotToTarget = fieldToRobot.inverse().then(targetFieldToRobot);
 
         // Translate to reduce position error.
-        DriveSignal t = GuidanceControllers.translationCmd(
+        DriveSignal t = DriveGuidanceControllers.translationCmd(
                 robotToTarget.xInches,
                 robotToTarget.yInches,
                 tuning
@@ -75,7 +75,7 @@ final class PoseLockOverlay implements DriveOverlay {
 
         // Rotate to reduce heading error.
         double headingErr = Pose2d.wrapToPi(robotToTarget.headingRad);
-        double omega = GuidanceControllers.omegaCmd(headingErr, tuning);
+        double omega = DriveGuidanceControllers.omegaCmd(headingErr, tuning);
 
         DriveSignal cmd = new DriveSignal(t.axial, t.lateral, omega);
         lastOut = new DriveOverlayOutput(cmd, DriveOverlayMask.ALL);

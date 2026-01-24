@@ -31,7 +31,7 @@ ObservationSource2d obs = ObservationSources.aprilTag(scoringTarget, cameraMount
 
 DriveGuidancePlan aimPlan = DriveGuidance.plan()
         .aimTo()
-            .lookAtTagPointInches(0.0, 0.0)   // center of the observed tag
+            .tagRelativePointInches(0.0, 0.0)   // center of the observed tag
             .doneAimTo()
         .feedback()
             .observation(obs)                 // vision-only feedback
@@ -184,11 +184,11 @@ You can use either one independently, or both together.
 
 ### Aim target
 
-* `.aimTo().lookAtFieldPointInches(x, y)`
+* `.aimTo().fieldPointInches(x, y)`
 * `.aimTo().fieldHeadingDeg(deg)` / `.aimTo().fieldHeadingRad(rad)` — turn to an absolute field heading
   (requires field pose)
-* `.aimTo().lookAtTagPointInches(tagId, forward, left)`
-* `.aimTo().lookAtTagPointInches(forward, left)` — **currently observed** tag
+* `.aimTo().tagRelativePointInches(tagId, forward, left)`
+* `.aimTo().tagRelativePointInches(forward, left)` — **currently observed** tag
 
 ---
 
@@ -225,7 +225,7 @@ Use when you only care about **relative** movement and the target is visible.
 ObservationSource2d obs = ObservationSources.aprilTag(tagTarget, cameraMount);
 
 DriveGuidancePlan plan = DriveGuidance.plan()
-        .aimTo().lookAtTagPointInches(0.0, 0.0).doneAimTo()
+        .aimTo().tagRelativePointInches(0.0, 0.0).doneAimTo()
         .feedback().observation(obs).doneFeedback()
         .build();
 ```
@@ -248,7 +248,7 @@ known field point.
 ```java
 DriveGuidancePlan plan = DriveGuidance.plan()
         .translateTo().fieldPointInches(12, 48).doneTranslateTo()
-        .aimTo().lookAtFieldPointInches(0, 0).doneAimTo()
+        .aimTo().fieldPointInches(0, 0).doneAimTo()
         .feedback().fieldPose(poseEstimator, tagLayout).doneFeedback()
         .build();
 ```

@@ -308,12 +308,12 @@ public final class DriveGuidance {
          * @param xInches field X (forward) in inches
          * @param yInches field Y (left) in inches
          */
-        AimToBuilder<RETURN> lookAtFieldPointInches(double xInches, double yInches);
+        AimToBuilder<RETURN> fieldPointInches(double xInches, double yInches);
 
         /**
          * Turn so the controlled aim frame reaches an <b>absolute field heading</b>.
          *
-         * <p>This is the "turn-to-heading" sibling of {@link #lookAtFieldPointInches(double, double)}.
+         * <p>This is the "turn-to-heading" sibling of {@link #fieldPointInches(double, double)}.
          * Instead of aiming at a point, DriveGuidance will rotate until the aim frame's heading
          * matches the requested field heading.</p>
          *
@@ -334,12 +334,12 @@ public final class DriveGuidance {
          *
          * <p>This is how you do things like “aim 4 inches left of tag 5”.</p>
          */
-        AimToBuilder<RETURN> lookAtTagPointInches(int tagId, double forwardInches, double leftInches);
+        AimToBuilder<RETURN> tagRelativePointInches(int tagId, double forwardInches, double leftInches);
 
         /**
          * Turn so the robot “looks at” a point in the currently observed tag's frame.
          */
-        AimToBuilder<RETURN> lookAtTagPointInches(double forwardInches, double leftInches);
+        AimToBuilder<RETURN> tagRelativePointInches(double forwardInches, double leftInches);
 
         /**
          * Convenience: aim at the center of a specific tag.
@@ -423,10 +423,10 @@ public final class DriveGuidance {
         /**
          * Prefer observation for turning (omega) whenever it is valid.
          *
-         * <p>This is usually what you want for AprilTag aiming: if the tag is visible, use the
+         * <p>This is usually what you want for AprilTag aiming: if the observation is valid, use the
          * camera bearing for crisp turning. Translation may still rely on field pose.</p>
          */
-        FeedbackBuilder<RETURN> preferObservationForOmegaWhenVisible(boolean prefer);
+        FeedbackBuilder<RETURN> preferObservationForOmegaWhenValid(boolean prefer);
 
         /**
          * Set behavior when guidance cannot produce a valid command.
@@ -601,8 +601,8 @@ public final class DriveGuidance {
         }
 
         // Tag-relative targets: certain combinations require observation and/or a tag layout.
-        boolean usesTagTargets = (s.translationTarget instanceof DriveGuidancePlan.TagPoint)
-                || (s.aimTarget instanceof DriveGuidancePlan.TagPoint);
+        boolean usesTagTargets = (s.translationTarget instanceof DriveGuidancePlan.TagRelativePoint)
+                || (s.aimTarget instanceof DriveGuidancePlan.TagRelativePoint);
 
         if (usesTagTargets && hasFieldPose) {
             if (s.tagLayout == null) {
@@ -635,17 +635,17 @@ public final class DriveGuidance {
     }
 
     private static boolean isObservedTag(Object target) {
-        if (!(target instanceof DriveGuidancePlan.TagPoint)) {
+        if (!(target instanceof DriveGuidancePlan.TagRelativePoint)) {
             return false;
         }
-        return ((DriveGuidancePlan.TagPoint) target).tagId < 0;
+        return ((DriveGuidancePlan.TagRelativePoint) target).tagId < 0;
     }
 
     private static void checkTagIdExists(Object target, TagLayout layout, ArrayList<String> errors) {
-        if (!(target instanceof DriveGuidancePlan.TagPoint)) {
+        if (!(target instanceof DriveGuidancePlan.TagRelativePoint)) {
             return;
         }
-        DriveGuidancePlan.TagPoint tp = (DriveGuidancePlan.TagPoint) target;
+        DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) target;
         if (tp.tagId >= 0 && !layout.has(tp.tagId)) {
             errors.add("TagLayout does not contain tag id=" + tp.tagId);
         }
@@ -767,7 +767,7 @@ public final class DriveGuidance {
             if (s.translationTarget != null) {
                 throw new IllegalStateException("translateTo() target already configured; choose only one target method");
             }
-            s.translationTarget = new DriveGuidancePlan.TagPoint(tagId, forwardInches, leftInches);
+            s.translationTarget = new DriveGuidancePlan.TagRelativePoint(tagId, forwardInches, leftInches);
             return this;
         }
 
@@ -807,7 +807,7 @@ public final class DriveGuidance {
         }
 
         @Override
-        public AimToBuilder<RETURN> lookAtFieldPointInches(double xInches, double yInches) {
+        public AimToBuilder<RETURN> fieldPointInches(double xInches, double yInches) {
             if (s.aimTarget != null) {
                 throw new IllegalStateException("aimTo() target already configured; choose only one target method");
             }
@@ -830,27 +830,27 @@ public final class DriveGuidance {
         }
 
         @Override
-        public AimToBuilder<RETURN> lookAtTagPointInches(int tagId, double forwardInches, double leftInches) {
+        public AimToBuilder<RETURN> tagRelativePointInches(int tagId, double forwardInches, double leftInches) {
             if (s.aimTarget != null) {
                 throw new IllegalStateException("aimTo() target already configured; choose only one target method");
             }
-            s.aimTarget = new DriveGuidancePlan.TagPoint(tagId, forwardInches, leftInches);
+            s.aimTarget = new DriveGuidancePlan.TagRelativePoint(tagId, forwardInches, leftInches);
             return this;
         }
 
         @Override
-        public AimToBuilder<RETURN> lookAtTagPointInches(double forwardInches, double leftInches) {
-            return lookAtTagPointInches(-1, forwardInches, leftInches);
+        public AimToBuilder<RETURN> tagRelativePointInches(double forwardInches, double leftInches) {
+            return tagRelativePointInches(-1, forwardInches, leftInches);
         }
 
         @Override
         public AimToBuilder<RETURN> tagCenter(int tagId) {
-            return lookAtTagPointInches(tagId, 0.0, 0.0);
+            return tagRelativePointInches(tagId, 0.0, 0.0);
         }
 
         @Override
         public AimToBuilder<RETURN> tagCenter() {
-            return lookAtTagPointInches(-1, 0.0, 0.0);
+            return tagRelativePointInches(-1, 0.0, 0.0);
         }
 
         @Override
@@ -932,7 +932,7 @@ public final class DriveGuidance {
         }
 
         @Override
-        public FeedbackBuilder<RETURN> preferObservationForOmegaWhenVisible(boolean prefer) {
+        public FeedbackBuilder<RETURN> preferObservationForOmegaWhenValid(boolean prefer) {
             s.preferObsOmega = prefer;
             return this;
         }

@@ -242,8 +242,8 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         boolean canOmega = false;
 
         // --- Translation ---
-        if (plan.translationTarget instanceof DriveGuidancePlan.TagPoint) {
-            DriveGuidancePlan.TagPoint tp = (DriveGuidancePlan.TagPoint) plan.translationTarget;
+        if (plan.translationTarget instanceof DriveGuidancePlan.TagRelativePoint) {
+            DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) plan.translationTarget;
 
             boolean idMatches = (tp.tagId < 0)
                     || (obs.hasTargetId() && obs.targetId == tp.tagId);
@@ -258,7 +258,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
                 double forwardErr = robotToTarget.xInches - robotToTFrame.xInches;
                 double leftErr = robotToTarget.yInches - robotToTFrame.yInches;
 
-                DriveSignal t = GuidanceControllers.translationCmd(forwardErr, leftErr, plan.tuning);
+                DriveSignal t = DriveGuidanceControllers.translationCmd(forwardErr, leftErr, plan.tuning);
                 axial = t.axial;
                 lateral = t.lateral;
                 canTranslate = true;
@@ -266,8 +266,8 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         }
 
         // --- Omega / Aim ---
-        if (plan.aimTarget instanceof DriveGuidancePlan.TagPoint) {
-            DriveGuidancePlan.TagPoint tp = (DriveGuidancePlan.TagPoint) plan.aimTarget;
+        if (plan.aimTarget instanceof DriveGuidancePlan.TagRelativePoint) {
+            DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) plan.aimTarget;
 
             boolean idMatches = (tp.tagId < 0)
                     || (obs.hasTargetId() && obs.targetId == tp.tagId);
@@ -283,7 +283,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
                     Pose2d robotToAimPoint = robotToAnchorPose.then(new Pose2d(tp.forwardInches, tp.leftInches, 0.0));
                     Pose2d aimFrameToPoint = robotToAimFrame.inverse().then(robotToAimPoint);
                     double bearingErr = Math.atan2(aimFrameToPoint.yInches, aimFrameToPoint.xInches);
-                    omega = GuidanceControllers.omegaCmd(Pose2d.wrapToPi(bearingErr), plan.tuning);
+                    omega = DriveGuidanceControllers.omegaCmd(Pose2d.wrapToPi(bearingErr), plan.tuning);
                     canOmega = true;
                 }
             } else {
@@ -294,7 +294,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
 
                 if (idMatches && aimingAtCenter && aimFrameAtOrigin) {
                     double bearingErr = Pose2d.wrapToPi(obs.bearingRad - robotToAimFrame.headingRad);
-                    omega = GuidanceControllers.omegaCmd(bearingErr, plan.tuning);
+                    omega = DriveGuidanceControllers.omegaCmd(bearingErr, plan.tuning);
                     canOmega = true;
                 }
             }
@@ -368,7 +368,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
             double forwardErr = dxField * cos + dyField * sin;
             double leftErr = -dxField * sin + dyField * cos;
 
-            DriveSignal t = GuidanceControllers.translationCmd(forwardErr, leftErr, plan.tuning);
+            DriveSignal t = DriveGuidanceControllers.translationCmd(forwardErr, leftErr, plan.tuning);
             axial = t.axial;
             lateral = t.lateral;
             canTranslate = true;
@@ -379,13 +379,13 @@ final class DriveGuidanceOverlay implements DriveOverlay {
             DriveGuidancePlan.FieldHeading fh = (DriveGuidancePlan.FieldHeading) plan.aimTarget;
             Pose2d fieldToAimFrame = fieldToRobot.then(plan.controlFrames.robotToAimFrame());
             double headingErr = Pose2d.wrapToPi(fh.fieldHeadingRad - fieldToAimFrame.headingRad);
-            omega = GuidanceControllers.omegaCmd(headingErr, plan.tuning);
+            omega = DriveGuidanceControllers.omegaCmd(headingErr, plan.tuning);
             canOmega = true;
         } else if (fieldToAimPoint != null) {
             Pose2d fieldToAimFrame = fieldToRobot.then(plan.controlFrames.robotToAimFrame());
             Pose2d aimFrameToPoint = fieldToAimFrame.inverse().then(fieldToAimPoint);
             double bearingErr = Math.atan2(aimFrameToPoint.yInches, aimFrameToPoint.xInches);
-            omega = GuidanceControllers.omegaCmd(Pose2d.wrapToPi(bearingErr), plan.tuning);
+            omega = DriveGuidanceControllers.omegaCmd(Pose2d.wrapToPi(bearingErr), plan.tuning);
             canOmega = true;
         }
 
@@ -419,12 +419,12 @@ final class DriveGuidanceOverlay implements DriveOverlay {
             return new Pose2d(fp.xInches, fp.yInches, 0.0);
         }
 
-        if (target instanceof DriveGuidancePlan.TagPoint) {
+        if (target instanceof DriveGuidancePlan.TagRelativePoint) {
             if (layout == null) {
                 return null;
             }
 
-            DriveGuidancePlan.TagPoint tp = (DriveGuidancePlan.TagPoint) target;
+            DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) target;
             int tagId = (tp.tagId >= 0) ? tp.tagId : lastObservedTagId;
             if (tagId < 0) {
                 return null;
