@@ -52,7 +52,7 @@ import edu.ftcphoenix.fw.core.math.MathUtil;
  *     private final DriveSource driveSource;
  *
  *     public PhoenixRobot(HardwareMap hw, Gamepads pads) {
- *         this.drivebase = Drives.mecanum(hw);
+ *         this.drivebase = FtcDrives.mecanum(hw);
  *         // Choose one of the GamepadDriveSource factories.
  *         this.driveSource = GamepadDriveSource.teleOpMecanum(pads);
  *     }
@@ -127,6 +127,7 @@ public final class DriveSignal {
         this.lateral = lateral;
         this.omega = omega;
     }
+
     /**
      * Return a new signal with translation and rotation scaled independently.
      *
@@ -251,7 +252,9 @@ public final class DriveSignal {
         return new DriveSignal(axial, lateral, newOmega);
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public String toString() {
         return "DriveSignal{"

@@ -7,22 +7,22 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
 import edu.ftcphoenix.fw.actuation.PlantTasks;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.task.ParallelAllTask;
 import edu.ftcphoenix.fw.task.SequenceTask;
 import edu.ftcphoenix.fw.task.Task;
 import edu.ftcphoenix.fw.task.TaskRunner;
-import edu.ftcphoenix.fw.core.time.LoopClock;
-import edu.ftcphoenix.fw.core.debug.DebugSink;
-import edu.ftcphoenix.fw.core.debug.NullDebugSink;
-import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 03: Shooter Macro (Tasks + PlantTasks)</h1>
@@ -85,7 +85,7 @@ import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
  * <h2>Hardware assumed (same as Example 02)</h2>
  *
  * <ul>
- *   <li>Drive: mecanum with default motor names used by {@link Drives#mecanum}.</li>
+ *   <li>Drive: mecanum with default motor names used by {@link FtcDrives#mecanum}.</li>
  *   <li>Shooter:
  *     <ul>
  *       <li>{@code "shooterLeftMotor"}</li>
@@ -226,7 +226,7 @@ public final class TeleOp_03_ShooterMacro extends OpMode {
         bindings = new Bindings();
 
         // === 2) Drive wiring (same pattern as Examples 01–02) ===
-        drivebase = Drives.mecanum(hardwareMap);
+        drivebase = FtcDrives.mecanum(hardwareMap);
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // === 3) Mechanism wiring using Actuators ===

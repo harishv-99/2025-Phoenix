@@ -4,16 +4,15 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
-import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.robots.phoenix.RobotConfig;
 
 /**
@@ -26,7 +25,7 @@ import edu.ftcphoenix.robots.phoenix.RobotConfig;
  * <ul>
  *   <li>Use <b>beginner helpers</b> whenever possible:
  *     <ul>
- *       <li>{@link Drives#mecanum} to wire the drive motors.</li>
+ *       <li>{@link FtcDrives#mecanum} to wire the drive motors.</li>
  *       <li>{@link Gamepads} to wrap FTC gamepads.</li>
  *       <li>{@link GamepadDriveSource#teleOpMecanumSlowRb(Gamepads)} for
  *           stick → mecanum mapping.</li>
@@ -148,7 +147,7 @@ public final class Phoenix4 extends OpMode {
         //   - Applies a standard inversion pattern.
         //   - Uses the default MecanumConfig.
         MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
-        drivebase = Drives.mecanum(hardwareMap,
+        drivebase = FtcDrives.mecanum(hardwareMap,
                 RobotConfig.DriveTrain.directionMotorFrontLeft,
                 RobotConfig.DriveTrain.directionMotorFrontRight,
                 RobotConfig.DriveTrain.directionMotorBackLeft,

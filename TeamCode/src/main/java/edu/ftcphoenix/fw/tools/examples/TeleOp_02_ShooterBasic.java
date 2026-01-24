@@ -6,18 +6,18 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.core.hal.Direction;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
-import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.input.binding.Bindings;
-import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
+import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.input.Gamepads;
+import edu.ftcphoenix.fw.input.binding.Bindings;
 
 /**
  * <h1>Example 02: Shooter + Transfer + Pusher (Basic TeleOp)</h1>
@@ -259,7 +259,7 @@ public final class TeleOp_02_ShooterBasic extends OpMode {
         bindings = new Bindings();
 
         // === 2) Drive wiring (same as Example 01) ===
-        drivebase = Drives.mecanum(hardwareMap);
+        drivebase = FtcDrives.mecanum(hardwareMap);
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // === 3) Mechanism wiring using Actuators ===

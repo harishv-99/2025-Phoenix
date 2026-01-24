@@ -124,6 +124,10 @@ public final class GamepadDevice {
     private final Axis leftTrigger;
     private final Axis rightTrigger;
 
+    // Common 2D stick helpers
+    private final Axis leftStickMagnitude;
+    private final Axis rightStickMagnitude;
+
     // Buttons
     private final Button a;
     private final Button b;
@@ -166,6 +170,10 @@ public final class GamepadDevice {
 
         this.leftTrigger = Axis.of(() -> applyDeadband(calibratedTrigger(rawLeftTrigger(), leftTriggerCenter)));
         this.rightTrigger = Axis.of(() -> applyDeadband(calibratedTrigger(rawRightTrigger(), rightTriggerCenter)));
+
+        // 2D stick magnitudes (after calibration + deadband).
+        this.leftStickMagnitude = Axis.magnitude(this.leftX, this.leftY);
+        this.rightStickMagnitude = Axis.magnitude(this.rightX, this.rightY);
 
         // Buttons
         this.a = Button.of(() -> gp.a);
@@ -329,6 +337,20 @@ public final class GamepadDevice {
      */
     public Axis rightY() {
         return rightY;
+    }
+
+    /**
+     * Magnitude of the left stick vector (x,y) after calibration and deadband: {@code hypot(leftX, leftY)}.
+     */
+    public Axis leftStickMagnitude() {
+        return leftStickMagnitude;
+    }
+
+    /**
+     * Magnitude of the right stick vector (x,y) after calibration and deadband: {@code hypot(rightX, rightY)}.
+     */
+    public Axis rightStickMagnitude() {
+        return rightStickMagnitude;
     }
 
     /**
@@ -591,6 +613,9 @@ public final class GamepadDevice {
                 .addData(p + ".rightY.center", rightYCenter)
                 .addData(p + ".rightY.calib", calRY)
                 .addData(p + ".rightY.out", outRY);
+
+        dbg.addData(p + ".leftStick.mag", Math.hypot(outLX, outLY));
+        dbg.addData(p + ".rightStick.mag", Math.hypot(outRX, outRY));
 
         dbg.addData(p + ".leftTrigger.raw", rawLT)
                 .addData(p + ".leftTrigger.center", leftTriggerCenter)

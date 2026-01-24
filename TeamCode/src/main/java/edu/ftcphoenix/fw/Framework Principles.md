@@ -266,7 +266,7 @@ Why this matters:
 
 Implementation rule:
 
-- `Owner.Config` (and other owner-scoped nested `*Config` classes, like `Drives.MecanumWiringConfig`) constructors should be `private`, and each config should provide `public static ... defaults()`.
+- `Owner.Config` (and other owner-scoped nested `*Config` classes, like `FtcDrives.MecanumWiringConfig`) constructors should be `private`, and each config should provide `public static ... defaults()`.
 
 
 #### 3.4.3 Naming config helpers: `withX(...)` / `withoutX()`

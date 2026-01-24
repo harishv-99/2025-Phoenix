@@ -18,7 +18,8 @@ Most robot code should only need imports from these packages:
 * `edu.ftcphoenix.fw.input.binding` — `Bindings`: map button edges to actions.
 * `edu.ftcphoenix.fw.task` — `Task`, `TaskRunner`, `Tasks`: non-blocking macros over time.
 * `edu.ftcphoenix.fw.actuation` — `Plant`, `Actuators`, `PlantTasks`: mechanisms you command with numeric targets.
-* `edu.ftcphoenix.fw.drive` — `DriveSignal`, `DriveSource`, `MecanumDrivebase`, and drive helpers.
+* `edu.ftcphoenix.fw.drive` — `DriveSignal`, `DriveSource`, `MecanumDrivebase` (FTC-independent drive logic).
+* `edu.ftcphoenix.fw.ftc` — FTC entrypoints/adapters (e.g. `FtcDrives` for drivetrain wiring).
 * `edu.ftcphoenix.fw.sensing` — sensor-facing wrappers (vision, odometry, etc.).
 * `edu.ftcphoenix.fw.localization` — pose estimation (AprilTags, odometry, fusion).
 * `edu.ftcphoenix.fw.field` — field metadata (tag layouts, constants).
@@ -34,7 +35,7 @@ Within `drive/`, subpackages are intentionally parallel and predictable:
 These exist so the student-facing packages stay small and consistent:
 
 * `edu.ftcphoenix.fw.core.*` — shared plumbing: time, math, geometry, control, debug, and the HAL.
-* `edu.ftcphoenix.fw.ftc.*` — the **FTC SDK boundary** (hardware adapters, frame conversions, FTC vision plumbing).
+* `edu.ftcphoenix.fw.ftc.*` — the **FTC SDK boundary** (hardware adapters, frame conversions, FTC vision plumbing). Most teams only touch a couple entrypoints like `FtcDrives`.
 * `edu.ftcphoenix.fw.tools.*` — testers and examples you can copy.
 * `edu.ftcphoenix.fw.legacy.*` — intentionally retained older base classes (not recommended for new code).
 
@@ -229,9 +230,9 @@ A `DriveSource` produces a `DriveSignal` each loop:
 
 `DriveSource` also supports composition helpers (like scaling and blending) via default methods.
 
-### `MecanumDrivebase` + `Drives`
+### `MecanumDrivebase` + `FtcDrives`
 
-`Drives.mecanum(hardwareMap)` is the beginner-friendly way to wire a mecanum drivetrain.
+`FtcDrives.mecanum(hardwareMap)` is the beginner-friendly way to wire a mecanum drivetrain.
 
 ```java
 import edu.ftcphoenix.fw.drive.*;
@@ -240,7 +241,7 @@ import edu.ftcphoenix.fw.input.Gamepads;
 
 Gamepads pads = Gamepads.create(gamepad1, gamepad2);
 
-MecanumDrivebase drivebase = Drives.mecanum(hardwareMap);
+MecanumDrivebase drivebase = FtcDrives.mecanum(hardwareMap);
 DriveSource drive = GamepadDriveSource.teleOpMecanumStandard(pads);
 ```
 

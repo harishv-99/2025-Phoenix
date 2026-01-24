@@ -34,7 +34,8 @@ Everything else exists to keep those packages clean:
 * `edu.ftcphoenix.fw.tools.*` contains testers and copyable examples.
 * `edu.ftcphoenix.fw.legacy.*` contains intentionally-retained old base classes.
 
-If you’re curious *why* the packages are arranged this way, see **Framework Overview → Package structure**.
+If you’re curious *why* the packages are arranged this way, see **Framework Overview → Package
+structure**.
 
 ---
 
@@ -68,7 +69,7 @@ Here’s a simplified TeleOp that:
 > Notes:
 >
 > * This is a *skeleton* — you’ll fill in your hardware names and constants.
-> * `Drives.mecanum(hardwareMap)` assumes the standard motor names:
+> * `FtcDrives.mecanum(hardwareMap)` assumes the standard motor names:
     >   `frontLeftMotor`, `frontRightMotor`, `backLeftMotor`, `backRightMotor`.
 
 ```java
@@ -105,7 +106,7 @@ public class PhoenixTeleOp extends OpMode {
         bindings = new Bindings();
 
         // Drive
-        drivebase = Drives.mecanum(hardwareMap);
+        drivebase = FtcDrives.mecanum(hardwareMap);
         driveSource = GamepadDriveSource.teleOpMecanumStandard(gamepads);
 
         // Mechanism plants

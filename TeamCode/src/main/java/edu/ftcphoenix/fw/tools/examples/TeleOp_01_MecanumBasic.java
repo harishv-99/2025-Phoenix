@@ -4,16 +4,16 @@ import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
-import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
-import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
+import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.input.Gamepads;
 
 /**
  * <h1>Example 01: Basic Mecanum TeleOp</h1>
@@ -62,7 +62,7 @@ public final class TeleOp_01_MecanumBasic extends OpMode {
         gamepads = Gamepads.create(gamepad1, gamepad2);
 
         // Beginner-friendly mecanum wiring (uses default motor names and inversions).
-        drivebase = Drives.mecanum(hardwareMap);
+        drivebase = FtcDrives.mecanum(hardwareMap);
 
         // Standard TeleOp stick mapping (includes slow-mode button).
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);

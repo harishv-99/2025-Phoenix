@@ -4,14 +4,14 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.legacy.robot.Subsystem;
-import edu.ftcphoenix.fw.core.time.LoopClock;
 
 /**
  * P1 drive subsystem: mecanum + TagAim.
@@ -46,7 +46,7 @@ public final class DriveSubsystem implements Subsystem {
         // Match old builder semantics:
         //   .invertRightSide().invertFrontLeft()
         // → FL, FR, BR inverted; BL not inverted.
-        this.drivebase = Drives.mecanum(
+        this.drivebase = FtcDrives.mecanum(
                 hw,
                 /* invertFrontLeft  */ Direction.REVERSE,
                 /* invertFrontRight */ Direction.REVERSE,

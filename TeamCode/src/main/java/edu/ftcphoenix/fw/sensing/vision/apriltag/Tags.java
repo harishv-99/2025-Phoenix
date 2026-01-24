@@ -9,7 +9,7 @@ import edu.ftcphoenix.fw.ftc.FtcVision;
 /**
  * High-level helpers for working with AprilTags in robot code.
  *
- * <p>This class plays a similar role to {@code Drives} and the plant factories in
+ * <p>This class plays a similar role to {@code FtcDrives} and the plant factories in
  * {@code Actuators}: it provides a small number of static factory methods that hide the
  * FTC SDK details and return framework-friendly interfaces.</p>
  *

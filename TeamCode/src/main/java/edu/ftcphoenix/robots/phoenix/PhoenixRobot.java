@@ -1,48 +1,47 @@
 package edu.ftcphoenix.robots.phoenix;
 
 import com.qualcomm.robotcore.hardware.Gamepad;
-import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
 
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
-import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
-import edu.ftcphoenix.fw.ftc.FtcGameTagLayout;
-import edu.ftcphoenix.fw.ftc.FtcVision;
-import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
-import edu.ftcphoenix.fw.field.TagLayout;
+import edu.ftcphoenix.fw.core.control.HysteresisLatch;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.geometry.Pose2d;
 import edu.ftcphoenix.fw.core.geometry.Pose3d;
-import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.core.time.LoopClock;
 import edu.ftcphoenix.fw.drive.DriveOverlayMask;
-import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.DriveOverlayStack;
-import edu.ftcphoenix.fw.drive.Drives;
+import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.guidance.DriveGuidance;
 import edu.ftcphoenix.fw.drive.guidance.DriveGuidancePlan;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.field.TagLayout;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
+import edu.ftcphoenix.fw.ftc.FtcGameTagLayout;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcVision;
+import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
 import edu.ftcphoenix.fw.sensing.observation.ObservationSources;
-import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
-import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
-import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.task.TaskBindings;
+import edu.ftcphoenix.fw.task.TaskRunner;
 import edu.ftcphoenix.fw.task.Tasks;
-import edu.ftcphoenix.fw.core.time.LoopClock;
-
-import org.firstinspires.ftc.vision.apriltag.AprilTagGameDatabase;
 
 /**
  * Central robot class for Phoenix-based robots.
@@ -82,10 +81,11 @@ public final class PhoenixRobot {
     // "Shoot brace" pose-lock: latch-on while the shooter is spinning and the driver is not
     // commanding translation. This lets the driver still nudge/strafe to line up, but once they
     // let go, the robot resists being bumped off the spot.
-    private boolean shootBraceEnabled = false;
-    private boolean shootBraceLatched = false;
     private static final double SHOOT_BRACE_ENTER_MAG = 0.06;
     private static final double SHOOT_BRACE_EXIT_MAG = 0.10;
+
+    private final HysteresisLatch shootBraceLatch =
+            HysteresisLatch.onWhenBelowOffWhenAbove(SHOOT_BRACE_ENTER_MAG, SHOOT_BRACE_EXIT_MAG);
 
 
     // ----------------------------------------------------------------------
@@ -132,14 +132,15 @@ public final class PhoenixRobot {
 
         // --- Create mechanisms ---
         MecanumDrivebase.Config mecanumConfig = MecanumDrivebase.Config.defaults();
-        drivebase = Drives.mecanum(
+        FtcDrives.MecanumWiringConfig mecanumWiring = RobotConfig.DriveTrain.mecanumWiring();
+        drivebase = FtcDrives.mecanum(
                 hardwareMap,
-                RobotConfig.DriveTrain.mecanumWiring(),
+                mecanumWiring,
                 mecanumConfig);
 
         // Use motor braking to help resist small pushes when commanded power is 0.
         // PoseLock will actively correct position, but BRAKE helps reduce "coast".
-        setDriveBrake(RobotConfig.DriveTrain.zeroPowerBrake);
+        FtcDrives.setDriveBrake(hardwareMap, mecanumWiring, RobotConfig.DriveTrain.zeroPowerBrake);
 
         shooter = new Shooter(hardwareMap, telemetry, gamepads);
 
@@ -291,7 +292,7 @@ public final class PhoenixRobot {
         driveWithAim = DriveOverlayStack.on(stickDrive)
                 .add(
                         "shootBrace",
-                        () -> shootBraceEnabled,
+                        shootBraceLatch::get,
                         DriveGuidance.poseLock(
                                 pinpoint,
                                 DriveGuidancePlan.Tuning.defaults()
@@ -422,7 +423,7 @@ public final class PhoenixRobot {
 
         // --- 5) Telemetry / debug ---
         telemetry.addData("shooter velocity", shooter.getVelocity());
-        telemetry.addData("shootBrace", shootBraceEnabled);
+        telemetry.addData("shootBrace", shootBraceLatch.get());
         if (pinpoint != null) {
             telemetry.addData("pose", pinpoint.getEstimate());
         }
@@ -508,45 +509,16 @@ public final class PhoenixRobot {
         // Only brace while the aiming driver (P2) is actively holding the aim button.
         // This avoids surprise "fighting the driver" behavior during normal driving.
         if (!gamepads.p2().leftBumper().isHeld()) {
-            shootBraceLatched = false;
-            shootBraceEnabled = false;
+            shootBraceLatch.reset(false);
             return;
         }
 
-        double lx = gamepads.p1().leftX().get();
-        double ly = gamepads.p1().leftY().get();
-        double mag = Math.hypot(lx, ly);
-
-        if (shootBraceLatched) {
-            if (mag > SHOOT_BRACE_EXIT_MAG) {
-                shootBraceLatched = false;
-            }
-        } else {
-            if (mag < SHOOT_BRACE_ENTER_MAG) {
-                shootBraceLatched = true;
-            }
-        }
-
-        shootBraceEnabled = shootBraceLatched;
+        // Treat the driver stick as "idle" only after it is clearly near center, and stay idle
+        // until the stick is clearly moved again (hysteresis avoids chatter).
+        double mag = gamepads.p1().leftStickMagnitude().get();
+        shootBraceLatch.update(mag);
     }
 
-    /**
-     * Sets ZeroPowerBehavior on the drivetrain motors.
-     */
-    private void setDriveBrake(boolean brake) {
-        DcMotor.ZeroPowerBehavior behavior = brake
-                ? DcMotor.ZeroPowerBehavior.BRAKE
-                : DcMotor.ZeroPowerBehavior.FLOAT;
-
-        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorFrontLeft)
-                .setZeroPowerBehavior(behavior);
-        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorFrontRight)
-                .setZeroPowerBehavior(behavior);
-        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorBackLeft)
-                .setZeroPowerBehavior(behavior);
-        hardwareMap.get(DcMotor.class, RobotConfig.DriveTrain.nameMotorBackRight)
-                .setZeroPowerBehavior(behavior);
-    }
 
     /**
      * Stop hook shared by all OpModes.

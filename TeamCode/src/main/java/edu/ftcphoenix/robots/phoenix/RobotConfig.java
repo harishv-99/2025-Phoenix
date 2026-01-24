@@ -2,10 +2,9 @@ package edu.ftcphoenix.robots.phoenix;
 
 import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
 
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
-
 import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
+import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 
 /**
@@ -48,8 +47,8 @@ public class RobotConfig {
         /**
          * Convenience wiring bundle for framework helpers/testers that want to instantiate a mecanum drive.
          */
-        public static Drives.MecanumWiringConfig mecanumWiring() {
-            Drives.MecanumWiringConfig w = Drives.MecanumWiringConfig.defaults();
+        public static FtcDrives.MecanumWiringConfig mecanumWiring() {
+            FtcDrives.MecanumWiringConfig w = FtcDrives.MecanumWiringConfig.defaults();
             w.frontLeftName = nameMotorFrontLeft;
             w.frontLeftDirection = directionMotorFrontLeft;
             w.frontRightName = nameMotorFrontRight;

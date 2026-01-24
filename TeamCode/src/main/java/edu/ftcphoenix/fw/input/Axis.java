@@ -387,4 +387,35 @@ public interface Axis {
                 positiveTrigger, 0.0, 1.0
         );
     }
+
+    /**
+     * Create an axis that reports the 2D magnitude of ({@code x}, {@code y}): {@code sqrt(x^2 + y^2)}.
+     *
+     * <p>This is commonly used for "stick moved" / "stick idle" checks, radial deadbands,
+     * and any UI behavior that depends on how far a 2D control has moved.</p>
+     *
+     * <p>Null axes are treated as 0.</p>
+     */
+    static Axis magnitude(Axis x, Axis y) {
+        return () -> {
+            double xv = (x != null) ? x.get() : 0.0;
+            double yv = (y != null) ? y.get() : 0.0;
+            return Math.hypot(xv, yv);
+        };
+    }
+
+    /**
+     * Create an axis that reports the squared 2D magnitude of ({@code x}, {@code y}): {@code x^2 + y^2}.
+     *
+     * <p>Use this if you want to avoid a {@code sqrt} and you're comparing to a squared threshold.</p>
+     *
+     * <p>Null axes are treated as 0.</p>
+     */
+    static Axis magnitudeSquared(Axis x, Axis y) {
+        return () -> {
+            double xv = (x != null) ? x.get() : 0.0;
+            double yv = (y != null) ? y.get() : 0.0;
+            return xv * xv + yv * yv;
+        };
+    }
 }

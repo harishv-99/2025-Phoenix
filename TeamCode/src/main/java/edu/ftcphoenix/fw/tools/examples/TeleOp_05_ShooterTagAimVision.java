@@ -10,30 +10,30 @@ import java.util.Set;
 
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.ftc.FtcVision;
+import edu.ftcphoenix.fw.core.debug.DebugSink;
+import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.drive.DriveSignal;
 import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.drive.DriveOverlayMask;
-import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.drive.guidance.DriveGuidance;
 import edu.ftcphoenix.fw.drive.guidance.DriveGuidancePlan;
 import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
+import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.input.Gamepads;
 import edu.ftcphoenix.fw.input.binding.Bindings;
 import edu.ftcphoenix.fw.sensing.observation.ObservationSource2d;
 import edu.ftcphoenix.fw.sensing.observation.ObservationSources;
-import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
-import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.CameraMountLogic;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagObservation;
+import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
-import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
-import edu.ftcphoenix.fw.core.time.LoopClock;
-import edu.ftcphoenix.fw.core.debug.DebugSink;
-import edu.ftcphoenix.fw.core.debug.NullDebugSink;
-import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
 
 /**
  * <h1>Example 05: Shooter + DriveGuidance Auto-Aim + Vision Distance</h1>
@@ -41,7 +41,7 @@ import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
  * <p>This example combines three ideas:</p>
  *
  * <ol>
- *   <li><b>Mecanum drive</b> using {@link Drives#mecanum} +
+ *   <li><b>Mecanum drive</b> using {@link FtcDrives#mecanum} +
  *       {@link GamepadDriveSource} (same as Example 01).</li>
  *   <li><b>Tag-based auto-aim</b> using {@link DriveGuidance} (as a {@link edu.ftcphoenix.fw.drive.DriveOverlay}):
  *     <ul>
@@ -161,7 +161,7 @@ public final class TeleOp_05_ShooterTagAimVision extends OpMode {
         bindings = new Bindings();
 
         // 2) Drive wiring: mecanum + sticks.
-        drivebase = Drives.mecanum(hardwareMap);
+        drivebase = FtcDrives.mecanum(hardwareMap);
         baseDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // 3) Tag sensor: real FTC VisionPortal + AprilTagProcessor adapter.

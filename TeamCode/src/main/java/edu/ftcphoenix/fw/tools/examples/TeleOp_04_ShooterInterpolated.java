@@ -6,20 +6,20 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import edu.ftcphoenix.fw.actuation.Actuators;
 import edu.ftcphoenix.fw.actuation.Plant;
-import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.DriveSource;
-import edu.ftcphoenix.fw.drive.Drives;
-import edu.ftcphoenix.fw.core.hal.Direction;
-import edu.ftcphoenix.fw.drive.MecanumDrivebase;
-import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
-import edu.ftcphoenix.fw.input.Gamepads;
-import edu.ftcphoenix.fw.input.binding.Bindings;
-import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
-import edu.ftcphoenix.fw.core.time.LoopClock;
-import edu.ftcphoenix.fw.core.math.MathUtil;
 import edu.ftcphoenix.fw.core.debug.DebugSink;
 import edu.ftcphoenix.fw.core.debug.NullDebugSink;
+import edu.ftcphoenix.fw.core.hal.Direction;
+import edu.ftcphoenix.fw.core.math.InterpolatingTable1D;
+import edu.ftcphoenix.fw.core.math.MathUtil;
+import edu.ftcphoenix.fw.core.time.LoopClock;
+import edu.ftcphoenix.fw.drive.DriveSignal;
+import edu.ftcphoenix.fw.drive.DriveSource;
+import edu.ftcphoenix.fw.drive.MecanumDrivebase;
+import edu.ftcphoenix.fw.drive.source.GamepadDriveSource;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
 import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
+import edu.ftcphoenix.fw.input.Gamepads;
+import edu.ftcphoenix.fw.input.binding.Bindings;
 
 /**
  * <h1>Example 04: Shooter with Interpolation Table (manual "distance")</h1>
@@ -73,7 +73,7 @@ import edu.ftcphoenix.fw.ftc.FtcTelemetryDebugSink;
  * <h2>Hardware assumed</h2>
  *
  * <ul>
- *   <li>Drive: mecanum using {@link Drives#mecanum} with default motor names.</li>
+ *   <li>Drive: mecanum using {@link FtcDrives#mecanum} with default motor names.</li>
  *   <li>Shooter:
  *     <ul>
  *       <li>{@code "shooterLeftMotor"}</li>
@@ -199,7 +199,7 @@ public final class TeleOp_04_ShooterInterpolated extends OpMode {
         bindings = new Bindings();
 
         // 2) Drive wiring (same as Example 01)
-        drivebase = Drives.mecanum(hardwareMap);
+        drivebase = FtcDrives.mecanum(hardwareMap);
         stickDrive = GamepadDriveSource.teleOpMecanumSlowRb(gamepads);
 
         // 3) Shooter wiring using Actuators

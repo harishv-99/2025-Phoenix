@@ -1,13 +1,20 @@
-package edu.ftcphoenix.fw.drive;
+package edu.ftcphoenix.fw.ftc;
 
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
 import edu.ftcphoenix.fw.core.hal.Direction;
 import edu.ftcphoenix.fw.core.hal.PowerOutput;
-import edu.ftcphoenix.fw.ftc.FtcHardware;
+import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 
 /**
- * High-level helpers for creating common drivebases.
+ * FTC-boundary helpers for creating and configuring common drivebases.
+ *
+ * <p>
+ * This class lives in {@code fw.ftc} on purpose: any API that touches FTC SDK types like
+ * {@link HardwareMap} or {@link DcMotor} belongs in the FTC boundary layer.
+ * The resulting {@link MecanumDrivebase} is framework-generic and lives in {@code fw.drive}.
+ * </p>
  *
  * <h2>Beginner entrypoint for mecanum drive</h2>
  *
@@ -16,7 +23,7 @@ import edu.ftcphoenix.fw.ftc.FtcHardware;
  * just a single line:</p>
  *
  * <pre>{@code
- * MecanumDrivebase drive = Drives.mecanum(hardwareMap);
+ * MecanumDrivebase drive = FtcDrives.mecanum(hardwareMap);
  * }</pre>
  *
  * <p>This call:</p>
@@ -40,7 +47,7 @@ import edu.ftcphoenix.fw.ftc.FtcHardware;
  *
  * <pre>{@code
  * // Same standard names, but custom directions:
- * MecanumDrivebase drive = Drives.mecanum(
+ * MecanumDrivebase drive = FtcDrives.mecanum(
  *         hardwareMap,
  *         Direction.REVERSE,  // frontLeftMotor direction
  *         Direction.REVERSE,  // frontRightMotor direction
@@ -65,9 +72,9 @@ import edu.ftcphoenix.fw.ftc.FtcHardware;
  * robot code focused on behavior (how the robot should move) instead of
  * wiring details.</p>
  */
-public final class Drives {
+public final class FtcDrives {
 
-    private Drives() {
+    private FtcDrives() {
         // utility class; no instances
     }
 
@@ -204,6 +211,57 @@ public final class Drives {
                 wiring.backRightDirection,
                 config
         );
+    }
+
+    // ======================================================================
+    // Motor behavior helpers (FTC-specific)
+    // ======================================================================
+
+    /**
+     * Set {@link DcMotor.ZeroPowerBehavior} on the four drivetrain motors described by {@code wiring}.
+     *
+     * <p>
+     * This is intentionally kept in {@code fw.ftc} so robot code does not need to talk to
+     * FTC SDK motor objects directly.
+     * </p>
+     *
+     * @param hw       FTC hardware map
+     * @param wiring   mecanum wiring bundle (motor names)
+     * @param behavior desired behavior when commanded power is zero
+     */
+    public static void setZeroPowerBehavior(HardwareMap hw, MecanumWiringConfig wiring, DcMotor.ZeroPowerBehavior behavior) {
+        if (hw == null) {
+            throw new IllegalArgumentException("HardwareMap is required");
+        }
+        if (wiring == null) {
+            throw new IllegalArgumentException("wiring is required");
+        }
+        if (behavior == null) {
+            throw new IllegalArgumentException("behavior is required");
+        }
+
+        hw.get(DcMotor.class, wiring.frontLeftName).setZeroPowerBehavior(behavior);
+        hw.get(DcMotor.class, wiring.frontRightName).setZeroPowerBehavior(behavior);
+        hw.get(DcMotor.class, wiring.backLeftName).setZeroPowerBehavior(behavior);
+        hw.get(DcMotor.class, wiring.backRightName).setZeroPowerBehavior(behavior);
+    }
+
+    /**
+     * Convenience helper: set drivetrain motors to BRAKE (if {@code brake} is true) or FLOAT.
+     */
+    public static void setDriveBrake(HardwareMap hw, MecanumWiringConfig wiring, boolean brake) {
+        setZeroPowerBehavior(
+                hw,
+                wiring,
+                brake ? DcMotor.ZeroPowerBehavior.BRAKE : DcMotor.ZeroPowerBehavior.FLOAT
+        );
+    }
+
+    /**
+     * Convenience helper using {@link MecanumWiringConfig#defaults()}.
+     */
+    public static void setDriveBrake(HardwareMap hw, boolean brake) {
+        setDriveBrake(hw, MecanumWiringConfig.defaults(), brake);
     }
 
     // ======================================================================
@@ -356,7 +414,7 @@ public final class Drives {
     /**
      * Create a mecanum drivebase with custom motor names, directions, and config.
      *
-     * <p>This is the most general mecanum factory in {@link Drives}. It is useful when:</p>
+     * <p>This is the most general mecanum factory in {@link FtcDrives}. It is useful when:</p>
      * <ul>
      *   <li>Your robot uses non-standard motor names in the FTC Robot Configuration.</li>
      *   <li>You want full control over motor directions.</li>

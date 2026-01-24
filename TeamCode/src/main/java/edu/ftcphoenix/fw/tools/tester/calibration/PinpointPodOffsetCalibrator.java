@@ -6,19 +6,19 @@ import org.firstinspires.ftc.vision.apriltag.AprilTagLibrary;
 
 import java.util.Locale;
 
-import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.core.geometry.Pose2d;
 import edu.ftcphoenix.fw.core.geometry.Pose3d;
 import edu.ftcphoenix.fw.core.math.MathUtil;
 import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.drive.Drives;
 import edu.ftcphoenix.fw.drive.MecanumDrivebase;
 import edu.ftcphoenix.fw.field.TagLayout;
+import edu.ftcphoenix.fw.ftc.FtcDrives;
 import edu.ftcphoenix.fw.ftc.FtcGameTagLayout;
 import edu.ftcphoenix.fw.ftc.FtcVision;
 import edu.ftcphoenix.fw.ftc.localization.PinpointPoseEstimator;
 import edu.ftcphoenix.fw.localization.PoseEstimate;
 import edu.ftcphoenix.fw.localization.apriltag.TagOnlyPoseEstimator;
+import edu.ftcphoenix.fw.sensing.vision.CameraMountConfig;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.AprilTagSensor;
 import edu.ftcphoenix.fw.sensing.vision.apriltag.TagTarget;
 import edu.ftcphoenix.fw.tools.tester.BaseTeleOpTester;
@@ -74,7 +74,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
         /**
          * Optional mecanum wiring. If null, the tester won't drive the robot.
          */
-        public Drives.MecanumWiringConfig mecanumWiring = null;
+        public FtcDrives.MecanumWiringConfig mecanumWiring = null;
 
         /**
          * Optional mecanum tuning config (only used when {@link #mecanumWiring} is non-null).
@@ -347,7 +347,7 @@ public final class PinpointPodOffsetCalibrator extends BaseTeleOpTester {
 
         // Optional drive
         if (cfg.mecanumWiring != null) {
-            drive = Drives.mecanum(ctx.hw, cfg.mecanumWiring, cfg.driveConfig);
+            drive = FtcDrives.mecanum(ctx.hw, cfg.mecanumWiring, cfg.driveConfig);
         }
 
         // Optional AprilTag assist
