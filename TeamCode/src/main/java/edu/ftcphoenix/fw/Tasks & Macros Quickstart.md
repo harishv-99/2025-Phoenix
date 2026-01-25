@@ -15,6 +15,19 @@ Everything here is **non‑blocking** – there is no `sleep()` and no `while` l
 
 ---
 
+## Related: spatial predicates (zones, safety gating)
+
+Not every decision needs to be a task.
+
+If you want a simple safety gate like “enable shooting only when the robot is in the shooting zone”, use the **spatial predicate** layer:
+
+* `Region2d` / `Regions2d` to describe the zone geometry
+* `ZoneLatch` to add hysteresis so the gate doesn’t chatter on a boundary
+
+These live in `edu.ftcphoenix.fw.spatial` and can be used in TeleOp, tasks, testers, or anywhere else.
+
+---
+
 ## 1. The big picture: Tasks drive everything
 
 Phoenix code is built around three ideas:

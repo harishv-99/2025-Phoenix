@@ -34,8 +34,7 @@ Everything else exists to keep those packages clean:
 * `edu.ftcphoenix.fw.tools.*` contains testers and copyable examples.
 * `edu.ftcphoenix.fw.legacy.*` contains intentionally-retained old base classes.
 
-If you’re curious *why* the packages are arranged this way, see **Framework Overview → Package
-structure**.
+If you’re curious *why* the packages are arranged this way, see **Framework Overview → Package structure**.
 
 ---
 

@@ -8,9 +8,6 @@ import edu.ftcphoenix.fw.drive.DriveOverlay;
 import edu.ftcphoenix.fw.drive.DriveOverlayMask;
 import edu.ftcphoenix.fw.drive.DriveOverlayOutput;
 import edu.ftcphoenix.fw.drive.DriveSignal;
-import edu.ftcphoenix.fw.field.TagLayout;
-import edu.ftcphoenix.fw.localization.PoseEstimate;
-import edu.ftcphoenix.fw.sensing.observation.TargetObservation2d;
 
 /**
  * Implementation of {@link DriveOverlay} for {@link DriveGuidancePlan}.
@@ -18,19 +15,14 @@ import edu.ftcphoenix.fw.sensing.observation.TargetObservation2d;
 final class DriveGuidanceOverlay implements DriveOverlay {
 
     private final DriveGuidancePlan plan;
+    private final DriveGuidanceEvaluator evaluator;
 
     // Adaptive selection state.
     private boolean obsInRangeForTranslation = false;
     private double blendTTranslate = 0.0;
     private double blendTOmega = 0.0;
 
-    // For “observed tag” targets (tagId = -1), remember the last seen tag ID so field-pose mode
-    // can keep working even if the tag temporarily drops out of view.
-    private int lastObservedTagId = -1;
-
-    // For robot-relative translation targets, capture the translation-frame pose when the
-    // overlay becomes enabled. This allows "move forward N inches" style plans.
-    private Pose2d fieldToTranslationFrameAnchor = null;
+    // Note: per-plan spatial evaluation state is held by {@link DriveGuidanceEvaluator}.
 
     // Debug last values.
     private DriveOverlayOutput lastOut = DriveOverlayOutput.zero();
@@ -38,6 +30,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
 
     DriveGuidanceOverlay(DriveGuidancePlan plan) {
         this.plan = plan;
+        this.evaluator = new DriveGuidanceEvaluator(plan);
     }
 
     @Override
@@ -46,8 +39,7 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         obsInRangeForTranslation = false;
         blendTTranslate = 0.0;
         blendTOmega = 0.0;
-        lastObservedTagId = -1;
-        fieldToTranslationFrameAnchor = null;
+        evaluator.onEnable();
         lastMode = "enabled";
     }
 
@@ -196,9 +188,9 @@ final class DriveGuidanceOverlay implements DriveOverlay {
         dbg.addData(p + ".adaptive.obsInRange", obsInRangeForTranslation);
         dbg.addData(p + ".adaptive.blendTTranslate", blendTTranslate);
         dbg.addData(p + ".adaptive.blendTOmega", blendTOmega);
-        dbg.addData(p + ".adaptive.lastObservedTagId", lastObservedTagId);
-        dbg.addData(p + ".robotRelative.translationAnchor",
-                fieldToTranslationFrameAnchor != null ? fieldToTranslationFrameAnchor.toString() : "null");
+        dbg.addData(p + ".adaptive.lastObservedTagId", evaluator.lastObservedTagId());
+        Pose2d anchor = evaluator.fieldToTranslationFrameAnchor();
+        dbg.addData(p + ".robotRelative.translationAnchor", anchor != null ? anchor.toString() : "null");
     }
 
     // ------------------------------------------------------------------------
@@ -206,241 +198,39 @@ final class DriveGuidanceOverlay implements DriveOverlay {
     // ------------------------------------------------------------------------
 
     private Solution solveWithObservation(LoopClock clock) {
-        DriveGuidancePlan.Observation cfg = plan.feedback.observation;
-        TargetObservation2d obs = cfg.source.sample(clock);
-
-        if (obs == null) {
-            return Solution.invalid();
-        }
-
-        boolean valid = obs.hasTarget
-                && obs.ageSec <= cfg.maxAgeSec
-                && obs.quality >= cfg.minQuality;
-
-        if (!valid) {
-            return Solution.invalid();
-        }
-
-        if (obs.hasTargetId()) {
-            lastObservedTagId = obs.targetId;
-        }
-
-        // Observation feedback is robot-relative.
-        boolean hasPos = obs.hasPosition();
-        Pose2d robotToAnchorPose = hasPos
-                ? new Pose2d(obs.forwardInches, obs.leftInches, obs.hasOrientation() ? obs.targetHeadingRad : 0.0)
-                : null;
-
-        double rangeIn = hasPos ? Math.hypot(obs.forwardInches, obs.leftInches) : Double.NaN;
-        boolean hasRange = Double.isFinite(rangeIn);
-
-        double axial = 0.0;
-        double lateral = 0.0;
-        double omega = 0.0;
-
-        boolean canTranslate = false;
-        boolean canOmega = false;
-
-        // --- Translation ---
-        if (plan.translationTarget instanceof DriveGuidancePlan.TagRelativePoint) {
-            DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) plan.translationTarget;
-
-            boolean idMatches = (tp.tagId < 0)
-                    || (obs.hasTargetId() && obs.targetId == tp.tagId);
-
-            boolean needsOrientation = !(Math.abs(tp.forwardInches) < 1e-9 && Math.abs(tp.leftInches) < 1e-9);
-            boolean orientationOk = !needsOrientation || obs.hasOrientation();
-
-            if (idMatches && hasPos && orientationOk && robotToAnchorPose != null) {
-                Pose2d robotToTarget = robotToAnchorPose.then(new Pose2d(tp.forwardInches, tp.leftInches, 0.0));
-
-                Pose2d robotToTFrame = plan.controlFrames.robotToTranslationFrame();
-                double forwardErr = robotToTarget.xInches - robotToTFrame.xInches;
-                double leftErr = robotToTarget.yInches - robotToTFrame.yInches;
-
-                DriveSignal t = DriveGuidanceControllers.translationCmd(forwardErr, leftErr, plan.tuning);
-                axial = t.axial;
-                lateral = t.lateral;
-                canTranslate = true;
-            }
-        }
-
-        // --- Omega / Aim ---
-        if (plan.aimTarget instanceof DriveGuidancePlan.TagRelativePoint) {
-            DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) plan.aimTarget;
-
-            boolean idMatches = (tp.tagId < 0)
-                    || (obs.hasTargetId() && obs.targetId == tp.tagId);
-
-            Pose2d robotToAimFrame = plan.controlFrames.robotToAimFrame();
-
-            // If we have position, we can compute the true vector from the aim frame origin.
-            if (idMatches && hasPos && robotToAnchorPose != null) {
-                boolean needsOrientation = !(Math.abs(tp.forwardInches) < 1e-9 && Math.abs(tp.leftInches) < 1e-9);
-                boolean orientationOk = !needsOrientation || obs.hasOrientation();
-
-                if (orientationOk) {
-                    Pose2d robotToAimPoint = robotToAnchorPose.then(new Pose2d(tp.forwardInches, tp.leftInches, 0.0));
-                    Pose2d aimFrameToPoint = robotToAimFrame.inverse().then(robotToAimPoint);
-                    double bearingErr = Math.atan2(aimFrameToPoint.yInches, aimFrameToPoint.xInches);
-                    omega = DriveGuidanceControllers.omegaCmd(Pose2d.wrapToPi(bearingErr), plan.tuning);
-                    canOmega = true;
-                }
-            } else {
-                // Bearing-only fallback: only safe when the aim frame origin is the robot origin
-                // and we are aiming at the anchor center (forward=0,left=0).
-                boolean aimingAtCenter = Math.abs(tp.forwardInches) < 1e-9 && Math.abs(tp.leftInches) < 1e-9;
-                boolean aimFrameAtOrigin = Math.abs(robotToAimFrame.xInches) < 1e-9 && Math.abs(robotToAimFrame.yInches) < 1e-9;
-
-                if (idMatches && aimingAtCenter && aimFrameAtOrigin) {
-                    double bearingErr = Pose2d.wrapToPi(obs.bearingRad - robotToAimFrame.headingRad);
-                    omega = DriveGuidanceControllers.omegaCmd(bearingErr, plan.tuning);
-                    canOmega = true;
-                }
-            }
-        }
-
-        return new Solution(true,
-                new DriveSignal(axial, lateral, omega),
-                canTranslate,
-                canOmega,
-                hasRange,
-                rangeIn
-        );
+        DriveGuidanceEvaluator.Solution sol = evaluator.solveWithObservation(clock);
+        return toCommandSolution(sol);
     }
 
     private Solution solveWithFieldPose(LoopClock clock) {
-        DriveGuidancePlan.FieldPose cfg = plan.feedback.fieldPose;
-        PoseEstimate est = cfg.poseEstimator.getEstimate();
+        DriveGuidanceEvaluator.Solution sol = evaluator.solveWithFieldPose();
+        return toCommandSolution(sol);
+    }
 
-        boolean valid = est != null
-                && est.hasPose
-                && est.ageSec <= cfg.maxAgeSec
-                && est.quality >= cfg.minQuality;
-
-        if (!valid) {
+    private Solution toCommandSolution(DriveGuidanceEvaluator.Solution sol) {
+        if (sol == null || !sol.valid) {
             return Solution.invalid();
         }
-
-        Pose2d fieldToRobot = est.toPose2d();
-        TagLayout layout = cfg.tagLayout;
-
-        // Current controlled-frame poses.
-        Pose2d fieldToTFrame = fieldToRobot.then(plan.controlFrames.robotToTranslationFrame());
-
-        // Resolve translation target.
-        Pose2d fieldToTranslatePoint;
-        if (plan.translationTarget instanceof DriveGuidancePlan.RobotRelativePoint) {
-            DriveGuidancePlan.RobotRelativePoint rr = (DriveGuidancePlan.RobotRelativePoint) plan.translationTarget;
-
-            // Capture the "starting" translation-frame pose once per enable cycle.
-            if (fieldToTranslationFrameAnchor == null) {
-                fieldToTranslationFrameAnchor = fieldToTFrame;
-            }
-
-            fieldToTranslatePoint = fieldToTranslationFrameAnchor.then(new Pose2d(rr.forwardInches, rr.leftInches, 0.0));
-        } else {
-            fieldToTranslatePoint = resolveToFieldPoint(plan.translationTarget, layout);
-        }
-
-        // Resolve aim target (FieldHeading is handled as a non-point target below).
-        Pose2d fieldToAimPoint = (plan.aimTarget instanceof DriveGuidancePlan.FieldHeading)
-                ? null
-                : resolveToFieldPoint(plan.aimTarget, layout);
 
         double axial = 0.0;
         double lateral = 0.0;
         double omega = 0.0;
 
-        boolean canTranslate = false;
-        boolean canOmega = false;
-
-        // --- Translation ---
-        if (fieldToTranslatePoint != null) {
-            // Field error vector from translation-frame origin to target point.
-            double dxField = fieldToTranslatePoint.xInches - fieldToTFrame.xInches;
-            double dyField = fieldToTranslatePoint.yInches - fieldToTFrame.yInches;
-
-            // Rotate into robot frame.
-            double h = fieldToRobot.headingRad;
-            double cos = Math.cos(h);
-            double sin = Math.sin(h);
-            double forwardErr = dxField * cos + dyField * sin;
-            double leftErr = -dxField * sin + dyField * cos;
-
-            DriveSignal t = DriveGuidanceControllers.translationCmd(forwardErr, leftErr, plan.tuning);
+        if (sol.canTranslate) {
+            DriveSignal t = DriveGuidanceControllers.translationCmd(sol.forwardErrorIn, sol.leftErrorIn, plan.tuning);
             axial = t.axial;
             lateral = t.lateral;
-            canTranslate = true;
         }
-
-        // --- Omega / Aim ---
-        if (plan.aimTarget instanceof DriveGuidancePlan.FieldHeading) {
-            DriveGuidancePlan.FieldHeading fh = (DriveGuidancePlan.FieldHeading) plan.aimTarget;
-            Pose2d fieldToAimFrame = fieldToRobot.then(plan.controlFrames.robotToAimFrame());
-            double headingErr = Pose2d.wrapToPi(fh.fieldHeadingRad - fieldToAimFrame.headingRad);
-            omega = DriveGuidanceControllers.omegaCmd(headingErr, plan.tuning);
-            canOmega = true;
-        } else if (fieldToAimPoint != null) {
-            Pose2d fieldToAimFrame = fieldToRobot.then(plan.controlFrames.robotToAimFrame());
-            Pose2d aimFrameToPoint = fieldToAimFrame.inverse().then(fieldToAimPoint);
-            double bearingErr = Math.atan2(aimFrameToPoint.yInches, aimFrameToPoint.xInches);
-            omega = DriveGuidanceControllers.omegaCmd(Pose2d.wrapToPi(bearingErr), plan.tuning);
-            canOmega = true;
+        if (sol.canOmega) {
+            omega = DriveGuidanceControllers.omegaCmd(sol.omegaErrorRad, plan.tuning);
         }
 
         return new Solution(true,
                 new DriveSignal(axial, lateral, omega),
-                canTranslate,
-                canOmega,
-                false,
-                Double.NaN
-        );
-    }
-
-    /**
-     * Resolve a plan target into a field-coordinate point (x,y,heading=0) if possible.
-     *
-     * <p>Returns null when the target cannot be resolved in field space. Examples include:</p>
-     * <ul>
-     *   <li>tag-relative targets without a {@link TagLayout},</li>
-     *   <li>“observed tag” targets when no tag has been seen yet,</li>
-     *   <li>non-point targets such as {@link DriveGuidancePlan.FieldHeading}, and</li>
-     *   <li>robot-relative translation targets ({@link DriveGuidancePlan.RobotRelativePoint}).</li>
-     * </ul>
-     */
-    private Pose2d resolveToFieldPoint(Object target, TagLayout layout) {
-        if (target == null) {
-            return null;
-        }
-
-        if (target instanceof DriveGuidancePlan.FieldPoint) {
-            DriveGuidancePlan.FieldPoint fp = (DriveGuidancePlan.FieldPoint) target;
-            return new Pose2d(fp.xInches, fp.yInches, 0.0);
-        }
-
-        if (target instanceof DriveGuidancePlan.TagRelativePoint) {
-            if (layout == null) {
-                return null;
-            }
-
-            DriveGuidancePlan.TagRelativePoint tp = (DriveGuidancePlan.TagRelativePoint) target;
-            int tagId = (tp.tagId >= 0) ? tp.tagId : lastObservedTagId;
-            if (tagId < 0) {
-                return null;
-            }
-
-            TagLayout.TagPose tagPose = layout.get(tagId);
-            if (tagPose == null) {
-                return null;
-            }
-
-            Pose2d fieldToTag = tagPose.fieldToTagPose().toPose2d();
-            Pose2d tagToPoint = new Pose2d(tp.forwardInches, tp.leftInches, 0.0);
-            return fieldToTag.then(tagToPoint);
-        }
-
-        return null;
+                sol.canTranslate,
+                sol.canOmega,
+                sol.hasRangeInches,
+                sol.rangeInches);
     }
 
     // ------------------------------------------------------------------------

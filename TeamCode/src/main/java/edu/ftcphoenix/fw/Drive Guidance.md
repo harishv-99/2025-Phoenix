@@ -14,6 +14,22 @@ It replaces the older `drive.assist` utilities (`TagAim`, `BearingSource`, etc.)
 
 ---
 
+## Layering: math, predicates, controllers
+
+Phoenix keeps “where am I?” logic separate from “how do I drive?” logic. This makes it easier to:
+
+* gate actions (shooting/intake) based on position without enabling a drive assist,
+* reuse the same geometry checks in TeleOp, tasks, and testers, and
+* keep DriveGuidance / tasks focused on generating commands.
+
+The three layers are:
+
+1) **Spatial math** (pure geometry): bearings, errors, frame transforms. See `edu.ftcphoenix.fw.spatial.SpatialMath2d`.
+2) **Spatial predicates** (yes/no decisions): zone membership and “safe” booleans, often with hysteresis. See `Region2d`, `Regions2d`, and `ZoneLatch` in `edu.ftcphoenix.fw.spatial`.
+3) **Controllers** (produce commands): DriveGuidance overlays and drive tasks (e.g., `GoToPoseTask`) use errors from the math layer and turn them into drive outputs.
+
+---
+
 ## Quick start
 
 ### 1) Start with a normal TeleOp drive source
